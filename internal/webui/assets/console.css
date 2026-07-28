@@ -306,6 +306,7 @@ input:focus {
 .summary-strip dd { margin: 6px 0 0; font-size: 22px; font-weight: 850; }
 
 .control-grid { display: grid; gap: 24px; }
+.section-spacer { margin-top: 24px; }
 
 .gate-panel, .ledger-panel {
   background: var(--paper);

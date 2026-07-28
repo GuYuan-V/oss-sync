@@ -3,8 +3,12 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/oss/oss-server/internal/models"
 )
 
 func TestShareAndBlogFlow(t *testing.T) {
@@ -197,6 +201,41 @@ func TestDefaultThemeCSSAvailable(t *testing.T) {
 	srv.Router().ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), ".oss-content") {
 		t.Errorf("default CSS: status=%d body=%q", w.Code, w.Body.String())
+	}
+}
+
+func TestCustomThemeRendersVaultBlogAndServesAssets(t *testing.T) {
+	srv, db, dataDir := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "custom-theme", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, token)
+	uploadFile(t, router, token, "Post.md", "# Custom title\n\nTheme body", 1700000000000)
+
+	themeDir := filepath.Join(dataDir, "themes", "paper-cut")
+	if err := os.MkdirAll(themeDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(themeDir, "template.html"), []byte(`<!doctype html><title>{{.Title}}</title><main data-theme="paper-cut">{{.ContentHTML}}</main><link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css">`), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(themeDir, "style.css"), []byte("main[data-theme] { color: teal; }"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&models.VaultSetting{}).Where("vault_id = ?", vaultID).Update("theme_name", "paper-cut").Error; err != nil {
+		t.Fatal(err)
+	}
+
+	_, share := doJSON(t, router, http.MethodPost, "/api/shares", token, map[string]any{"target_path": "Post.md", "is_folder": false})
+	shareID := share["share_id"].(string)
+	page := httptest.NewRecorder()
+	router.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/p/"+shareID, nil))
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), `data-theme="paper-cut"`) || !strings.Contains(page.Body.String(), "Theme body") {
+		t.Fatalf("custom page: status=%d body=%s", page.Code, page.Body.String())
+	}
+	asset := httptest.NewRecorder()
+	router.ServeHTTP(asset, httptest.NewRequest(http.MethodGet, "/themes/paper-cut/style.css", nil))
+	if asset.Code != http.StatusOK || !strings.Contains(asset.Body.String(), "teal") {
+		t.Fatalf("custom CSS: status=%d body=%q", asset.Code, asset.Body.String())
 	}
 }
 

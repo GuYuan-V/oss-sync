@@ -6,6 +6,7 @@
 package blog
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -130,6 +131,7 @@ func basenameNoExt(p string) string {
 type renderParams struct {
 	Title         string
 	ThemeName     string
+	ThemeBaseURL  string
 	ThemeConfigJS template.JS
 	CustomHeader  template.HTML
 	CustomFooter  template.HTML
@@ -165,6 +167,20 @@ func (h *Handler) loadVaultSettings(userID uint, vaultID string) (*models.VaultS
 }
 
 func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
+	if p.ThemeName != "default" {
+		if custom, err := h.customThemeTemplate(p.ThemeName); err == nil {
+			var rendered bytes.Buffer
+			if err := custom.Execute(&rendered, p); err == nil {
+				c.Header("Content-Type", "text/html; charset=utf-8")
+				_, _ = c.Writer.Write(rendered.Bytes())
+				return
+			}
+		}
+		// An invalid or incomplete custom theme must not make a published note
+		// unavailable. Fall back to the built-in page and assets instead.
+		p.ThemeName = "default"
+		p.ThemeBaseURL = "/themes/default"
+	}
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	if err := h.tpl.ExecuteTemplate(c.Writer, "base.html", p); err != nil {
 		_ = err
@@ -219,6 +235,7 @@ func (h *Handler) handleSingle(c *gin.Context) {
 	params := renderParams{
 		Title:         basenameNoExt(f.Path) + " · OSS",
 		ThemeName:     us.ThemeName,
+		ThemeBaseURL:  themeBaseURL(us.ThemeName),
 		ThemeConfigJS: template.JS(themeConfigJSON),
 		CustomHeader:  template.HTML(us.CustomHeader),
 		CustomFooter:  template.HTML(us.CustomFooter),
@@ -285,6 +302,7 @@ func (h *Handler) renderFolderTree(c *gin.Context, share models.Share, files []m
 	params := renderParams{
 		Title:         "Folder · " + share.TargetPath,
 		ThemeName:     us.ThemeName,
+		ThemeBaseURL:  themeBaseURL(us.ThemeName),
 		ThemeConfigJS: template.JS(themeConfigJSON),
 		CustomHeader:  template.HTML(us.CustomHeader),
 		CustomFooter:  template.HTML(us.CustomFooter),
@@ -314,6 +332,7 @@ func (h *Handler) renderFolderFile(c *gin.Context, share models.Share, f models.
 	params := renderParams{
 		Title:         basenameNoExt(f.Path) + " · " + share.TargetPath,
 		ThemeName:     us.ThemeName,
+		ThemeBaseURL:  themeBaseURL(us.ThemeName),
 		ThemeConfigJS: template.JS(themeConfigJSON),
 		CustomHeader:  template.HTML(us.CustomHeader),
 		CustomFooter:  template.HTML(us.CustomFooter),
@@ -325,7 +344,7 @@ func (h *Handler) renderFolderFile(c *gin.Context, share models.Share, f models.
 func (h *Handler) handleThemeAsset(c *gin.Context) {
 	theme := c.Param("theme")
 	fp := c.Param("filepath")
-	if theme == "" || fp == "" || strings.Contains(theme, "..") || strings.Contains(fp, "..") {
+	if err := ValidateThemeName(theme); err != nil || !validThemeAssetPath(fp) {
 		c.String(http.StatusBadRequest, "invalid theme or path")
 		return
 	}
@@ -335,6 +354,22 @@ func (h *Handler) handleThemeAsset(c *gin.Context) {
 	}
 	abs := filepath.Join(h.Cfg.Storage.DataDir, "themes", theme, fp)
 	c.File(abs)
+}
+
+func themeBaseURL(themeName string) string {
+	if ValidateThemeName(themeName) != nil {
+		themeName = "default"
+	}
+	return "/themes/" + themeName
+}
+
+func validThemeAssetPath(raw string) bool {
+	path := strings.TrimPrefix(raw, "/")
+	if path == "" || strings.Contains(path, "\\") || strings.ContainsRune(path, '\x00') {
+		return false
+	}
+	clean := filepath.ToSlash(filepath.Clean(path))
+	return clean != "." && !strings.HasPrefix(clean, "../") && clean != ".." && clean == path
 }
 
 func readFileUTF8(abs string) (string, error) {

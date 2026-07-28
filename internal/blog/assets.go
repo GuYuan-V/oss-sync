@@ -15,8 +15,8 @@ import (
 	"github.com/oss/oss-server/internal/models"
 )
 
-//go:embed assets/default/*
-var defaultThemeFS embed.FS
+//go:embed assets/default/* assets/development-template/*
+var themeAssetsFS embed.FS
 
 type blogAssetResolver struct{ shareID string }
 
@@ -110,7 +110,7 @@ func (h *Handler) serveDefaultTheme(c *gin.Context, filename string) bool {
 	if filename != "style.css" && filename != "theme.js" {
 		return false
 	}
-	content, err := defaultThemeFS.ReadFile("assets/default/" + filename)
+	content, err := themeAssetsFS.ReadFile("assets/default/" + filename)
 	if err != nil {
 		return false
 	}

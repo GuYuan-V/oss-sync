@@ -24,7 +24,7 @@
       </div>
     </section>
 
-    {{if .Saved}}<div class="notice notice--success" role="status">成员权限已保存。</div>{{end}}
+    {{if .Saved}}<div class="notice notice--success" role="status">Vault 设置已保存。</div>{{end}}
     {{if .Error}}<div class="notice notice--error" role="alert">{{.Error}}</div>{{end}}
 
     <section class="control-grid">
@@ -58,6 +58,24 @@
           <label><span>用户名</span><input name="username" required minlength="3" maxlength="64" autocomplete="off"></label>
           <label><span>角色</span><select name="role"><option value="participant">participant — 访问与同步</option><option value="manager">manager — 管理参与者</option></select></label>
           <button class="button button--primary" type="submit">保存成员权限</button>
+        </form>
+      </article>
+    </section>
+
+    <section class="control-grid section-spacer">
+      <article class="gate-panel">
+        <div class="gate-panel__copy"><span class="eyebrow">Blog theme</span><h2>选择博客模板</h2><p>当前主题：<strong>{{.ThemeName}}</strong>。使用 <code>default</code> 恢复内置页面；其他主题必须位于服务端数据目录的 <code>themes/&lt;主题名&gt;/</code>，并包含 <code>template.html</code>。</p></div>
+        <form method="post" action="/admin/vaults/{{.VaultID}}/theme" class="gate-form">
+          <label><span>主题名称</span><input name="theme_name" value="{{.ThemeName}}" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}" autocomplete="off"></label>
+          <button class="button button--primary" type="submit">启用主题</button>
+        </form>
+      </article>
+
+      <article class="gate-panel">
+        <div class="gate-panel__copy"><span class="eyebrow">Theme starter</span><h2>创建开发模板</h2><p>为此 Vault 创建一份可编辑的起始主题，并立即启用。它包含页面模板、CSS、JavaScript 和字段说明；创建后直接编辑该目录中的文件并刷新公开分享页。</p></div>
+        <form method="post" action="/admin/vaults/{{.VaultID}}/theme/development" class="gate-form">
+          <label><span>新主题名称</span><input name="theme_name" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}" placeholder="my-field-notes" autocomplete="off"></label>
+          <button class="button button--primary" type="submit">创建并启用</button>
         </form>
       </article>
     </section>

@@ -18,6 +18,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/oss/oss-server/internal/auth"
+	"github.com/oss/oss-server/internal/blog"
 	"github.com/oss/oss-server/internal/config"
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/vaultbackup"
@@ -87,6 +88,7 @@ type vaultMemberView struct {
 	VaultID       string
 	VaultName     string
 	Owner         string
+	ThemeName     string
 	Members       []adminVaultMemberRow
 	Saved         bool
 	Error         string
@@ -121,6 +123,8 @@ func (h *Handler) Register(r *gin.Engine) {
 		adminGroup.GET("", h.adminDashboard)
 		adminGroup.POST("/registration", h.updateRegistration)
 		adminGroup.GET("/vaults/:vault_id", h.vaultMembersPage)
+		adminGroup.POST("/vaults/:vault_id/theme", h.updateVaultTheme)
+		adminGroup.POST("/vaults/:vault_id/theme/development", h.createDevelopmentTheme)
 		adminGroup.POST("/vaults/:vault_id/members", h.addVaultMember)
 		adminGroup.POST("/vaults/:vault_id/members/:user_id/role", h.updateVaultMemberRole)
 		adminGroup.POST("/vaults/:vault_id/members/:user_id/delete", h.deleteVaultMember)
@@ -305,10 +309,100 @@ func (h *Handler) vaultMembersPage(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/admin")
 		return
 	}
+	themeName, err := h.vaultThemeName(vault.ID)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "failed to load vault theme")
+		return
+	}
 	h.render(c, "vault_members.html", vaultMemberView{
 		AdminUsername: current.Username, VaultID: vault.ID, VaultName: vault.Name,
-		Owner: owner.Username, Members: members, Saved: c.Query("saved") == "1", Error: c.Query("error"),
+		Owner: owner.Username, ThemeName: themeName, Members: members, Saved: c.Query("saved") == "1", Error: c.Query("error"),
 	})
+}
+
+func (h *Handler) updateVaultTheme(c *gin.Context) {
+	vault, _, _, err := h.loadVaultMembers(c.Param("vault_id"))
+	if err != nil {
+		c.Redirect(http.StatusSeeOther, "/admin")
+		return
+	}
+	themeName := strings.TrimSpace(c.PostForm("theme_name"))
+	if err := h.validateSelectableTheme(themeName); err != nil {
+		h.redirectVaultMembers(c, vault.ID, err.Error())
+		return
+	}
+	if err := h.saveVaultTheme(vault, themeName); err != nil {
+		h.redirectVaultMembers(c, vault.ID, "保存博客主题失败")
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/admin/vaults/"+vault.ID+"?saved=1")
+}
+
+func (h *Handler) createDevelopmentTheme(c *gin.Context) {
+	vault, _, _, err := h.loadVaultMembers(c.Param("vault_id"))
+	if err != nil {
+		c.Redirect(http.StatusSeeOther, "/admin")
+		return
+	}
+	themeName := strings.TrimSpace(c.PostForm("theme_name"))
+	if _, err := blog.CreateDevelopmentTheme(h.Cfg.Storage.DataDir, themeName); err != nil {
+		h.redirectVaultMembers(c, vault.ID, err.Error())
+		return
+	}
+	if err := h.saveVaultTheme(vault, themeName); err != nil {
+		h.redirectVaultMembers(c, vault.ID, "开发模板已创建，但未能启用；请在主题选择中手动启用")
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/admin/vaults/"+vault.ID+"?saved=1")
+}
+
+func (h *Handler) validateSelectableTheme(themeName string) error {
+	if themeName == "default" {
+		return nil
+	}
+	if err := blog.ValidateThemeName(themeName); err != nil {
+		return err
+	}
+	if !blog.CustomThemeExists(h.Cfg.Storage.DataDir, themeName) {
+		return errors.New("未找到该主题的 template.html；请先创建开发模板或放入完整主题目录")
+	}
+	return nil
+}
+
+func (h *Handler) vaultThemeName(vaultID string) (string, error) {
+	var setting models.VaultSetting
+	err := h.DB.Where("vault_id = ?", vaultID).First(&setting).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "default", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if setting.ThemeName == "" {
+		return "default", nil
+	}
+	return setting.ThemeName, nil
+}
+
+func (h *Handler) saveVaultTheme(vault models.Vault, themeName string) error {
+	var setting models.VaultSetting
+	err := h.DB.Where("vault_id = ?", vault.ID).First(&setting).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		setting = models.VaultSetting{VaultID: vault.ID, ThemeName: themeName, KeepDirectoryTree: true}
+		// Preserve installations created before settings became Vault-scoped.
+		var legacy models.UserSetting
+		if err := h.DB.Where("user_id = ?", vault.OwnerID).First(&legacy).Error; err == nil {
+			setting.ThemeConfig = legacy.ThemeConfig
+			setting.CustomHeader = legacy.CustomHeader
+			setting.CustomFooter = legacy.CustomFooter
+			setting.KeepDirectoryTree = legacy.KeepDirectoryTree
+		}
+		return h.DB.Create(&setting).Error
+	}
+	if err != nil {
+		return err
+	}
+	return h.DB.Model(&setting).Update("theme_name", themeName).Error
 }
 
 func (h *Handler) addVaultMember(c *gin.Context) {

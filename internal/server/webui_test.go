@@ -179,7 +179,7 @@ func TestAdminPanelRejectsRegularUser(t *testing.T) {
 }
 
 func TestAdminPlatformManagesVaultMembers(t *testing.T) {
-	srv, db, _ := newTestServer(t)
+	srv, db, dataDir := newTestServer(t)
 	router := srv.Router()
 	if _, err := auth.CreateAccount(db, "platform-admin", "admin-password-123", "admin"); err != nil {
 		t.Fatal(err)
@@ -203,8 +203,21 @@ func TestAdminPlatformManagesVaultMembers(t *testing.T) {
 	}
 
 	page := doForm(t, router, http.MethodGet, "/admin/vaults/"+vaultID, nil, session)
-	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "已授权成员") {
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "已授权成员") || !strings.Contains(page.Body.String(), "创建开发模板") {
 		t.Fatalf("member page: %d %s", page.Code, page.Body.String())
+	}
+	createdTheme := doForm(t, router, http.MethodPost, "/admin/vaults/"+vaultID+"/theme/development", url.Values{"theme_name": {"field-notes"}}, session)
+	if createdTheme.Code != http.StatusSeeOther {
+		t.Fatalf("create development theme: %d body=%s", createdTheme.Code, createdTheme.Body.String())
+	}
+	for _, filename := range []string{"template.html", "style.css", "theme.js", "README.md"} {
+		if _, err := os.Stat(filepath.Join(dataDir, "themes", "field-notes", filename)); err != nil {
+			t.Fatalf("development theme file %s: %v", filename, err)
+		}
+	}
+	var setting models.VaultSetting
+	if err := db.Where("vault_id = ?", vaultID).First(&setting).Error; err != nil || setting.ThemeName != "field-notes" {
+		t.Fatalf("development theme was not enabled: %#v err=%v", setting, err)
 	}
 	added := doForm(t, router, http.MethodPost, "/admin/vaults/"+vaultID+"/members", url.Values{"username": {"platform-member"}, "role": {"participant"}}, session)
 	if added.Code != http.StatusSeeOther {
