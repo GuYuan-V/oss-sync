@@ -3,7 +3,7 @@
 
 server:
   host: "0.0.0.0"
-  port: 8080
+  port: 9090
   mode: "debug"                # gin mode: debug / release / test
   max_multipart_memory_mb: 8   # multipart 内存上限，超出后写入临时文件
   max_file_size_mb: 100        # 单文件大小上限
@@ -18,7 +18,8 @@ storage:
 auth:
   jwt_secret: "dev-only-change-me"
   jwt_ttl_hours: 72
-  allow_anonymous_registration: false # 开启后，任何人都可注册普通用户；匿名请求不能创建 admin
+  bootstrap_admin_username: "admin"
+  allow_anonymous_registration: true # 仅作为新数据库注册开关的初始值；之后由管理面板控制
 
 sync:
   max_concurrency: 6           # 客户端默认并发数

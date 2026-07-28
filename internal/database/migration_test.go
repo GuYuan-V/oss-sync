@@ -91,3 +91,31 @@ func TestAutoMigrateCreatesDefaultVaultAndBackfillsLegacyRows(t *testing.T) {
 		t.Fatalf("migration is not idempotent: revision=%d want %d", migratedFile.Revision, firstRevision)
 	}
 }
+
+func TestAutoMigrateDoesNotCreateVaultForEmptyAccount(t *testing.T) {
+	db, err := gorm.Open(
+		sqlite.Open(filepath.Join(t.TempDir(), "empty-account.db")),
+		&gorm.Config{Logger: logger.Default.LogMode(logger.Silent)},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := AutoMigrate(db); err != nil {
+		t.Fatal(err)
+	}
+	user := models.User{Username: "empty", PasswordHash: "hash", Role: "user"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := AutoMigrate(db); err != nil {
+		t.Fatal(err)
+	}
+	var vaultCount int64
+	if err := db.Model(&models.Vault{}).Where("owner_id = ?", user.ID).Count(&vaultCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if vaultCount != 0 {
+		t.Fatalf("migration created %d vaults for an empty account, want 0", vaultCount)
+	}
+}

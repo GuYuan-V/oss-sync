@@ -12,6 +12,7 @@ OSS Sync 是一个自托管的 Obsidian 同步与分享项目，由 Gin 后端�
 - 冲突检测及远端覆盖、本地覆盖、保留双方三种处理方式
 - 文件和文件夹公开分享
 - Markdown、Obsidian 双链和本地图片渲染
+- 网页注册页和管理员控制台
 - SQLite 默认存储，可切换 PostgreSQL
 - 启动及定时存储对账
 
@@ -41,6 +42,16 @@ plugin/tests/        插件同步逻辑测试
 ```bash
 go run ./cmd/server
 ```
+
+第一次启动时，如果数据库里还没有管理员，服务会在终端中隐藏输入并确认管理员密码。管理员用户名默认为 `admin`。创建完成后，以后的启动不会再次询问密码。
+
+非交互式部署需要在首次启动时提供初始密码：
+
+```bash
+OSS_ADMIN_PASSWORD='replace-with-a-strong-password' go run ./cmd/server
+```
+
+项目不内置通用管理员密码。数据库中已有管理员后，不再需要保留 `OSS_ADMIN_PASSWORD`。
 
 默认监听 `http://localhost:8080`，数据写入项目下的 `data/` 目录。
 
@@ -72,7 +83,9 @@ OSS_ENV=prod go run ./cmd/server
 | 环境变量 | 说明 |
 | --- | --- |
 | `OSS_JWT_SECRET` | JWT 签名密钥 |
-| `OSS_ALLOW_ANONYMOUS_REGISTRATION` | 是否允许匿名注册普通用户 |
+| `OSS_ADMIN_USERNAME` | 首次创建的管理员用户名，默认 `admin` |
+| `OSS_ADMIN_PASSWORD` | 非交互式首次启动所需的管理员密码 |
+| `OSS_ALLOW_ANONYMOUS_REGISTRATION` | 新数据库注册开关的初始值；之后由管理面板控制 |
 | `OSS_DB_DRIVER` | `sqlite` 或 `postgres` |
 | `OSS_DB_DSN` | 数据库连接字符串 |
 | `OSS_SERVER_HOST` | HTTP 监听地址 |
@@ -86,27 +99,30 @@ OSS_ENV=prod go run ./cmd/server
 ```bash
 export OSS_ENV=prod
 export OSS_JWT_SECRET='replace-with-a-random-secret'
+export OSS_ADMIN_PASSWORD='replace-with-a-strong-password'
 go run ./cmd/server
 ```
 
 ### 用户注册
 
-开发环境的用户表为空时，第一次注册会创建管理员。管理员建立后，默认只有已登录管理员可以创建其他用户。
+服务启动流程如下：
 
-匿名注册默认关闭，可通过配置开启：
+1. 数据库没有管理员时，从 `OSS_ADMIN_PASSWORD` 创建管理员，或等待终端隐藏输入密码。
+2. 数据库已有管理员时直接启动，不修改现有管理员。
+3. 新数据库默认开放普通用户注册。
+4. 管理员访问 `http://localhost:8080/admin` 登录，在控制台打开或关闭注册。
+5. 普通用户访问 `http://localhost:8080/register` 创建账户，再使用相同用户名和密码登录 Obsidian 插件。
+6. 登录后在插件的 Vault 区域手动创建服务端仓库，或明确选择已有仓库；只有这两种操作才会绑定并执行全量同步。
+
+网页注册只能创建 `user` 角色，不能获取管理员权限，也不会自动创建 Vault。关闭注册只阻止新账户创建，已有账户仍可登录和同步。
+
+配置中的 `allow_anonymous_registration`（或对应环境变量）只决定新数据库第一次创建注册设置时的初始值。管理员在网页保存后，选择会写入数据库，重启不会被配置覆盖：
 
 ```yaml
 auth:
+  bootstrap_admin_username: "admin"
   allow_anonymous_registration: true
 ```
-
-也可以使用环境变量：
-
-```bash
-export OSS_ALLOW_ANONYMOUS_REGISTRATION=true
-```
-
-匿名请求只能创建普通用户，即使请求中提交 `role: admin` 也不会获得管理员权限。生产环境建议先完成管理员初始化，再切换到 `OSS_ENV=prod`。
 
 ## 构建插件
 
@@ -128,8 +144,8 @@ plugin/styles.css
 
 1. 后端地址
 2. 用户名和密码
-3. 注册或登录
-4. 当前本地 Vault 要绑定的服务端 Vault
+3. 没有账户时打开网页注册，有账户时直接登录
+4. 手动创建并同步服务端 Vault，或选择已有 Vault 进行绑定
 
 插件会在本地 Vault 根目录维护 `.oss-sync-state.json`。该文件保存服务端 revision、待处理操作和冲突状态，不会上传到服务端。
 
@@ -205,7 +221,8 @@ npm run build
 
 - 使用反向代理提供 HTTPS
 - 使用随机且长期稳定的 `OSS_JWT_SECRET`
-- 默认关闭匿名注册
+- 完成用户开户后在 `/admin` 关闭新用户注册
+- 首次启动后从部署环境中移除 `OSS_ADMIN_PASSWORD`
 - 定期备份数据库和存储目录
 - 监控 `/readyz` 和服务日志
 - 升级前先备份 SQLite 数据库

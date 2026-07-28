@@ -19,7 +19,8 @@ storage:
 auth:
   jwt_secret: "REPLACE-ME-IN-PRODUCTION"
   jwt_ttl_hours: 72
-  allow_anonymous_registration: false # 生产环境建议默认关闭，也可用环境变量覆盖
+  bootstrap_admin_username: "admin"
+  allow_anonymous_registration: true # 仅作为新数据库注册开关的初始值；之后由管理面板控制
 
 sync:
   max_concurrency: 6

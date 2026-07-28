@@ -17,6 +17,7 @@ import (
 	"github.com/oss/oss-server/internal/shares"
 	"github.com/oss/oss-server/internal/syncapi"
 	"github.com/oss/oss-server/internal/vaults"
+	"github.com/oss/oss-server/internal/webui"
 )
 
 // Server 持有运行期依赖：配置、DB、磁盘根。
@@ -48,6 +49,12 @@ func (s *Server) Router() *gin.Engine {
 
 	authH := auth.NewHandler(s.DB, s.Cfg)
 	authH.Register(r)
+
+	webH, err := webui.New(s.DB, s.Cfg)
+	if err != nil {
+		panic("webui.New: " + err.Error())
+	}
+	webH.Register(r)
 
 	vaultsH := vaults.New(s.DB, s.Cfg)
 	vaultsH.Register(r)

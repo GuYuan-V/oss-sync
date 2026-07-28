@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/oss/oss-server/internal/auth"
 	"github.com/oss/oss-server/internal/config"
 	"github.com/oss/oss-server/internal/cron"
 	"github.com/oss/oss-server/internal/database"
@@ -31,6 +32,19 @@ func main() {
 
 	if err := database.AutoMigrate(db); err != nil {
 		log.Fatalf("AutoMigrate 失败: %v", err)
+	}
+	if err := auth.EnsureRegistrationSetting(db, cfg.Auth.AllowAnonymousRegistration); err != nil {
+		log.Fatalf("初始化注册设置失败: %v", err)
+	}
+	createdAdmin, err := auth.EnsureBootstrapAdmin(db, cfg, os.Stdin, os.Stdout)
+	if err != nil {
+		log.Fatalf("初始化管理员失败: %v", err)
+	}
+	if createdAdmin {
+		log.Printf(
+			"[OSS] 已创建初始管理员 %q；请访问 /admin 登录并按需调整注册开关",
+			cfg.Auth.EffectiveBootstrapAdminUsername(),
+		)
 	}
 	reconcileReport, err := reconcile.New(db, cfg).Run(true)
 	if err != nil {

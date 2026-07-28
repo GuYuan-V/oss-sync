@@ -56,6 +56,15 @@ type User struct {
 	DeletedAt    gorm.DeletedAt `gorm:"index"`
 }
 
+// SystemSetting 保存由管理员在网页面板修改的服务端运行设置。
+// 单例记录固定使用 ID=1，避免部署配置覆盖管理员已经保存的选择。
+type SystemSetting struct {
+	ID                  uint `gorm:"primaryKey"`
+	RegistrationEnabled bool `gorm:"not null"`
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
 // Vault 是一个独立的 Obsidian 笔记仓库。同步 revision、文件路径和配置均按 Vault 隔离。
 type Vault struct {
 	ID           string `gorm:"primaryKey;size:36"`

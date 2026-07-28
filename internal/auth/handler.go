@@ -1,6 +1,6 @@
 // Package auth 提供用户注册、登录和请求鉴权。
 //
-//	POST /api/auth/register  注册（默认仅 admin 可调用，可配置开放匿名普通用户注册）
+//	POST /api/auth/register  注册（由数据库开关控制匿名普通用户注册）
 //	POST /api/auth/login      登录，返回 JWT
 //
 // Middleware 同时支持 Bearer JWT 与 Basic 认证。
@@ -12,10 +12,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
@@ -66,8 +64,7 @@ type AuthResponse struct {
 }
 
 // RegisterUser 处理 POST /api/auth/register。
-// 默认要求已有 admin 身份，可通过配置开放匿名普通用户注册。
-// dev 环境 + users 表为空时允许首次注册（即建首个 admin）。
+// 匿名请求只能在数据库注册开关开启时创建普通用户；管理员始终可以创建用户。
 func (h *Handler) RegisterUser(c *gin.Context) {
 	h.registerMu.Lock()
 	defer h.registerMu.Unlock()
@@ -75,8 +72,12 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "用户名或密码不符合要求（用户名 3-64 位，密码 8-128 位）: " + err.Error(),
+			"error": "用户名或密码不符合要求（用户名 3-64 位，密码至少 8 位且不超过 72 字节）: " + err.Error(),
 		})
+		return
+	}
+	if err := ValidateAccountInput(req.Username, req.Password); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	role := strings.ToLower(req.Role)
@@ -88,86 +89,43 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 		return
 	}
 
-	allowFirstAdmin := false
-	if config.Env() == "dev" {
-		var n int64
-		h.DB.Model(&models.User{}).Count(&n)
-		if n == 0 {
-			allowFirstAdmin = true
-			role = "admin"
+	cur := CurrentUser(c)
+	if cur == nil {
+		enabled, err := RegistrationEnabled(h.DB, h.Cfg.Auth.AllowAnonymousRegistration)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取注册设置失败"})
+			return
 		}
-	}
-	if !allowFirstAdmin {
-		cur := CurrentUser(c)
-		if cur == nil {
-			if h.Cfg.Auth.AllowAnonymousRegistration {
-				role = "user"
-			} else {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"error":      "首个 admin 已存在，匿名注册已关闭。请先用 admin 登录后再注册新用户",
-					"code":       "first_admin_exists",
-					"hint":       "login_first",
-					"need_admin": true,
-				})
-				return
-			}
-		} else if cur.Role != "admin" {
+		if !enabled {
 			c.JSON(http.StatusForbidden, gin.H{
-				"error": "仅 admin 可注册新用户，当前用户 " + cur.Username + " 无权限",
-				"code":  "not_admin",
+				"error": "管理员已关闭新用户注册",
+				"code":  "registration_closed",
 			})
 			return
 		}
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "hash failed: " + err.Error()})
+		role = "user"
+	} else if cur.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "仅 admin 可创建其他用户，当前用户 " + cur.Username + " 无权限",
+			"code":  "not_admin",
+		})
 		return
 	}
-	u := models.User{
-		Username:     req.Username,
-		PasswordHash: string(hash),
-		Role:         role,
-		StorageQuota: 0,
-	}
-	if err := h.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&u).Error; err != nil {
-			return err
-		}
-		if err := tx.Create(&models.UserSetting{UserID: u.ID}).Error; err != nil {
-			return err
-		}
-		vaultID := uuid.NewString()
-		if err := tx.Create(&models.Vault{
-			ID:        vaultID,
-			OwnerID:   u.ID,
-			Name:      "Default",
-			IsDefault: true,
-		}).Error; err != nil {
-			return err
-		}
-		if err := tx.Create(&models.VaultSetting{VaultID: vaultID}).Error; err != nil {
-			return err
-		}
-		return tx.Create(&models.VaultSyncState{VaultID: vaultID}).Error
-	}); err != nil {
+
+	u, err := CreateAccount(h.DB, req.Username, req.Password, role)
+	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
 		return
 	}
 
-	token, err := jwt.Sign(h.Cfg.Auth.JWTSecret, jwt.Claims{
-		UserID:   u.ID,
-		Username: u.Username,
-		Role:     u.Role,
-	}, time.Duration(h.Cfg.Auth.JWTTTLHours)*time.Hour)
+	token, expiresIn, err := IssueToken(h.Cfg, *u)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "sign failed: " + err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, AuthResponse{
 		Token:     token,
-		ExpiresIn: int64(h.Cfg.Auth.JWTTTLHours) * 3600,
+		ExpiresIn: expiresIn,
 		UserID:    u.ID,
 		Username:  u.Username,
 		Role:      u.Role,
@@ -175,25 +133,27 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 }
 
 func (h *Handler) Status(c *gin.Context) {
-	var count int64
-	if err := h.DB.Model(&models.User{}).Count(&count).Error; err != nil {
+	var adminCount int64
+	if err := h.DB.Model(&models.User{}).Where("role = ?", "admin").Count(&adminCount).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query auth status"})
 		return
 	}
+	enabled, err := RegistrationEnabled(h.DB, h.Cfg.Auth.AllowAnonymousRegistration)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query registration status"})
+		return
+	}
+	mode := "closed"
+	if enabled {
+		mode = "open"
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"needs_first_admin": config.Env() == "dev" && count == 0,
-		"registration_mode": h.registrationMode(count),
+		"needs_first_admin":    adminCount == 0,
+		"registration_enabled": enabled,
+		"registration_mode":    mode,
+		"registration_url":     "/register",
+		"admin_url":            "/admin",
 	})
-}
-
-func (h *Handler) registrationMode(userCount int64) string {
-	if config.Env() == "dev" && userCount == 0 {
-		return "first_admin"
-	}
-	if h.Cfg.Auth.AllowAnonymousRegistration {
-		return "anonymous"
-	}
-	return "admin_only"
 }
 
 // Login 处理 POST /api/auth/login。
@@ -203,27 +163,19 @@ func (h *Handler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	var u models.User
-	if err := h.DB.Where("username = ?", req.Username).First(&u).Error; err != nil {
+	u, err := AuthenticateCredentials(h.DB, req.Username, req.Password)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
-	if u.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)) != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
-		return
-	}
-	token, err := jwt.Sign(h.Cfg.Auth.JWTSecret, jwt.Claims{
-		UserID:   u.ID,
-		Username: u.Username,
-		Role:     u.Role,
-	}, time.Duration(h.Cfg.Auth.JWTTTLHours)*time.Hour)
+	token, expiresIn, err := IssueToken(h.Cfg, *u)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "sign failed: " + err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, AuthResponse{
 		Token:     token,
-		ExpiresIn: int64(h.Cfg.Auth.JWTTTLHours) * 3600,
+		ExpiresIn: expiresIn,
 		UserID:    u.ID,
 		Username:  u.Username,
 		Role:      u.Role,

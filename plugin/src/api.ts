@@ -16,7 +16,10 @@ export interface AuthResponse {
 
 export interface AuthStatus {
   readonly needs_first_admin: boolean;
-  readonly registration_mode: "first_admin" | "anonymous" | "admin_only";
+  readonly registration_enabled: boolean;
+  readonly registration_mode: "open" | "closed";
+  readonly registration_url: string;
+  readonly admin_url: string;
 }
 
 interface CheckFileIn {
@@ -155,16 +158,6 @@ export class OSSApiClient {
 
   getTimeOffset(): number {
     return this.timeOffset;
-  }
-
-  async register(): Promise<AuthResponse> {
-    const res = await this.doRequest<AuthResponse>("POST", "/api/auth/register", {
-      username: this.settings.username,
-      password: this.settings.password,
-      role: "user",
-    });
-    this.token = res.token;
-    return res;
   }
 
   async authStatus(): Promise<AuthStatus> {

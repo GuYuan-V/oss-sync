@@ -1,5 +1,4 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
-import type { ButtonComponent } from "obsidian";
 import type OSSPlugin from "./main";
 import type { OSSSettings } from "./settings";
 
@@ -50,11 +49,9 @@ export class OSSSettingTab extends PluginSettingTab {
           });
       });
 
-    let registerButton: ButtonComponent | null = null;
-    let registrationMode: "first_admin" | "anonymous" | "admin_only" = "admin_only";
     const authSetting = new Setting(containerEl)
       .setName("Login")
-      .setDesc("正在检查服务端注册状态...")
+      .setDesc("正在检查服务端注册状态…")
       .addButton((btn) =>
         btn.setButtonText("Login").onClick(async () => {
           const error = this.validateCredentials();
@@ -64,48 +61,30 @@ export class OSSSettingTab extends PluginSettingTab {
           }
           try {
             await this.plugin.login();
-            new Notice("OSS 登录成功");
+            new Notice(
+              this.plugin.settings.vaultId
+                ? "OSS 登录成功"
+                : "OSS 登录成功；请在 Vault 区域创建服务端仓库后开始同步"
+            );
           } catch (e) {
             new Notice("OSS 登录失败: " + this.errorMessage(e));
           }
         })
       )
-      .addButton((btn) => {
-        registerButton = btn;
-        btn.setButtonText("Register").setDisabled(true).onClick(async () => {
-          const error = this.validateCredentials();
-          if (error) {
-            new Notice(error);
-            return;
-          }
-          try {
-            await this.plugin.register();
-            if (registrationMode === "first_admin") {
-              new Notice("OSS 首个 admin 创建成功，已自动登录");
-              btn.setDisabled(true);
-              authSetting.setDesc("首个 admin 已创建。后续请使用 Login。");
-            } else {
-              new Notice("OSS 注册成功，已自动登录");
-            }
-          } catch (e) {
-            new Notice("OSS 注册失败: " + this.errorMessage(e));
-          }
-        });
-      });
+      .addButton((btn) =>
+        btn.setButtonText("Open registration page").onClick(() => {
+          const url = this.plugin.settings.serverUrl.replace(/\/$/, "") + "/register";
+          window.open(url, "_blank", "noopener,noreferrer");
+        })
+      );
 
     void this.plugin.api.authStatus().then((status) => {
-      registrationMode = status.registration_mode;
-      if (status.registration_mode === "first_admin") {
-        authSetting.setDesc("服务端尚未初始化：填写用户名和至少 8 位密码，然后创建首个 admin。");
-        registerButton?.setButtonText("创建首个 admin");
-        registerButton?.setDisabled(false);
-      } else if (status.registration_mode === "anonymous") {
-        authSetting.setDesc("服务端已开启匿名注册：填写用户名和至少 8 位密码即可创建普通用户。");
-        registerButton?.setButtonText("Register");
-        registerButton?.setDisabled(false);
+      if (status.needs_first_admin) {
+        authSetting.setDesc("服务端尚未完成管理员初始化，请检查服务端启动终端。");
+      } else if (status.registration_enabled) {
+        authSetting.setDesc("没有账户？请先在网页注册，然后回到这里登录。");
       } else {
-        authSetting.setDesc("首个 admin 已存在。请使用 Login；匿名注册已关闭。");
-        registerButton?.setDisabled(true);
+        authSetting.setDesc("新用户注册已关闭；已有账户仍可直接登录。");
       }
     }).catch((e: unknown) => {
       authSetting.setDesc("无法读取服务端认证状态，请检查 Server URL 和后端服务。");
@@ -174,9 +153,9 @@ export class OSSSettingTab extends PluginSettingTab {
         );
     };
 
-    new Setting(containerEl)
+    const boundVaultSetting = new Setting(containerEl)
       .setName("Bound vault")
-      .setDesc("当前 Obsidian 仓库只能绑定一个服务端 Vault。")
+      .setDesc("明确选择后会绑定当前 Obsidian Vault，并立即执行一次全量同步。")
       .addDropdown((dropdown) => {
         dropdown.addOption("", "Select vault");
         dropdown.setValue(this.plugin.settings.vaultId);
@@ -191,6 +170,12 @@ export class OSSSettingTab extends PluginSettingTab {
           }
         });
         void this.plugin.refreshVaults().then((vaults) => {
+          if (vaults.length === 0) {
+            dropdown.addOption("", "No vaults — create one below");
+            boundVaultSetting.setDesc(
+              "尚未创建服务端 Vault。请在下方明确创建；创建完成后才会开始同步。"
+            );
+          }
           for (const vault of vaults) {
             dropdown.addOption(vault.id, vault.is_default ? `${vault.name} (default)` : vault.name);
           }
@@ -205,27 +190,30 @@ export class OSSSettingTab extends PluginSettingTab {
 
     let newVaultName = "";
     new Setting(containerEl)
-      .setName("Create vault")
-      .setDesc("创建新的独立服务端笔记仓库。")
+      .setName("Create and sync vault")
+      .setDesc("创建后会立即绑定当前 Obsidian Vault，并执行一次全量上传。")
       .addText((text) =>
-        text.setPlaceholder("Vault name").onChange((value) => {
+        text.setPlaceholder("例如 Note").onChange((value) => {
           newVaultName = value.trim();
         })
       )
       .addButton((button) =>
-        button.setButtonText("Create").onClick(async () => {
+        button.setButtonText("Create & sync").onClick(async () => {
           if (!newVaultName) {
             new Notice("请输入仓库名称");
             return;
           }
+          button.setDisabled(true);
           try {
             const vault = await this.plugin.api.createVault(newVaultName);
             await this.plugin.refreshVaults();
             await this.plugin.bindVault(vault);
-            new Notice(`OSS: 已创建并绑定仓库 ${vault.name}`);
+            new Notice(`OSS: 已创建 ${vault.name} 并完成首次同步`);
             this.display();
           } catch (error: unknown) {
             new Notice("OSS: 创建仓库失败 " + this.errorMessage(error));
+          } finally {
+            button.setDisabled(false);
           }
         })
       );

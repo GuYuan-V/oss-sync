@@ -46,8 +46,13 @@ func newTestServer(t *testing.T) (*Server, *gorm.DB, string) {
 		Server:   config.ServerConfig{Host: "127.0.0.1", Port: 0, Mode: gin.TestMode, MaxMultipartMemoryMB: 8, MaxFileSizeMB: 100},
 		Database: config.DatabaseConfig{Driver: "sqlite", DSN: dbPath},
 		Storage:  config.StorageConfig{DataDir: dataDir},
-		Auth:     config.AuthConfig{JWTSecret: "test-secret", JWTTTLHours: 1},
-		Sync:     config.SyncConfig{MaxConcurrency: 6},
+		Auth: config.AuthConfig{
+			JWTSecret:                  "test-secret",
+			JWTTTLHours:                1,
+			BootstrapAdminUsername:     "admin",
+			AllowAnonymousRegistration: true,
+		},
+		Sync: config.SyncConfig{MaxConcurrency: 6},
 	}
 	srv, err := New(cfg, db)
 	if err != nil {
@@ -86,7 +91,14 @@ func registerAndLogin(t *testing.T, router *gin.Engine, user, pass string) strin
 	if code != http.StatusOK {
 		t.Fatalf("register: %d %v", code, body)
 	}
-	return body["token"].(string)
+	token := body["token"].(string)
+	code, vault := doJSON(t, router, http.MethodPost, "/api/vaults", token, map[string]string{
+		"name": "Test Vault",
+	})
+	if code != http.StatusCreated {
+		t.Fatalf("create test vault: %d %v", code, vault)
+	}
+	return token
 }
 
 func uploadFile(t *testing.T, router *gin.Engine, token, path, content string, mtime int64) (int, map[string]any) {

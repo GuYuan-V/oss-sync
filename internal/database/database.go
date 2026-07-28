@@ -67,6 +67,7 @@ func initPostgres(cfg *config.Config) (*gorm.DB, error) {
 func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&models.User{},
+		&models.SystemSetting{},
 		&models.Vault{},
 		&models.VaultSetting{},
 		&models.VaultSyncState{},
@@ -80,13 +81,15 @@ func AutoMigrate(db *gorm.DB) error {
 	); err != nil {
 		return fmt.Errorf("AutoMigrate 失败: %w", err)
 	}
-	if err := ensureDefaultVaults(db); err != nil {
+	if err := backfillLegacyVaults(db); err != nil {
 		return err
 	}
 	return backfillVaultRevisions(db)
 }
 
-func ensureDefaultVaults(db *gorm.DB) error {
+// backfillLegacyVaults 只为升级前没有 VaultID 的历史内容创建承载 Vault。
+// 没有历史内容的新账户保持零 Vault，等待用户在插件中明确创建。
+func backfillLegacyVaults(db *gorm.DB) error {
 	var users []models.User
 	if err := db.Find(&users).Error; err != nil {
 		return fmt.Errorf("查询用户以初始化默认 Vault 失败: %w", err)
@@ -99,6 +102,13 @@ func ensureDefaultVaults(db *gorm.DB) error {
 				err = tx.Where("owner_id = ?", user.ID).Order("created_at asc").First(&vault).Error
 			}
 			if errors.Is(err, gorm.ErrRecordNotFound) {
+				needsVault, err := hasVaultlessLegacyContent(tx, user.ID)
+				if err != nil {
+					return err
+				}
+				if !needsVault {
+					return nil
+				}
 				vault = models.Vault{
 					ID:        uuid.NewString(),
 					OwnerID:   user.ID,
@@ -147,6 +157,27 @@ func ensureDefaultVaults(db *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+func hasVaultlessLegacyContent(tx *gorm.DB, userID uint) (bool, error) {
+	queries := []struct {
+		model any
+		where string
+	}{
+		{model: &models.File{}, where: "user_id = ? AND (vault_id = '' OR vault_id IS NULL)"},
+		{model: &models.Share{}, where: "user_id = ? AND (vault_id = '' OR vault_id IS NULL)"},
+		{model: &models.Collaboration{}, where: "owner_id = ? AND (vault_id = '' OR vault_id IS NULL)"},
+	}
+	for _, query := range queries {
+		var count int64
+		if err := tx.Model(query.model).Where(query.where, userID).Count(&count).Error; err != nil {
+			return false, err
+		}
+		if count > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func backfillVaultRevisions(db *gorm.DB) error {

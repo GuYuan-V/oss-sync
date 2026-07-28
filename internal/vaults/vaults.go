@@ -95,6 +95,13 @@ func (h *Handler) Create(c *gin.Context) {
 		Description: strings.TrimSpace(req.Description),
 	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		var activeVaultCount int64
+		if err := tx.Model(&models.Vault{}).
+			Where("owner_id = ?", u.ID).
+			Count(&activeVaultCount).Error; err != nil {
+			return err
+		}
+		vault.IsDefault = activeVaultCount == 0
 		if err := tx.Create(&vault).Error; err != nil {
 			return err
 		}

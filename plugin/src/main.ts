@@ -52,10 +52,18 @@ export default class OSSPlugin extends Plugin {
     this.setSyncState("idle");
 
     this.statusBarEl.onClickEvent(() => {
+      if (!this.settings.vaultId) {
+        new Notice("OSS: 请先在插件设置中创建并绑定服务端 Vault");
+        return;
+      }
       this.syncEngine.runOnce({ forceFull: true });
     });
 
     this.addRibbonIcon("refresh-cw", "OSS force sync", async () => {
+      if (!this.settings.vaultId) {
+        new Notice("OSS: 请先在插件设置中创建并绑定服务端 Vault");
+        return;
+      }
       new Notice("OSS: 触发全量同步");
       await this.syncEngine.runOnce({ forceFull: true });
     });
@@ -167,13 +175,6 @@ export default class OSSPlugin extends Plugin {
     await this.ensureVaultBinding();
   }
 
-  async register(): Promise<void> {
-    const res = await this.api.register();
-    this.token = res.token;
-    await this.saveSettings();
-    await this.ensureVaultBinding();
-  }
-
   async refreshVaults(): Promise<VaultOut[]> {
     if (!this.api.hasToken()) {
       this.availableVaults = [];
@@ -187,8 +188,11 @@ export default class OSSPlugin extends Plugin {
   async ensureVaultBinding(): Promise<void> {
     const vaults = await this.refreshVaults();
     if (vaults.length === 0) {
-      const created = await this.api.createVault("Default");
-      await this.bindVault(created);
+      if (this.settings.vaultId || this.settings.vaultName) {
+        this.settings.vaultId = "";
+        this.settings.vaultName = "";
+        await this.saveSettings();
+      }
       return;
     }
     const current = vaults.find((vault) => vault.id === this.settings.vaultId);
@@ -197,7 +201,11 @@ export default class OSSPlugin extends Plugin {
       await this.saveSettings();
       return;
     }
-    await this.bindVault(vaults.find((vault) => vault.is_default) ?? vaults[0]);
+    if (this.settings.vaultId || this.settings.vaultName) {
+      this.settings.vaultId = "";
+      this.settings.vaultName = "";
+      await this.saveSettings();
+    }
   }
 
   async bindVault(vault: VaultOut): Promise<void> {

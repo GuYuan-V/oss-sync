@@ -37,9 +37,12 @@ type StorageConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret                  string `yaml:"jwt_secret"`
-	JWTTTLHours                int    `yaml:"jwt_ttl_hours"`
-	AllowAnonymousRegistration bool   `yaml:"allow_anonymous_registration"`
+	JWTSecret              string `yaml:"jwt_secret"`
+	JWTTTLHours            int    `yaml:"jwt_ttl_hours"`
+	BootstrapAdminUsername string `yaml:"bootstrap_admin_username"`
+	// AllowAnonymousRegistration 只用于初始化新数据库中的注册开关。
+	// 初始化后以数据库中的 SystemSetting 为准。
+	AllowAnonymousRegistration bool `yaml:"allow_anonymous_registration"`
 }
 
 type SyncConfig struct {
@@ -56,6 +59,7 @@ type SyncConfig struct {
 // 配置文件查找路径：configs/config.<env>.yaml（相对于工作目录）。
 // 以下字段支持环境变量覆盖：
 //   - OSS_JWT_SECRET
+//   - OSS_ADMIN_USERNAME
 //   - OSS_ALLOW_ANONYMOUS_REGISTRATION
 //   - OSS_DB_DRIVER / OSS_DB_DSN
 //   - OSS_SERVER_HOST / OSS_SERVER_PORT
@@ -92,6 +96,9 @@ func Load() (*Config, error) {
 func (c *Config) applyEnvOverrides() error {
 	if v := os.Getenv("OSS_JWT_SECRET"); v != "" {
 		c.Auth.JWTSecret = v
+	}
+	if v := os.Getenv("OSS_ADMIN_USERNAME"); v != "" {
+		c.Auth.BootstrapAdminUsername = strings.TrimSpace(v)
 	}
 	if v, ok := os.LookupEnv("OSS_ALLOW_ANONYMOUS_REGISTRATION"); ok && v != "" {
 		switch strings.ToLower(strings.TrimSpace(v)) {
@@ -152,6 +159,9 @@ func (c *Config) validate() error {
 	if c.Auth.JWTSecret == "" {
 		return fmt.Errorf("auth.jwt_secret 不能为空")
 	}
+	if c.Auth.BootstrapAdminUsername == "" {
+		c.Auth.BootstrapAdminUsername = "admin"
+	}
 	if c.Server.Port <= 0 || c.Server.Port > 65535 {
 		return fmt.Errorf("server.port 非法: %d", c.Server.Port)
 	}
@@ -162,6 +172,14 @@ func (c *Config) validate() error {
 		return fmt.Errorf("sync maintenance intervals cannot be negative")
 	}
 	return nil
+}
+
+func (c AuthConfig) EffectiveBootstrapAdminUsername() string {
+	username := strings.TrimSpace(c.BootstrapAdminUsername)
+	if username == "" {
+		return "admin"
+	}
+	return username
 }
 
 func (c SyncConfig) EffectiveDeviceStaleDays() int {
