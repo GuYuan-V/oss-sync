@@ -61,16 +61,12 @@ auth: {jwt_secret: "from-file", jwt_ttl_hours: 72, allow_anonymous_registration:
 sync: {max_concurrency: 6}
 `)
 	t.Setenv("OSS_ENV", "prod")
-	t.Setenv("OSS_JWT_SECRET", "from-env")
 	t.Setenv("OSS_ALLOW_ANONYMOUS_REGISTRATION", "false")
 	t.Setenv("OSS_SERVER_PORT", "9999")
 	t.Setenv("OSS_STORAGE_DIR", "/var/data")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("load: %v", err)
-	}
-	if cfg.Auth.JWTSecret != "from-env" {
-		t.Errorf("jwt secret not overridden: %q", cfg.Auth.JWTSecret)
 	}
 	if cfg.Auth.AllowAnonymousRegistration {
 		t.Error("anonymous registration should be disabled by env override")

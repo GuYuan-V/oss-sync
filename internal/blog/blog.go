@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -100,8 +101,8 @@ func (h *Handler) buildResolver(userID uint, vaultID string) *shareResolver {
 		var files []models.File
 		prefix := strings.TrimSuffix(r.TargetPath, "/") + "/"
 		h.DB.Where(
-			"user_id = ? AND vault_id = ? AND path LIKE ? AND is_deleted = ? AND type = ?",
-			userID, vaultID, prefix+"%", false, "markdown",
+			"user_id = ? AND vault_id = ? AND path LIKE ? ESCAPE '\\' AND is_deleted = ? AND type = ?",
+			userID, vaultID, likePrefix(prefix), false, "markdown",
 		).Find(&files)
 		for _, f := range files {
 			base := basenameNoExt(f.Path)
@@ -247,8 +248,8 @@ func (h *Handler) handleFolder(c *gin.Context) {
 	prefix := strings.TrimSuffix(share.TargetPath, "/") + "/"
 	var files []models.File
 	h.DB.Where(
-		"user_id = ? AND vault_id = ? AND path LIKE ? AND is_deleted = ? AND type = ?",
-		share.UserID, share.VaultID, prefix+"%", false, "markdown",
+		"user_id = ? AND vault_id = ? AND path LIKE ? ESCAPE '\\' AND is_deleted = ? AND type = ?",
+		share.UserID, share.VaultID, likePrefix(prefix), false, "markdown",
 	).
 		Order("path asc").
 		Find(&files)
@@ -273,9 +274,9 @@ func (h *Handler) renderFolderTree(c *gin.Context, share models.Share, files []m
 	b.WriteString("<ul class=\"oss-tree-list\">")
 	for _, f := range files {
 		rel := strings.TrimPrefix(f.Path, strings.TrimSuffix(share.TargetPath, "/")+"/")
-		href := "/p/" + share.ShareID + "/" + rel
+		href := "/p/" + share.ShareID + "/" + escapedRelativeURL(rel)
 		title := strings.TrimSuffix(path.Base(f.Path), filepath.Ext(f.Path))
-		b.WriteString(fmt.Sprintf(`<li><a href="%s">%s</a></li>`, href, htmlEscape(title)))
+		b.WriteString(fmt.Sprintf(`<li><a href="%s">%s</a></li>`, htmlEscape(href), htmlEscape(title)))
 	}
 	b.WriteString("</ul>")
 
@@ -354,4 +355,20 @@ var osReadFile = func(p string) ([]byte, error) {
 
 func htmlEscape(s string) string {
 	return template.HTMLEscapeString(s)
+}
+
+// likePrefix escapes SQL LIKE metacharacters before adding the only wildcard
+// we intend: descendants of the selected folder. Both SQLite and PostgreSQL
+// understand the explicit backslash ESCAPE clause used by callers.
+func likePrefix(prefix string) string {
+	replacer := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_")
+	return replacer.Replace(prefix) + "%"
+}
+
+func escapedRelativeURL(rel string) string {
+	parts := strings.Split(rel, "/")
+	for i, part := range parts {
+		parts[i] = url.PathEscape(part)
+	}
+	return strings.Join(parts, "/")
 }

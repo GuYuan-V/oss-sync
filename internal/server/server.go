@@ -28,6 +28,9 @@ type Server struct {
 
 // New 创建 Server 实例，确保磁盘根目录存在。
 func New(cfg *config.Config, db *gorm.DB) (*Server, error) {
+	if err := auth.EnsureDatabaseJWTSecret(db, cfg); err != nil {
+		return nil, fmt.Errorf("初始化数据库 JWT 密钥失败: %w", err)
+	}
 	if err := os.MkdirAll(filepath.Join(cfg.Storage.DataDir), 0o755); err != nil {
 		return nil, fmt.Errorf("创建数据目录失败: %w", err)
 	}

@@ -179,17 +179,19 @@ export class SyncEngine {
     });
   }
 
-  async runOnce(opts: { forceFull: boolean }): Promise<void> {
+  async runOnce(opts: { forceFull: boolean }): Promise<boolean> {
+    let succeeded = true;
     await this.runCoordinator.run(opts.forceFull, async (forceFull) => {
-      await this.executeRun(forceFull);
+      succeeded = await this.executeRun(forceFull);
     });
+    return succeeded;
   }
 
-  private async executeRun(forceFull: boolean): Promise<void> {
+  private async executeRun(forceFull: boolean): Promise<boolean> {
     const vaultID = this.plugin.settings.vaultId;
     if (!this.api.hasToken() || !vaultID) {
       this.plugin.setSyncState("error", !this.api.hasToken() ? "not logged in" : "vault not bound");
-      return;
+      return false;
     }
     this.plugin.setSyncState("syncing");
     await this.enqueueChain;
@@ -262,9 +264,11 @@ export class SyncEngine {
       } else {
         this.plugin.setSyncState("idle");
       }
+		return failures.length === 0;
     } catch (error: unknown) {
       this.plugin.setSyncState("error", errorMessage(error));
       new Notice("OSS sync error: " + errorMessage(error), 8000);
+		return false;
     }
   }
 

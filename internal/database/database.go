@@ -69,6 +69,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.User{},
 		&models.SystemSetting{},
 		&models.Vault{},
+		&models.VaultMember{},
+		&models.VaultBackup{},
 		&models.VaultSetting{},
 		&models.VaultSyncState{},
 		&models.ClientDevice{},

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.VaultName}} · Vault 权限</title>
+  <link rel="stylesheet" href="/ui/assets/console.css">
+</head>
+<body>
+  <main class="shell shell--dashboard">
+    <header class="masthead">
+      <a class="wordmark" href="/admin">
+        <span class="wordmark__mark">OS</span>
+        <span><strong>OSS Sync</strong><small>Vault access console</small></span>
+      </a>
+      <div class="admin-identity"><span>{{.AdminUsername}}</span><a class="text-button" href="/admin">返回管理台</a></div>
+    </header>
+
+    <section class="dashboard-heading">
+      <div>
+        <span class="eyebrow">Vault access</span>
+        <h1>{{.VaultName}}</h1>
+        <p class="lead">所有者：<strong>{{.Owner}}</strong>。管理者可管理参与者与仓库设置；参与者只能访问和同步。</p>
+      </div>
+    </section>
+
+    {{if .Saved}}<div class="notice notice--success" role="status">成员权限已保存。</div>{{end}}
+    {{if .Error}}<div class="notice notice--error" role="alert">{{.Error}}</div>{{end}}
+
+    <section class="control-grid">
+      <article class="ledger-panel">
+        <header><div><span class="eyebrow">Members</span><h2>已授权成员</h2></div></header>
+        <div class="table-wrap"><table>
+          <thead><tr><th>用户名</th><th>角色</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td><strong>{{.Owner}}</strong></td><td><span class="role role--admin">owner</span></td><td>所有者不可在此移除</td></tr>
+            {{range .Members}}
+            <tr>
+              <td><strong>{{.Username}}</strong></td>
+              <td>
+                <form class="inline-form" method="post" action="/admin/vaults/{{$.VaultID}}/members/{{.UserID}}/role">
+                  <select name="role"><option value="manager" {{if eq .Role "manager"}}selected{{end}}>manager</option><option value="participant" {{if eq .Role "participant"}}selected{{end}}>participant</option></select>
+                  <button class="text-button" type="submit">保存</button>
+                </form>
+              </td>
+              <td><form method="post" action="/admin/vaults/{{$.VaultID}}/members/{{.UserID}}/delete"><button class="text-button text-button--danger" type="submit">移除</button></form></td>
+            </tr>
+            {{else}}
+            <tr><td colspan="3">暂无额外成员。</td></tr>
+            {{end}}
+          </tbody>
+        </table></div>
+      </article>
+
+      <article class="gate-panel">
+        <div class="gate-panel__copy"><span class="eyebrow">Grant access</span><h2>添加成员</h2><p>输入已注册用户的用户名，并分配其对该 Vault 的权限。</p></div>
+        <form method="post" action="/admin/vaults/{{.VaultID}}/members" class="gate-form">
+          <label><span>用户名</span><input name="username" required minlength="3" maxlength="64" autocomplete="off"></label>
+          <label><span>角色</span><select name="role"><option value="participant">participant — 访问与同步</option><option value="manager">manager — 管理参与者</option></select></label>
+          <button class="button button--primary" type="submit">保存成员权限</button>
+        </form>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

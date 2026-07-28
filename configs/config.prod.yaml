@@ -1,6 +1,6 @@
 # OSS Server 生产环境配置
 # 通过 OSS_ENV=prod 加载
-# 部署时请把 jwt_secret / dsn 等敏感项改为通过环境变量或密钥管理覆盖
+# 部署时请配置 dsn 等敏感项；JWT 签名密钥由服务首次启动时写入数据库。
 
 server:
   host: "0.0.0.0"
@@ -17,7 +17,7 @@ storage:
   data_dir: "data"
 
 auth:
-  jwt_secret: "REPLACE-ME-IN-PRODUCTION"
+  jwt_secret: ""
   jwt_ttl_hours: 72
   bootstrap_admin_username: "admin"
   allow_anonymous_registration: true # 仅作为新数据库注册开关的初始值；之后由管理面板控制

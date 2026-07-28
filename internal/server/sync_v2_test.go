@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -222,7 +223,8 @@ func TestSyncV2MultiVaultIsolationCASAndSharing(t *testing.T) {
 }
 
 func TestVaultManagementCRUD(t *testing.T) {
-	srv, _, _ := newTestServer(t)
+	t.Chdir(t.TempDir())
+	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	token := registerAndLogin(t, router, "vault-crud", "password123")
 	defaultVault := defaultVaultIDFromAPI(t, router, token)
@@ -261,8 +263,15 @@ func TestVaultManagementCRUD(t *testing.T) {
 		token,
 		nil,
 	)
-	if code != http.StatusNoContent {
-		t.Fatalf("archive vault: %d", code)
+	if code != http.StatusOK {
+		t.Fatalf("delete vault: %d", code)
+	}
+	var backup models.VaultBackup
+	if err := db.Where("vault_id = ?", secondVault).First(&backup).Error; err != nil {
+		t.Fatalf("vault backup record: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join("backups", "vaults", backup.FileName)); err != nil {
+		t.Fatalf("vault backup archive: %v", err)
 	}
 	code, _ = doJSON(
 		t,

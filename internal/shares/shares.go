@@ -2,6 +2,7 @@ package shares
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/oss/oss-server/internal/auth"
 	"github.com/oss/oss-server/internal/config"
 	"github.com/oss/oss-server/internal/models"
+	"github.com/oss/oss-server/internal/vaultaccess"
 )
 
 type Handler struct {
@@ -86,21 +88,26 @@ func (h *Handler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "target_path contains illegal segments"})
 		return
 	}
-	vaultID, err := h.resolveVaultID(u.ID, strings.TrimSpace(req.VaultID))
+	vault, role, err := h.resolveVault(u.ID, strings.TrimSpace(req.VaultID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
 		return
 	}
+	if !vaultaccess.CanManage(role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "insufficient vault permission"})
+		return
+	}
+	vaultID := vault.ID
 
 	extra := []shareOut{}
 	if req.RecursiveBacklinks && !req.IsFolder {
-		links, err := h.collectBacklinks(u.ID, vaultID, req.TargetPath)
+		links, err := h.collectBacklinks(vault.OwnerID, vaultID, req.TargetPath)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		for _, p := range links {
-			so, err := h.createOne(u.ID, vaultID, p, false, req.AllowCopy)
+			so, err := h.createOne(vault.OwnerID, vaultID, p, false, req.AllowCopy)
 			if err != nil {
 				continue
 			}
@@ -108,7 +115,7 @@ func (h *Handler) Create(c *gin.Context) {
 		}
 	}
 
-	so, err := h.createOne(u.ID, vaultID, req.TargetPath, req.IsFolder, req.AllowCopy)
+	so, err := h.createOne(vault.OwnerID, vaultID, req.TargetPath, req.IsFolder, req.AllowCopy)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -183,13 +190,35 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 	var rows []models.Share
-	query := h.DB.Where("user_id = ?", u.ID)
+	query := h.DB.Where("1 = 0")
 	if vaultID := strings.TrimSpace(c.Query("vault_id")); vaultID != "" {
-		if _, err := h.resolveVaultID(u.ID, vaultID); err != nil {
+		vault, _, err := h.resolveVault(u.ID, vaultID)
+		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
 			return
 		}
-		query = query.Where("vault_id = ?", vaultID)
+		query = h.DB.Where("vault_id = ?", vault.ID)
+	} else {
+		var owned []models.Vault
+		if err := h.DB.Where("owner_id = ?", u.ID).Find(&owned).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ids := make([]string, 0, len(owned))
+		for _, vault := range owned {
+			ids = append(ids, vault.ID)
+		}
+		var members []models.VaultMember
+		if err := h.DB.Where("user_id = ?", u.ID).Find(&members).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, member := range members {
+			ids = append(ids, member.VaultID)
+		}
+		if len(ids) > 0 {
+			query = h.DB.Where("vault_id IN ?", ids)
+		}
 	}
 	query.Order("created_at desc").Find(&rows)
 	out := make([]shareOut, 0, len(rows))
@@ -206,7 +235,12 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 	id := c.Param("id")
 	var s models.Share
-	if err := h.DB.Where("share_id = ? AND user_id = ?", id, u.ID).First(&s).Error; err != nil {
+	if err := h.DB.Where("share_id = ?", id).First(&s).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
+		return
+	}
+	_, role, err := h.resolveVault(u.ID, s.VaultID)
+	if err != nil || !vaultaccess.CanManage(role) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
 		return
 	}
@@ -219,7 +253,17 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 	id := c.Param("id")
-	res := h.DB.Where("share_id = ? AND user_id = ?", id, u.ID).Delete(&models.Share{})
+	var share models.Share
+	if err := h.DB.Where("share_id = ?", id).First(&share).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
+		return
+	}
+	_, role, err := h.resolveVault(u.ID, share.VaultID)
+	if err != nil || !vaultaccess.CanManage(role) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
+		return
+	}
+	res := h.DB.Where("share_id = ?", id).Delete(&models.Share{})
 	if res.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": res.Error.Error()})
 		return
@@ -248,18 +292,21 @@ func toOut(s models.Share) shareOut {
 	}
 }
 
-func (h *Handler) resolveVaultID(userID uint, requested string) (string, error) {
+func (h *Handler) resolveVault(userID uint, requested string) (models.Vault, string, error) {
 	var vault models.Vault
-	query := h.DB.Where("owner_id = ?", userID)
 	if requested != "" {
-		query = query.Where("id = ?", requested)
-	} else {
-		query = query.Order("is_default desc, created_at asc")
+		return vaultaccess.Resolve(h.DB, userID, requested)
 	}
-	if err := query.First(&vault).Error; err != nil {
-		return "", err
+	if err := h.DB.Where("owner_id = ?", userID).Order("is_default desc, created_at asc").First(&vault).Error; err == nil {
+		return vault, vaultaccess.RoleOwner, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return models.Vault{}, "", err
 	}
-	return vault.ID, nil
+	var member models.VaultMember
+	if err := h.DB.Where("user_id = ?", userID).Order("created_at asc").First(&member).Error; err != nil {
+		return models.Vault{}, "", err
+	}
+	return vaultaccess.Resolve(h.DB, userID, member.VaultID)
 }
 
 func genShareID() (string, error) {

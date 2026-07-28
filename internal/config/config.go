@@ -58,7 +58,6 @@ type SyncConfig struct {
 // OSS_ENV 取值：dev（默认）/ prod。对应 configs/config.<env>.yaml。
 // 配置文件查找路径：configs/config.<env>.yaml（相对于工作目录）。
 // 以下字段支持环境变量覆盖：
-//   - OSS_JWT_SECRET
 //   - OSS_ADMIN_USERNAME
 //   - OSS_ALLOW_ANONYMOUS_REGISTRATION
 //   - OSS_DB_DRIVER / OSS_DB_DSN
@@ -94,9 +93,6 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) applyEnvOverrides() error {
-	if v := os.Getenv("OSS_JWT_SECRET"); v != "" {
-		c.Auth.JWTSecret = v
-	}
 	if v := os.Getenv("OSS_ADMIN_USERNAME"); v != "" {
 		c.Auth.BootstrapAdminUsername = strings.TrimSpace(v)
 	}
@@ -155,9 +151,6 @@ func (c *Config) validate() error {
 	}
 	if c.Storage.DataDir == "" {
 		return fmt.Errorf("storage.data_dir 不能为空")
-	}
-	if c.Auth.JWTSecret == "" {
-		return fmt.Errorf("auth.jwt_secret 不能为空")
 	}
 	if c.Auth.BootstrapAdminUsername == "" {
 		c.Auth.BootstrapAdminUsername = "admin"

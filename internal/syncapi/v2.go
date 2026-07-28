@@ -25,6 +25,7 @@ import (
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/synclock"
+	"github.com/oss/oss-server/internal/vaultaccess"
 )
 
 const (
@@ -165,7 +166,7 @@ func (h *Handler) v2ListChanges(c *gin.Context, manifest bool) {
 	var rows []models.File
 	if err := h.DB.Where(
 		"user_id = ? AND vault_id = ? AND revision > ? AND revision <= ?",
-		u.ID, vault.ID, after, state.HeadRevision,
+		vault.OwnerID, vault.ID, after, state.HeadRevision,
 	).Order("revision asc").Limit(limit + 1).Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -337,7 +338,7 @@ func (h *Handler) V2Upload(c *gin.Context) {
 	moved := false
 
 	err = h.DB.Transaction(func(tx *gorm.DB) error {
-		current, exists, err := lockedFile(tx, u.ID, vault.ID, path)
+		current, exists, err := lockedFile(tx, vault.OwnerID, vault.ID, path)
 		if err != nil {
 			return err
 		}
@@ -394,7 +395,7 @@ func (h *Handler) V2Upload(c *gin.Context) {
 		}
 		now := time.Now()
 		if !exists {
-			current = models.File{UserID: u.ID, VaultID: vault.ID, Path: path}
+			current = models.File{UserID: vault.OwnerID, VaultID: vault.ID, Path: path}
 		}
 		current.Type = classifyFile(path)
 		current.Hash = actualHash
@@ -460,7 +461,7 @@ func (h *Handler) V2Download(c *gin.Context) {
 		return
 	}
 	var file models.File
-	if err := h.DB.Where("user_id = ? AND vault_id = ? AND path = ?", u.ID, vault.ID, path).First(&file).Error; err != nil {
+	if err := h.DB.Where("user_id = ? AND vault_id = ? AND path = ?", vault.OwnerID, vault.ID, path).First(&file).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
 		return
 	}
@@ -532,7 +533,7 @@ func (h *Handler) V2Delete(c *gin.Context) {
 	targetPath := ""
 	stagedPath := ""
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
-		current, exists, err := lockedFile(tx, u.ID, vault.ID, req.Path)
+		current, exists, err := lockedFile(tx, vault.OwnerID, vault.ID, req.Path)
 		if err != nil {
 			return err
 		}
@@ -545,7 +546,7 @@ func (h *Handler) V2Delete(c *gin.Context) {
 				return gorm.ErrRecordNotFound
 			}
 			result = models.File{
-				UserID:    u.ID,
+				UserID:    vault.OwnerID,
 				VaultID:   vault.ID,
 				Path:      req.Path,
 				Type:      classifyFile(req.Path),
@@ -660,7 +661,7 @@ func (h *Handler) V2Rename(c *gin.Context) {
 	newDisk := ""
 	moved := false
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
-		oldFile, oldExists, err := lockedFile(tx, u.ID, vault.ID, req.OldPath)
+		oldFile, oldExists, err := lockedFile(tx, vault.OwnerID, vault.ID, req.OldPath)
 		if err != nil {
 			return err
 		}
@@ -669,7 +670,7 @@ func (h *Handler) V2Rename(c *gin.Context) {
 		}
 		if oldFile.LastWriterClientID == req.ClientID && oldFile.LastOperationID == req.OperationID {
 			oldResult = oldFile
-			if err := tx.Where("user_id = ? AND vault_id = ? AND path = ?", u.ID, vault.ID, req.NewPath).First(&newResult).Error; err != nil {
+			if err := tx.Where("user_id = ? AND vault_id = ? AND path = ?", vault.OwnerID, vault.ID, req.NewPath).First(&newResult).Error; err != nil {
 				return err
 			}
 			return nil
@@ -679,7 +680,7 @@ func (h *Handler) V2Rename(c *gin.Context) {
 			conflictPath = req.OldPath
 			return errRevisionConflict
 		}
-		target, targetExists, err := lockedFile(tx, u.ID, vault.ID, req.NewPath)
+		target, targetExists, err := lockedFile(tx, vault.OwnerID, vault.ID, req.NewPath)
 		if err != nil {
 			return err
 		}
@@ -737,7 +738,7 @@ func (h *Handler) V2Rename(c *gin.Context) {
 		}
 
 		if !targetExists {
-			target = models.File{UserID: u.ID, VaultID: vault.ID, Path: req.NewPath}
+			target = models.File{UserID: vault.OwnerID, VaultID: vault.ID, Path: req.NewPath}
 		}
 		target.Type = classifyFile(req.NewPath)
 		target.Hash = oldFile.Hash
@@ -784,8 +785,8 @@ func (h *Handler) requireV2Vault(c *gin.Context) (*models.User, models.Vault, bo
 	if !ok {
 		return nil, models.Vault{}, false
 	}
-	var vault models.Vault
-	if err := h.DB.Where("id = ? AND owner_id = ?", c.Param("vault_id"), u.ID).First(&vault).Error; err != nil {
+	vault, _, err := vaultaccess.Resolve(h.DB, u.ID, c.Param("vault_id"))
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
 		return nil, models.Vault{}, false
 	}

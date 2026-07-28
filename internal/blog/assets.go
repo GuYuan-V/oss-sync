@@ -56,8 +56,8 @@ func (h *Handler) shareReferencesAsset(share models.Share, reference string) boo
 	prefix := strings.TrimSuffix(share.TargetPath, "/") + "/"
 	var files []models.File
 	if err := h.DB.Where(
-		"user_id = ? AND vault_id = ? AND path LIKE ? AND is_deleted = ? AND type = ?",
-		share.UserID, share.VaultID, prefix+"%", false, "markdown",
+		"user_id = ? AND vault_id = ? AND path LIKE ? ESCAPE '\\' AND is_deleted = ? AND type = ?",
+		share.UserID, share.VaultID, likePrefix(prefix), false, "markdown",
 	).Find(&files).Error; err != nil {
 		return false
 	}

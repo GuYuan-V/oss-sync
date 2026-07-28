@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -24,14 +25,16 @@ import (
 
 // Handler 持有 auth 路由所需依赖。
 type Handler struct {
-	DB         *gorm.DB
-	Cfg        *config.Config
-	registerMu sync.Mutex
+	DB            *gorm.DB
+	Cfg           *config.Config
+	registerMu    sync.Mutex
+	loginLimit    *AttemptLimiter
+	registerLimit *AttemptLimiter
 }
 
 // NewHandler 创建 auth handler。
 func NewHandler(db *gorm.DB, cfg *config.Config) *Handler {
-	return &Handler{DB: db, Cfg: cfg}
+	return &Handler{DB: db, Cfg: cfg, loginLimit: NewAttemptLimiter(8, time.Minute), registerLimit: NewAttemptLimiter(5, time.Minute)}
 }
 
 // Register 在 gin 引擎上挂载 auth 路由组。
@@ -66,6 +69,10 @@ type AuthResponse struct {
 // RegisterUser 处理 POST /api/auth/register。
 // 匿名请求只能在数据库注册开关开启时创建普通用户；管理员始终可以创建用户。
 func (h *Handler) RegisterUser(c *gin.Context) {
+	if !h.registerLimit.Allow("register:" + c.ClientIP()) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many registration attempts; try again later"})
+		return
+	}
 	h.registerMu.Lock()
 	defer h.registerMu.Unlock()
 
@@ -158,6 +165,10 @@ func (h *Handler) Status(c *gin.Context) {
 
 // Login 处理 POST /api/auth/login。
 func (h *Handler) Login(c *gin.Context) {
+	if !h.loginLimit.Allow("login:" + c.ClientIP()) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many login attempts; try again later"})
+		return
+	}
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

@@ -71,6 +71,7 @@ export interface VaultOut {
   name: string;
   description: string;
   is_default: boolean;
+  access_role: "owner" | "manager" | "participant";
   storage_quota: number;
   storage_used: number;
   head_revision: number;
@@ -181,17 +182,6 @@ export class OSSApiClient {
     return this.doRequest<VaultOut>("POST", "/api/vaults", { name });
   }
 
-  async updateVault(vaultID: string, input: { name?: string; description?: string }): Promise<VaultOut> {
-    return this.doRequest<VaultOut>(
-      "PATCH",
-      `/api/vaults/${encodeURIComponent(vaultID)}`,
-      input
-    );
-  }
-
-  async archiveVault(vaultID: string): Promise<void> {
-    await this.doRequest<void>("DELETE", `/api/vaults/${encodeURIComponent(vaultID)}`);
-  }
 
   async listDevices(): Promise<{ devices: DeviceOut[]; stale_after_days: number }> {
     return this.doRequest<{ devices: DeviceOut[]; stale_after_days: number }>(

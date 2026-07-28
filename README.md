@@ -82,7 +82,6 @@ OSS_ENV=prod go run ./cmd/server
 
 | 环境变量 | 说明 |
 | --- | --- |
-| `OSS_JWT_SECRET` | JWT 签名密钥 |
 | `OSS_ADMIN_USERNAME` | 首次创建的管理员用户名，默认 `admin` |
 | `OSS_ADMIN_PASSWORD` | 非交互式首次启动所需的管理员密码 |
 | `OSS_ALLOW_ANONYMOUS_REGISTRATION` | 新数据库注册开关的初始值；之后由管理面板控制 |
@@ -94,11 +93,10 @@ OSS_ENV=prod go run ./cmd/server
 | `OSS_DEVICE_STALE_DAYS` | 设备失效天数 |
 | `OSS_RECONCILE_INTERVAL_HOURS` | 存储对账周期 |
 
-生产环境至少应覆盖 JWT 密钥：
+生产环境首次启动会自动生成 48 字节随机 JWT 签名密钥并保存到数据库；之后每次启动均复用该值。请妥善备份数据库，遗失数据库会使所有现有会话失效。
 
 ```bash
 export OSS_ENV=prod
-export OSS_JWT_SECRET='replace-with-a-random-secret'
 export OSS_ADMIN_PASSWORD='replace-with-a-strong-password'
 go run ./cmd/server
 ```
@@ -220,7 +218,7 @@ npm run build
 ## 生产部署建议
 
 - 使用反向代理提供 HTTPS
-- 使用随机且长期稳定的 `OSS_JWT_SECRET`
+- 备份数据库中的 JWT 签名密钥（与数据库一并备份即可）
 - 完成用户开户后在 `/admin` 关闭新用户注册
 - 首次启动后从部署环境中移除 `OSS_ADMIN_PASSWORD`
 - 定期备份数据库和存储目录

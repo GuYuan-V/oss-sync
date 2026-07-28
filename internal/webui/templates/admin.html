@@ -33,7 +33,7 @@
       </dl>
     </section>
 
-    {{if .Saved}}<div class="notice notice--success notice--floating" role="status">注册设置已保存。</div>{{end}}
+    {{if .Saved}}<div class="notice notice--success notice--floating" role="status">设置已保存。</div>{{end}}
 
     <section class="control-grid">
       <article class="gate-panel">
@@ -75,6 +75,62 @@
               </tr>
               {{else}}
               <tr><td colspan="3">尚无账户。</td></tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="ledger-panel">
+        <header>
+          <div>
+            <span class="eyebrow">Vault archive ledger</span>
+            <h2>已删除仓库的备份</h2>
+          </div>
+          <span class="ledger-count">{{.BackupCount}} archives</span>
+        </header>
+        <p class="panel-note">仓库删除前会生成 ZIP 备份到项目运行目录。下载后可在安全位置长期保存；删除备份文件不可恢复。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>仓库</th><th>所有者</th><th>备份时间</th><th>大小</th><th>操作</th></tr></thead>
+            <tbody>
+              {{range .Backups}}
+              <tr>
+                <td><strong>{{.VaultName}}</strong><small class="file-name">{{.FileName}}</small></td>
+                <td>{{.Owner}}</td><td><time>{{.CreatedAt}}</time></td><td>{{.Size}}</td>
+                <td class="action-cell">
+                  <a class="quiet-link" href="/admin/backups/{{.ID}}/download">下载</a>
+                  <form method="post" action="/admin/backups/{{.ID}}/delete"><button class="text-button text-button--danger" type="submit">删除</button></form>
+                </td>
+              </tr>
+              {{else}}
+              <tr><td colspan="5">暂无已删除仓库的备份。</td></tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="ledger-panel">
+        <header>
+          <div>
+            <span class="eyebrow">Vault access registry</span>
+            <h2>Vault 成员权限</h2>
+          </div>
+          <span class="ledger-count">{{len .Vaults}} vaults</span>
+        </header>
+        <p class="panel-note">成员权限统一在平台维护。插件仅用于创建、选择并同步已授权的 Vault。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Vault</th><th>所有者</th><th>成员数</th><th>已用空间</th><th></th></tr></thead>
+            <tbody>
+              {{range .Vaults}}
+              <tr>
+                <td><strong>{{.Name}}</strong></td><td>{{.Owner}}</td><td>{{.MemberCount}}</td><td>{{.StorageUsed}}</td>
+                <td><a class="quiet-link" href="/admin/vaults/{{.ID}}">管理成员</a></td>
+              </tr>
+              {{else}}
+              <tr><td colspan="5">尚未创建 Vault。</td></tr>
               {{end}}
             </tbody>
           </table>

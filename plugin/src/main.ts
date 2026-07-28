@@ -150,6 +150,8 @@ export default class OSSPlugin extends Plugin {
     } else {
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
     }
+    // Passwords from older plugin versions are never retained after loading.
+    this.settings.password = "";
     if (!this.settings.clientId) {
       this.settings.clientId =
         typeof crypto.randomUUID === "function"
@@ -164,13 +166,14 @@ export default class OSSPlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
-    const data: PluginData = { ...this.settings, token: this.token };
+    const data: PluginData = { ...this.settings, password: "", token: this.token };
     await this.saveData(data);
   }
 
   async login(): Promise<void> {
     const res = await this.api.login();
     this.token = res.token;
+    this.settings.password = "";
     await this.saveSettings();
     await this.ensureVaultBinding();
   }
@@ -208,7 +211,7 @@ export default class OSSPlugin extends Plugin {
     }
   }
 
-  async bindVault(vault: VaultOut): Promise<void> {
+  async bindVault(vault: VaultOut): Promise<boolean> {
     const changed = this.settings.vaultId !== vault.id;
     this.settings.vaultId = vault.id;
     this.settings.vaultName = vault.name;
@@ -218,8 +221,9 @@ export default class OSSPlugin extends Plugin {
       await this.baseline.save();
     }
     if (changed) {
-      await this.syncEngine.runOnce({ forceFull: true });
+      return this.syncEngine.runOnce({ forceFull: true });
     }
+	return true;
   }
 
   setSyncState(state: SyncState, label?: string): void {

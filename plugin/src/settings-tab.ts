@@ -43,9 +43,8 @@ export class OSSSettingTab extends PluginSettingTab {
         text.inputEl.type = "password";
         text
           .setValue(this.plugin.settings.password)
-          .onChange(async (value) => {
+          .onChange((value) => {
             this.plugin.settings.password = value;
-            await this.plugin.saveSettings();
           });
       });
 
@@ -93,66 +92,6 @@ export class OSSSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h3", { text: "Vault" });
 
-    let vaultActionsEl: HTMLDivElement | null = null;
-    const renderVaultActions = (): void => {
-      if (!vaultActionsEl) return;
-      vaultActionsEl.empty();
-      const current = this.plugin.availableVaults.find(
-        (vault) => vault.id === this.plugin.settings.vaultId
-      );
-      if (!current) return;
-
-      let nextName = current.name;
-      new Setting(vaultActionsEl)
-        .setName("Rename vault")
-        .addText((text) =>
-          text.setValue(current.name).onChange((value) => {
-            nextName = value.trim();
-          })
-        )
-        .addButton((button) =>
-          button.setButtonText("Rename").onClick(async () => {
-            if (!nextName) {
-              new Notice("仓库名称不能为空");
-              return;
-            }
-            try {
-              const updated = await this.plugin.api.updateVault(current.id, { name: nextName });
-              await this.plugin.refreshVaults();
-              await this.plugin.bindVault(updated);
-              new Notice(`OSS: 仓库已重命名为 ${updated.name}`);
-              this.display();
-            } catch (error: unknown) {
-              new Notice("OSS: 重命名仓库失败 " + this.errorMessage(error));
-            }
-          })
-        );
-
-      new Setting(vaultActionsEl)
-        .setName("Archive vault")
-        .setDesc(current.is_default ? "默认仓库不能归档。" : "归档后该仓库不再出现在可选列表中。")
-        .addButton((button) =>
-          button
-            .setButtonText("Archive")
-            .setWarning()
-            .setDisabled(current.is_default)
-            .onClick(async () => {
-              try {
-                await this.plugin.api.archiveVault(current.id);
-                const vaults = await this.plugin.refreshVaults();
-                const fallback = vaults.find((vault) => vault.is_default) ?? vaults[0];
-                if (fallback) {
-                  await this.plugin.bindVault(fallback);
-                }
-                new Notice(`OSS: 已归档仓库 ${current.name}`);
-                this.display();
-              } catch (error: unknown) {
-                new Notice("OSS: 归档仓库失败 " + this.errorMessage(error));
-              }
-            })
-        );
-    };
-
     const boundVaultSetting = new Setting(containerEl)
       .setName("Bound vault")
       .setDesc("明确选择后会绑定当前 Obsidian Vault，并立即执行一次全量同步。")
@@ -163,8 +102,8 @@ export class OSSSettingTab extends PluginSettingTab {
           const vault = this.plugin.availableVaults.find((item) => item.id === vaultID);
           if (!vault) return;
           try {
-            await this.plugin.bindVault(vault);
-            new Notice(`OSS: 已绑定仓库 ${vault.name}`);
+            const synced = await this.plugin.bindVault(vault);
+            new Notice(synced ? `OSS: 已绑定仓库 ${vault.name}` : `OSS: 已绑定仓库 ${vault.name}，但首次同步失败；请修复后重试`);
           } catch (error: unknown) {
             new Notice("OSS: 绑定仓库失败 " + this.errorMessage(error));
           }
@@ -180,14 +119,10 @@ export class OSSSettingTab extends PluginSettingTab {
             dropdown.addOption(vault.id, vault.is_default ? `${vault.name} (default)` : vault.name);
           }
           dropdown.setValue(this.plugin.settings.vaultId);
-          renderVaultActions();
         }).catch(() => {
           // 尚未登录时保留空列表。
         });
       });
-    vaultActionsEl = containerEl.createDiv();
-    renderVaultActions();
-
     let newVaultName = "";
     new Setting(containerEl)
       .setName("Create and sync vault")
@@ -207,8 +142,8 @@ export class OSSSettingTab extends PluginSettingTab {
           try {
             const vault = await this.plugin.api.createVault(newVaultName);
             await this.plugin.refreshVaults();
-            await this.plugin.bindVault(vault);
-            new Notice(`OSS: 已创建 ${vault.name} 并完成首次同步`);
+            const synced = await this.plugin.bindVault(vault);
+            new Notice(synced ? `OSS: 已创建 ${vault.name} 并完成首次同步` : `OSS: 已创建 ${vault.name}，但首次同步失败；请修复后重试`);
             this.display();
           } catch (error: unknown) {
             new Notice("OSS: 创建仓库失败 " + this.errorMessage(error));
@@ -394,7 +329,8 @@ export class OSSSettingTab extends PluginSettingTab {
       .setDesc("立即执行一次完整清单校验。")
       .addButton((btn) =>
         btn.setButtonText("Sync now").onClick(async () => {
-          await this.plugin.syncEngine.runOnce({ forceFull: true });
+          const synced = await this.plugin.syncEngine.runOnce({ forceFull: true });
+          if (!synced) new Notice("OSS: 同步未完成，请查看状态栏错误信息后重试");
         })
       );
   }

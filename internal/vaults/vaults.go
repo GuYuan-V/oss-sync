@@ -1,6 +1,7 @@
 package vaults
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/oss/oss-server/internal/auth"
 	"github.com/oss/oss-server/internal/config"
 	"github.com/oss/oss-server/internal/models"
+	"github.com/oss/oss-server/internal/vaultaccess"
+	"github.com/oss/oss-server/internal/vaultbackup"
 )
 
 type Handler struct {
@@ -19,9 +22,7 @@ type Handler struct {
 	Cfg *config.Config
 }
 
-func New(db *gorm.DB, cfg *config.Config) *Handler {
-	return &Handler{DB: db, Cfg: cfg}
-}
+func New(db *gorm.DB, cfg *config.Config) *Handler { return &Handler{DB: db, Cfg: cfg} }
 
 func (h *Handler) Register(r *gin.Engine) {
 	g := r.Group("/api/vaults", auth.Middleware(h.DB, h.Cfg))
@@ -30,7 +31,11 @@ func (h *Handler) Register(r *gin.Engine) {
 		g.POST("", h.Create)
 		g.GET("/:vault_id", h.Get)
 		g.PATCH("/:vault_id", h.Update)
-		g.DELETE("/:vault_id", h.Archive)
+		g.DELETE("/:vault_id", h.Delete)
+		g.GET("/:vault_id/members", h.ListMembers)
+		g.POST("/:vault_id/members", h.AddMember)
+		g.PATCH("/:vault_id/members/:user_id", h.UpdateMember)
+		g.DELETE("/:vault_id/members/:user_id", h.RemoveMember)
 	}
 }
 
@@ -49,6 +54,7 @@ type vaultOut struct {
 	Name         string `json:"name"`
 	Description  string `json:"description"`
 	IsDefault    bool   `json:"is_default"`
+	AccessRole   string `json:"access_role"`
 	StorageQuota int64  `json:"storage_quota"`
 	StorageUsed  int64  `json:"storage_used"`
 	HeadRevision int64  `json:"head_revision"`
@@ -56,19 +62,45 @@ type vaultOut struct {
 	UpdatedAt    string `json:"updated_at"`
 }
 
+type memberOut struct {
+	UserID   uint   `json:"user_id"`
+	Username string `json:"username"`
+	Role     string `json:"role"`
+}
+
+type memberRequest struct {
+	Username string `json:"username" binding:"required,min=3,max=64"`
+	Role     string `json:"role" binding:"required"`
+}
+
+type memberRoleRequest struct {
+	Role string `json:"role" binding:"required"`
+}
+
 func (h *Handler) List(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {
 		return
 	}
-	var rows []models.Vault
-	if err := h.DB.Where("owner_id = ?", u.ID).Order("is_default desc, created_at asc").Find(&rows).Error; err != nil {
+	var owned []models.Vault
+	if err := h.DB.Where("owner_id = ?", u.ID).Order("is_default desc, created_at asc").Find(&owned).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	out := make([]vaultOut, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, h.toOut(row))
+	var memberships []models.VaultMember
+	if err := h.DB.Where("user_id = ?", u.ID).Find(&memberships).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	out := make([]vaultOut, 0, len(owned)+len(memberships))
+	for _, vault := range owned {
+		out = append(out, h.toOut(vault, vaultaccess.RoleOwner))
+	}
+	for _, member := range memberships {
+		var vault models.Vault
+		if err := h.DB.Where("id = ?", member.VaultID).First(&vault).Error; err == nil {
+			out = append(out, h.toOut(vault, member.Role))
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"vaults": out})
 }
@@ -88,17 +120,10 @@ func (h *Handler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
 		return
 	}
-	vault := models.Vault{
-		ID:          uuid.NewString(),
-		OwnerID:     u.ID,
-		Name:        req.Name,
-		Description: strings.TrimSpace(req.Description),
-	}
+	vault := models.Vault{ID: uuid.NewString(), OwnerID: u.ID, Name: req.Name, Description: strings.TrimSpace(req.Description)}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		var activeVaultCount int64
-		if err := tx.Model(&models.Vault{}).
-			Where("owner_id = ?", u.ID).
-			Count(&activeVaultCount).Error; err != nil {
+		if err := tx.Model(&models.Vault{}).Where("owner_id = ?", u.ID).Count(&activeVaultCount).Error; err != nil {
 			return err
 		}
 		vault.IsDefault = activeVaultCount == 0
@@ -113,7 +138,7 @@ func (h *Handler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, h.toOut(vault))
+	c.JSON(http.StatusCreated, h.toOut(vault, vaultaccess.RoleOwner))
 }
 
 func (h *Handler) Get(c *gin.Context) {
@@ -121,11 +146,11 @@ func (h *Handler) Get(c *gin.Context) {
 	if !ok {
 		return
 	}
-	vault, ok := h.requireOwned(c, u.ID)
+	vault, role, ok := h.requireAccess(c, u.ID)
 	if !ok {
 		return
 	}
-	c.JSON(http.StatusOK, h.toOut(vault))
+	c.JSON(http.StatusOK, h.toOut(vault, role))
 }
 
 func (h *Handler) Update(c *gin.Context) {
@@ -133,8 +158,12 @@ func (h *Handler) Update(c *gin.Context) {
 	if !ok {
 		return
 	}
-	vault, ok := h.requireOwned(c, u.ID)
+	vault, role, ok := h.requireAccess(c, u.ID)
 	if !ok {
+		return
+	}
+	if !vaultaccess.CanManage(role) {
+		h.writeForbidden(c)
 		return
 	}
 	var req updateRequest
@@ -162,59 +191,236 @@ func (h *Handler) Update(c *gin.Context) {
 		vault.Description = description
 	}
 	if len(updates) > 0 {
-		if err := h.DB.Model(&models.Vault{}).Where("id = ? AND owner_id = ?", vault.ID, u.ID).Updates(updates).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		if err := h.DB.Where("id = ? AND owner_id = ?", vault.ID, u.ID).First(&vault).Error; err != nil {
+		if err := h.DB.Model(&models.Vault{}).Where("id = ?", vault.ID).Updates(updates).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 	}
-	c.JSON(http.StatusOK, h.toOut(vault))
+	c.JSON(http.StatusOK, h.toOut(vault, role))
 }
 
-func (h *Handler) Archive(c *gin.Context) {
+// Delete first writes a ZIP archive below ./backups/vaults, then permanently
+// removes the Vault, shares, membership data, revisions and stored content.
+func (h *Handler) Delete(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {
 		return
 	}
-	vault, ok := h.requireOwned(c, u.ID)
+	vault, role, ok := h.requireAccess(c, u.ID)
 	if !ok {
 		return
 	}
-	if vault.IsDefault {
-		c.JSON(http.StatusConflict, gin.H{"error": "default vault cannot be archived"})
+	if !vaultaccess.CanDelete(role) {
+		h.writeForbidden(c)
 		return
 	}
-	if err := h.DB.Delete(&vault).Error; err != nil {
+	if vault.IsDefault {
+		c.JSON(http.StatusConflict, gin.H{"error": "default vault cannot be deleted"})
+		return
+	}
+	backup, err := vaultbackup.Purge(h.DB, h.Cfg.Storage.DataDir, vault)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "backup or permanent deletion failed: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"backup_id": backup.ID, "message": "vault permanently deleted after backup"})
+}
+
+func (h *Handler) ListMembers(c *gin.Context) {
+	u, ok := auth.RequireUser(c)
+	if !ok {
+		return
+	}
+	vault, role, ok := h.requireAccess(c, u.ID)
+	if !ok {
+		return
+	}
+	if !vaultaccess.CanManage(role) {
+		h.writeForbidden(c)
+		return
+	}
+	rows, err := h.memberRows(vault)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"members": rows, "current_role": role})
+}
+
+func (h *Handler) AddMember(c *gin.Context) {
+	u, ok := auth.RequireUser(c)
+	if !ok {
+		return
+	}
+	vault, actorRole, ok := h.requireAccess(c, u.ID)
+	if !ok {
+		return
+	}
+	if !vaultaccess.CanManage(actorRole) {
+		h.writeForbidden(c)
+		return
+	}
+	var req memberRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Username, req.Role = strings.TrimSpace(req.Username), strings.ToLower(strings.TrimSpace(req.Role))
+	if !vaultaccess.ValidMemberRole(req.Role) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "role must be manager or participant"})
+		return
+	}
+	if actorRole == vaultaccess.RoleManager && req.Role != vaultaccess.RoleParticipant {
+		h.writeForbidden(c)
+		return
+	}
+	var target models.User
+	if err := h.DB.Where("username = ?", req.Username).First(&target).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	if target.ID == vault.OwnerID {
+		c.JSON(http.StatusConflict, gin.H{"error": "vault owner already has access"})
+		return
+	}
+	member := models.VaultMember{VaultID: vault.ID, UserID: target.ID, Role: req.Role}
+	var existing models.VaultMember
+	err := h.DB.Where("vault_id = ? AND user_id = ?", vault.ID, target.ID).First(&existing).Error
+	if err == nil {
+		if actorRole == vaultaccess.RoleManager && existing.Role != vaultaccess.RoleParticipant {
+			h.writeForbidden(c)
+			return
+		}
+		if err := h.DB.Model(&existing).Update("role", req.Role).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := h.DB.Create(&member).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	} else {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.Status(http.StatusNoContent)
 }
 
-func (h *Handler) requireOwned(c *gin.Context, userID uint) (models.Vault, bool) {
-	var vault models.Vault
-	if err := h.DB.Where("id = ? AND owner_id = ?", c.Param("vault_id"), userID).First(&vault).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
-		return models.Vault{}, false
+func (h *Handler) UpdateMember(c *gin.Context) {
+	u, ok := auth.RequireUser(c)
+	if !ok {
+		return
 	}
-	return vault, true
+	vault, actorRole, ok := h.requireAccess(c, u.ID)
+	if !ok {
+		return
+	}
+	if !vaultaccess.CanManage(actorRole) {
+		h.writeForbidden(c)
+		return
+	}
+	var req memberRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Role = strings.ToLower(strings.TrimSpace(req.Role))
+	if !vaultaccess.ValidMemberRole(req.Role) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "role must be manager or participant"})
+		return
+	}
+	var member models.VaultMember
+	if err := h.DB.Where("vault_id = ? AND user_id = ?", vault.ID, c.Param("user_id")).First(&member).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "member not found"})
+		return
+	}
+	if actorRole == vaultaccess.RoleManager && (member.Role != vaultaccess.RoleParticipant || req.Role != vaultaccess.RoleParticipant) {
+		h.writeForbidden(c)
+		return
+	}
+	if err := h.DB.Model(&member).Update("role", req.Role).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
-func (h *Handler) toOut(vault models.Vault) vaultOut {
+func (h *Handler) RemoveMember(c *gin.Context) {
+	u, ok := auth.RequireUser(c)
+	if !ok {
+		return
+	}
+	vault, actorRole, ok := h.requireAccess(c, u.ID)
+	if !ok {
+		return
+	}
+	if !vaultaccess.CanManage(actorRole) {
+		h.writeForbidden(c)
+		return
+	}
+	var member models.VaultMember
+	if err := h.DB.Where("vault_id = ? AND user_id = ?", vault.ID, c.Param("user_id")).First(&member).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "member not found"})
+		return
+	}
+	if actorRole == vaultaccess.RoleManager && member.Role != vaultaccess.RoleParticipant {
+		h.writeForbidden(c)
+		return
+	}
+	if err := h.DB.Where("user_id = ? AND vault_id = ?", member.UserID, vault.ID).Delete(&models.DeviceVault{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.DB.Delete(&member).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) requireAccess(c *gin.Context, userID uint) (models.Vault, string, bool) {
+	vault, role, err := vaultaccess.Resolve(h.DB, userID, c.Param("vault_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
+		return models.Vault{}, "", false
+	}
+	return vault, role, true
+}
+
+func (h *Handler) memberRows(vault models.Vault) ([]memberOut, error) {
+	var members []models.VaultMember
+	if err := h.DB.Where("vault_id = ?", vault.ID).Order("created_at asc").Find(&members).Error; err != nil {
+		return nil, err
+	}
+	ids := make([]uint, 0, len(members)+1)
+	ids = append(ids, vault.OwnerID)
+	for _, member := range members {
+		ids = append(ids, member.UserID)
+	}
+	var users []models.User
+	if err := h.DB.Where("id IN ?", ids).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	byID := map[uint]string{}
+	for _, user := range users {
+		byID[user.ID] = user.Username
+	}
+	rows := []memberOut{{UserID: vault.OwnerID, Username: byID[vault.OwnerID], Role: vaultaccess.RoleOwner}}
+	for _, member := range members {
+		rows = append(rows, memberOut{UserID: member.UserID, Username: byID[member.UserID], Role: member.Role})
+	}
+	return rows, nil
+}
+
+func (h *Handler) writeForbidden(c *gin.Context) {
+	c.JSON(http.StatusForbidden, gin.H{"error": "insufficient vault permission"})
+}
+
+func (h *Handler) toOut(vault models.Vault, accessRole string) vaultOut {
 	var state models.VaultSyncState
 	_ = h.DB.Where("vault_id = ?", vault.ID).First(&state).Error
-	return vaultOut{
-		ID:           vault.ID,
-		Name:         vault.Name,
-		Description:  vault.Description,
-		IsDefault:    vault.IsDefault,
-		StorageQuota: vault.StorageQuota,
-		StorageUsed:  vault.StorageUsed,
-		HeadRevision: state.HeadRevision,
-		CreatedAt:    vault.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:    vault.UpdatedAt.Format(time.RFC3339),
-	}
+	return vaultOut{ID: vault.ID, Name: vault.Name, Description: vault.Description, IsDefault: vault.IsDefault,
+		AccessRole: accessRole, StorageQuota: vault.StorageQuota, StorageUsed: vault.StorageUsed,
+		HeadRevision: state.HeadRevision, CreatedAt: vault.CreatedAt.Format(time.RFC3339), UpdatedAt: vault.UpdatedAt.Format(time.RFC3339)}
 }

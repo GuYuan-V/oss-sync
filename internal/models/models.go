@@ -61,8 +61,12 @@ type User struct {
 type SystemSetting struct {
 	ID                  uint `gorm:"primaryKey"`
 	RegistrationEnabled bool `gorm:"not null"`
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	// JWTSecret is generated on the first server start and is deliberately not
+	// sourced from a checked-in configuration file. It must remain stable so
+	// existing sessions stay valid after a restart.
+	JWTSecret string `gorm:"type:text"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Vault 是一个独立的 Obsidian 笔记仓库。同步 revision、文件路径和配置均按 Vault 隔离。
@@ -77,6 +81,30 @@ type Vault struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	ArchivedAt   gorm.DeletedAt `gorm:"index"`
+}
+
+// VaultMember grants a non-owner account access to a Vault. The owner is kept
+// on Vault.OwnerID so ownership cannot accidentally be removed by membership
+// management.
+type VaultMember struct {
+	ID        uint   `gorm:"primaryKey"`
+	VaultID   string `gorm:"size:36;not null;uniqueIndex:idx_vault_member"`
+	UserID    uint   `gorm:"not null;uniqueIndex:idx_vault_member"`
+	Role      string `gorm:"size:16;not null"` // manager / participant
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// VaultBackup records a portable archive made before a Vault is permanently
+// removed. Only an administrator can download or delete these archives.
+type VaultBackup struct {
+	ID        string `gorm:"primaryKey;size:36"`
+	VaultID   string `gorm:"index;size:36;not null"`
+	OwnerID   uint   `gorm:"index;not null"`
+	VaultName string `gorm:"size:128;not null"`
+	FileName  string `gorm:"size:255;not null"`
+	Size      int64  `gorm:"not null;default:0"`
+	CreatedAt time.Time
 }
 
 // VaultSetting 保存仓库级配置。设备侧同步间隔等设置仍保留在插件本地。

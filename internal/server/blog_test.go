@@ -199,3 +199,27 @@ func TestDefaultThemeCSSAvailable(t *testing.T) {
 		t.Errorf("default CSS: status=%d body=%q", w.Code, w.Body.String())
 	}
 }
+
+func TestFolderShareEscapesLikeWildcardsAndLinkAttributes(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "folder-safe", "password123")
+	uploadFile(t, router, token, `A_/safe.md`, "# safe", 1700000000000)
+	uploadFile(t, router, token, `A_/quote".md`, "# quote", 1700000000001)
+	uploadFile(t, router, token, `AB/secret.md`, "# secret", 1700000000002)
+	code, body := doJSON(t, router, http.MethodPost, "/api/shares", token, map[string]any{"target_path": "A_", "is_folder": true})
+	if code != http.StatusOK {
+		t.Fatalf("create folder share: %d %v", code, body)
+	}
+	shareID := body["share_id"].(string)
+	req := httptest.NewRequest(http.MethodGet, "/p/"+shareID+"/", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	page := w.Body.String()
+	if w.Code != http.StatusOK || strings.Contains(page, "secret") {
+		t.Fatalf("folder share leaked wildcard sibling: %d %s", w.Code, page)
+	}
+	if !strings.Contains(page, "%22") || strings.Contains(page, `href="/p/`+shareID+`/quote"`) {
+		t.Fatalf("folder link was not safely escaped: %s", page)
+	}
+}
