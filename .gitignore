@@ -1,0 +1,59 @@
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+configs/config.local.yaml
+configs/*.local.yaml
+
+# Runtime data: databases, uploaded files, themes, recovery snapshots, and logs
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+
+# Go build and test artifacts
+/bin/
+/oss-server
+/server
+/server.exe
+/server.exe~
+*.exe
+*.test
+*.out
+coverage.txt
+coverage.out
+
+# Plugin dependencies and build outputs
+/plugin/node_modules/
+/plugin/main.js
+/plugin/*.js.map
+/plugin/dist/
+
+# Local automation, browser, and code-index artifacts
+/.codegraph/
+/.omo/
+/.playwright-mcp/
+/.claude/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# Private working notes
+/项目技术需求说明书.md

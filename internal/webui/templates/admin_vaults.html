@@ -1,0 +1,46 @@
+{{define "admin-vaults"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Admin · Vaults</span>
+    <h1>{{.Layout.T "common.all_vaults"}}</h1>
+  </div>
+  <dl class="summary-strip">
+    <div><dt>{{.Layout.T "admin.vault_count"}}</dt><dd>{{.Data.VaultCount}}</dd></div>
+  </dl>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Vault registry</span>
+        <h2>{{.Layout.T "admin.vault_list"}}</h2>
+      </div>
+      <span class="ledger-count">{{len .Data.Vaults}} vaults</span>
+    </header>
+    {{if .Data.Vaults}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{.Layout.T "common.name"}}</th><th>{{.Layout.T "common.owner"}}</th><th>{{.Layout.T "admin.member_count"}}</th><th>{{.Layout.T "admin.capacity"}}</th><th>{{.Layout.T "admin.template"}}</th><th></th></tr></thead>
+        <tbody>
+          {{range .Data.Vaults}}
+          <tr>
+            <td><strong>{{.Name}}</strong></td>
+            <td>{{.Owner}}</td>
+            <td>{{.MemberCount}}</td>
+            <td>{{formatBytes .StorageUsed}}</td>
+            <td>{{.ThemeName}}</td>
+            <td><a class="quiet-link" href="/dashboard/admin/vaults/{{.ID}}">{{$.Layout.T "common.enter"}}</a></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="panel-empty">{{.Layout.T "admin.no_vaults_yet"}}</p>
+    {{end}}
+  </article>
+</div>
+{{end}}

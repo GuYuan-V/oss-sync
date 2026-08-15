@@ -1,0 +1,84 @@
+{{define "vault-shares"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Shares</span>
+    <h1>{{.Layout.T "common.shares"}}</h1>
+    <p class="lead">{{.Layout.T "share.manage_shares_desc"}}</p>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+{{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "vault.settings_saved"}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="gate-panel">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">New share</span>
+      <h2>{{.Layout.T "share.create_share"}}</h2>
+      <p>{{.Layout.T "share.create_share_desc"}}</p>
+    </div>
+    <form method="post" action="/dashboard/vaults/{{.Data.VaultID}}/shares" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <label>
+        <span>{{.Layout.T "common.path"}}</span>
+        <input name="target_path" placeholder="{{.Layout.T "share.path_placeholder"}}" required>
+      </label>
+      <label class="switch-control">
+        <input type="checkbox" name="is_folder">
+        <span class="switch-control__track" aria-hidden="true"></span>
+        <span>{{.Layout.T "share.folder_share"}}</span>
+      </label>
+      <label class="switch-control">
+        <input type="checkbox" name="allow_copy">
+        <span class="switch-control__track" aria-hidden="true"></span>
+        <span>{{.Layout.T "share.allow_copy"}}</span>
+      </label>
+      <button class="button button--primary" type="submit">{{.Layout.T "share.create_share"}}</button>
+    </form>
+  </article>
+
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Share ledger</span>
+        <h2>{{.Layout.T "share.created_shares"}}</h2>
+      </div>
+      <span class="ledger-count">{{len .Data.Shares}} shares</span>
+    </header>
+    {{if .Data.Shares}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{$.Layout.T "common.path"}}</th><th>{{$.Layout.T "share.public_url"}}</th><th>{{$.Layout.T "share.views"}}</th><th>{{$.Layout.T "common.created"}}</th><th>{{$.Layout.T "share.allow_copy"}}</th><th>{{$.Layout.T "common.actions"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.Shares}}
+          <tr>
+            <td><strong>{{.TargetPath}}</strong></td>
+            <td><code class="share-url">{{.URL}}</code></td>
+            <td>{{.Views}}</td>
+            <td><time>{{timeFmt .CreatedAt}}</time></td>
+            <td>
+              <form method="post" action="/dashboard/vaults/{{$.Data.VaultID}}/shares/{{.ShareID}}/allow_copy" class="inline-form">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <input type="hidden" name="allow_copy" value="{{if .AllowCopy}}false{{else}}true{{end}}">
+                <button class="text-button" type="submit">{{if .AllowCopy}}{{$.Layout.T "share.toggle_on"}}{{else}}{{$.Layout.T "share.toggle_off"}}{{end}}</button>
+              </form>
+            </td>
+            <td class="action-cell">
+              <a class="quiet-link" href="{{.URL}}" target="_blank" rel="noopener">{{$.Layout.T "share.open_share"}}</a>
+              <form method="post" action="/dashboard/vaults/{{$.Data.VaultID}}/shares/{{.ShareID}}/delete"
+                    data-confirm="{{$.Layout.T "share.cancel_share_confirm" .TargetPath}}">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <button class="text-button text-button--danger" type="submit">{{$.Layout.T "share.cancel_share"}}</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="panel-empty">{{.Layout.T "share.no_shares"}}</p>
+    {{end}}
+  </article>
+</div>
+{{end}}

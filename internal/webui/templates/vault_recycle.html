@@ -1,0 +1,54 @@
+{{define "vault-recycle"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Recycle bin</span>
+    <h1>{{.Layout.T "common.recycle"}}</h1>
+    <p class="lead">{{.Layout.T "recycle.bin_desc"}}</p>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Deleted files</span>
+        <h2>{{.Layout.T "recycle.deleted_files"}}</h2>
+      </div>
+      <span class="ledger-count">{{len .Data.Files}} items</span>
+    </header>
+    {{if .Data.Files}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{$.Layout.T "common.path"}}</th><th>{{$.Layout.T "recycle.delete_time"}}</th><th>{{$.Layout.T "recycle.estimated_expiry"}}</th><th>{{$.Layout.T "common.actions"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.Files}}
+          <tr>
+            <td><strong>{{.Path}}</strong></td>
+            <td><time>{{timeFmt .DeletedAt}}</time></td>
+            <td><time>{{timeFmt .ExpiresAt}}</time></td>
+            <td class="action-cell">
+              <form method="post" action="/dashboard/vaults/{{$.Data.VaultID}}/recycle/{{.ID}}/restore">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <button class="text-button" type="submit">{{$.Layout.T "recycle.restore"}}</button>
+              </form>
+              <form method="post" action="/dashboard/vaults/{{$.Data.VaultID}}/recycle/{{.ID}}/delete"
+                    data-confirm="{{$.Layout.T "recycle.permanent_delete_confirm" .Path}}">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <button class="text-button text-button--danger" type="submit">{{$.Layout.T "recycle.permanent_delete"}}</button>
+              </form>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="4">{{$.Layout.T "recycle.bin_empty"}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="panel-empty">{{.Layout.T "recycle.bin_empty_desc"}}</p>
+    {{end}}
+  </article>
+</div>
+{{end}}

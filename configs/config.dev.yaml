@@ -1,0 +1,30 @@
+# OSS Server 开发环境配置
+# 通过 OSS_ENV=dev 加载（默认）
+
+server:
+  host: "0.0.0.0"
+  port: 9090
+  mode: "debug"                # gin mode: debug / release / test
+  max_multipart_memory_mb: 8   # multipart 内存上限，超出后写入临时文件
+  max_file_size_mb: 100        # 单文件大小上限
+
+database:
+  driver: "sqlite"
+  dsn: "data/oss.db"
+
+storage:
+  data_dir: "data"
+
+auth:
+  # JWT 签名密钥会在首次启动时自动生成并保存到数据库；此字段仅保留兼容性。
+  jwt_secret: ""
+  jwt_ttl_hours: 72
+  bootstrap_admin_username: "admin"
+  allow_anonymous_registration: true # 仅作为新数据库注册开关的初始值；之后由管理面板控制
+
+sync:
+  max_concurrency: 6           # 客户端默认并发数
+  device_stale_days: 90        # 超过此天数未在线的设备不再阻塞墓碑回收
+  reconcile_interval_hours: 24 # 后台存储对账周期；服务启动时还会立即执行一次
+  temp_file_max_age_hours: 24  # 后台清理临时上传文件的最小年龄
+  orphan_file_grace_hours: 24  # 后台隔离孤立存储对象前的保护时间

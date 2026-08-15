@@ -1,0 +1,80 @@
+{{define "register"}}
+<main class="shell shell--auth">
+  <header class="masthead">
+    <a class="wordmark" href="/register" aria-label="{{.Layout.T "auth.register_aria_label"}}">
+      <span class="wordmark__mark">OS</span>
+      <span><strong>OSS Sync</strong><small>Self-hosted vault relay</small></span>
+    </a>
+    <div class="masthead-actions">
+      <div id="theme-switcher" class="theme-switcher" role="group" aria-label="{{.Layout.T "common.theme_mode"}}">
+        <button type="button" class="button theme-switcher__btn" data-theme-pref="auto" aria-pressed="false">{{.Layout.T "common.theme_modes.system"}}</button>
+        <button type="button" class="button theme-switcher__btn" data-theme-pref="light" aria-pressed="false">{{.Layout.T "common.theme_modes.light"}}</button>
+        <button type="button" class="button theme-switcher__btn" data-theme-pref="dark" aria-pressed="false">{{.Layout.T "common.theme_modes.dark"}}</button>
+      </div>
+      <a class="quiet-link" href="/login">{{.Layout.T "auth.register_login_link"}}</a>
+    </div>
+  </header>
+
+  <section class="auth-grid">
+    <aside class="ledger-rail" aria-label="{{.Layout.T "auth.register_status_label"}}">
+      <span class="eyebrow">Registration gate</span>
+      {{if .Data.RegistrationEnabled}}
+        <strong class="gate-state gate-state--open">{{.Layout.T "common.status.open"}}</strong>
+        <p>{{.Layout.T "auth.register_open_text"}}</p>
+      {{else}}
+        <strong class="gate-state gate-state--closed">{{.Layout.T "common.status.closed"}}</strong>
+        <p>{{.Layout.T "auth.register_closed_text"}}</p>
+      {{end}}
+      <ol class="sequence">
+        <li><span>01</span>{{.Layout.T "auth.register_step_create"}}</li>
+        <li><span>02</span>{{.Layout.T "auth.register_step_settings"}}</li>
+        <li><span>03</span>{{.Layout.T "auth.register_step_bind"}}</li>
+      </ol>
+    </aside>
+
+    <section class="form-sheet">
+      {{if .Data.Success}}
+        <span class="eyebrow">Account ready</span>
+        <h1>{{.Layout.T "auth.register_success_title"}}</h1>
+        <div class="notice notice--success" role="status">
+          {{.Layout.T "auth.register_created_prefix"}}<strong>{{.Data.Username}}</strong>{{.Layout.T "auth.register_created_suffix"}}
+        </div>
+        <p class="lead">{{.Layout.T "auth.register_success_text"}}</p>
+        <a class="button button--primary" href="/login">{{.Layout.T "auth.register_success_link"}}</a>
+      {{else if not .Data.RegistrationEnabled}}
+        <span class="eyebrow">Gate closed</span>
+        <h1>{{.Layout.T "auth.register_suspended_title"}}</h1>
+        <p class="lead">{{.Layout.T "auth.register_suspended_text"}}</p>
+      {{else}}
+        <span class="eyebrow">New identity</span>
+        <h1>{{.Layout.T "auth.register_form_title"}}</h1>
+        <p class="lead">{{.Layout.T "auth.register_form_text"}}</p>
+
+        {{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+        <form method="post" action="/register" class="stack-form">
+          <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+          <label>
+            <span>{{.Layout.T "common.username"}}</span>
+            <input name="username" value="{{.Data.Username}}" minlength="3" maxlength="64"
+                   autocomplete="username" required autofocus>
+            <small>{{.Layout.T "auth.register_username_hint"}}</small>
+          </label>
+          <label>
+            <span>{{.Layout.T "common.password"}}</span>
+            <input type="password" name="password" minlength="8" maxlength="128"
+                   autocomplete="new-password" required>
+            <small>{{.Layout.T "auth.register_password_hint"}}</small>
+          </label>
+          <label>
+            <span>{{.Layout.T "common.confirm_password"}}</span>
+            <input type="password" name="password_confirm" minlength="8" maxlength="128"
+                   autocomplete="new-password" required>
+          </label>
+          <button class="button button--primary" type="submit">{{.Layout.T "auth.register_button"}}</button>
+        </form>
+      {{end}}
+    </section>
+  </section>
+</main>
+{{end}}

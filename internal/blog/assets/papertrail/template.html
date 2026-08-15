@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN" data-theme-key="oss-blog-theme">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{.Description}}">
+  <title>{{.Title}}</title>
+  <script src="/ui/assets/theme.js?v=2"></script>
+  <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css?v=3">
+  <script defer src="{{.ThemeBaseURL}}/theme.js?v=3"></script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <header class="pt-topbar">
+    <div class="pt-topbar__inner">
+      {{if .BlogHomeURL}}<a class="pt-brand" href="{{.BlogHomeURL}}" aria-label="返回 {{.BlogName}} 博客首页">{{else}}<span class="pt-brand">{{end}}
+        {{if .LogoURL}}<img class="pt-brand__logo{{if eq .LogoShape "circle"}} is-circle{{end}}" src="{{.LogoURL}}" alt="" width="38" height="38">{{else}}<span class="pt-brand__mark" aria-hidden="true">PT</span>{{end}}
+        {{if .BlogName}}<strong>{{.BlogName}}</strong>{{else}}<strong>Papertrail</strong>{{end}}
+      {{if .BlogHomeURL}}</a>{{else}}</span>{{end}}
+
+      <nav class="pt-actions" aria-label="博客与阅读工具">
+        {{if and .BlogHomeURL (not .IsHome)}}<a class="pt-action" href="{{.BlogHomeURL}}">返回首页</a>{{end}}
+        <div id="theme-switcher" class="theme-switcher" role="group" aria-label="主题模式">
+          <button type="button" class="pt-action theme-switcher__btn" data-theme-pref="auto" aria-pressed="false">自动</button>
+          <button type="button" class="pt-action theme-switcher__btn" data-theme-pref="light" aria-pressed="false">亮色</button>
+          <button type="button" class="pt-action theme-switcher__btn" data-theme-pref="dark" aria-pressed="false">暗色</button>
+        </div>
+        {{if .AllowCopy}}<button type="button" class="pt-action" data-copy-article><span data-copy-label>一键复制</span></button>{{end}}
+        <button type="button" class="pt-action" data-back-to-top>返回顶部</button>
+      </nav>
+    </div>
+  </header>
+
+  {{if .CustomHeader}}
+  <section class="pt-custom-fragment pt-custom-fragment--header" aria-label="自定义页眉">
+    <div class="pt-custom-fragment__content">{{.CustomHeader}}</div>
+  </section>
+  {{end}}
+
+  <main id="main-content" class="pt-main">
+    {{if .IsHome}}
+    <section class="pt-home" aria-labelledby="blog-title">
+      <header class="pt-hero">
+        {{if .LogoURL}}<img class="pt-hero__logo{{if eq .LogoShape "circle"}} is-circle{{end}}" src="{{.LogoURL}}" alt="{{.BlogName}} Logo" style="--pt-hero-logo-size: {{if gt .LogoSize 0}}{{.LogoSize}}{{else}}96{{end}}px" width="{{if gt .LogoSize 0}}{{.LogoSize}}{{else}}96{{end}}" height="{{if gt .LogoSize 0}}{{.LogoSize}}{{else}}96{{end}}">{{end}}
+        <div>
+          <span class="pt-kicker">Public notebook</span>
+          {{if .BlogName}}<h1 id="blog-title">{{.BlogName}}</h1>{{else}}<h1 id="blog-title">Papertrail</h1>{{end}}
+          {{if .Description}}<p>{{.Description}}</p>{{end}}
+          {{if .Buttons}}<nav class="pt-hero__links" aria-label="博客链接">{{range .Buttons}}<a class="pt-action" href="{{.URL}}">{{if .IconURL}}<img src="{{.IconURL}}" alt="" width="16" height="16">{{end}}{{.Label}}</a>{{end}}</nav>{{end}}
+        </div>
+      </header>
+
+      <section class="pt-post-list" aria-label="分享文章">
+        {{range .HomePosts}}
+        <article class="pt-post">
+          <time class="pt-post-date">{{.Date}}</time>
+          <h2 class="pt-post-title"><a href="{{.URL}}">{{.Title}}</a></h2>
+          {{if .Summary}}<p class="pt-post-summary">{{.Summary}}</p>{{end}}
+        </article>
+        {{else}}
+        <p class="pt-empty">还没有可访问的分享文章。</p>
+        {{end}}
+      </section>
+    </section>
+    {{else}}
+    <nav class="reading-toc" aria-label="文章目录" data-reading-toc hidden>
+      <button class="reading-toc__open" type="button" data-toc-open aria-label="展开目录">目录</button>
+      <div class="reading-toc__backdrop" data-toc-backdrop hidden></div>
+      <div class="reading-toc__panel" data-toc-panel>
+        <div class="reading-toc__panel-header">
+          <strong class="reading-toc__panel-title">文章目录</strong>
+          <button class="reading-toc__close" type="button" data-toc-close aria-label="关闭目录">关闭</button>
+        </div>
+        <details class="reading-toc__disclosure" open>
+          <summary>目录</summary>
+          <ol data-toc-list></ol>
+        </details>
+      </div>
+    </nav>
+    <article class="pt-article oss-content" data-reading-content {{if .AllowCopy}}data-allow-copy{{end}} tabindex="-1">
+      {{if .IsFolder}}<h1>{{.FolderTitle}}</h1><nav class="pt-file-directory" aria-label="文件目录">{{.ContentHTML}}</nav>{{else}}{{.ContentHTML}}{{end}}
+    </article>
+    {{end}}
+  </main>
+
+  {{if .CustomFooter}}
+  <section class="pt-custom-fragment pt-custom-fragment--footer" aria-label="自定义页脚">
+    <div class="pt-custom-fragment__content">{{.CustomFooter}}</div>
+  </section>
+  {{end}}
+  {{if .FooterNotice}}<aside class="oss-notice">{{.FooterNotice}}</aside>{{end}}
+  <p class="reading-status" data-copy-status role="status" aria-live="polite"></p>
+</body>
+</html>

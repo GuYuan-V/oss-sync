@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <meta name="generator" content="OSS Blog">
+  <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css">
+  <script>window.__THEME_CONFIG__ = {{.ThemeConfigJS}};</script>
+  <script defer src="{{.ThemeBaseURL}}/theme.js"></script>
+  {{if .CustomHeader}}{{.CustomHeader}}{{end}}
+</head>
+<body>
+  <div class="field-notes">
+    <header class="site-header">
+      <a class="site-mark" href="{{.ThemeBaseURL}}/../..">FIELD NOTES</a>
+      <span class="site-caption">published from an Obsidian vault</span>
+    </header>
+    <main class="reading-room">
+      {{if .IsFolder}}
+      <section class="index-card">
+        <p class="kicker">Vault index</p>
+        <h1>{{.FolderTitle}}</h1>
+        <nav class="oss-tree">{{.ContentHTML}}</nav>
+      </section>
+      {{else}}
+      <article class="entry">{{.ContentHTML}}</article>
+      {{end}}
+    </main>
+    {{if .FooterNotice}}<aside class="notice">{{.FooterNotice}}</aside>{{end}}
+    <footer class="site-footer">A small independent publishing surface.</footer>
+  </div>
+  {{if .CustomFooter}}{{.CustomFooter}}{{end}}
+</body>
+</html>

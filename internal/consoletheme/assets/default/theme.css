@@ -1,0 +1,13 @@
+/*
+ * OSS Sync console theme override.
+ * This built-in default intentionally preserves the application's base styles.
+ * Add token overrides or selectors below when working in an editable copy.
+ */
+
+:root {
+  /* Example: --cobalt: #3159d9; */
+}
+
+:root[data-theme="dark"] {
+  /* Example: --cobalt: #7a9aff; */
+}

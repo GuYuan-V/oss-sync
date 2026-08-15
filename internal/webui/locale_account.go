@@ -1,0 +1,31 @@
+package webui
+
+func init() {
+	registerEntries(map[string][2]string{
+		"account.heading":                  {"个人中心", "Account"},
+		"account.password_updated":         {"密码已更新。其他会话已失效，当前会话保持登录。", "Password updated. Other sessions are now invalid; this session remains active."},
+		"account.preferences_saved":        {"同步与存储偏好已保存。", "Sync and storage preferences saved."},
+		"account.console_theme_saved":      {"服务器网页主题已切换。", "Server console theme switched."},
+		"account.sync_storage_description": {"为当前账户设置同步节奏、回收周期与新仓库的存储偏好。", "Set sync timing, retention, and defaults for new vaults."},
+		"account.long_poll_wait":           {"长轮询等待时间（秒）", "Long-poll wait (seconds)"},
+		"account.sync_debounce":            {"同步防抖时间（秒）", "Sync debounce (seconds)"},
+		"account.default_recycle_retention": {"默认回收站保留天数", "Default recycle-bin retention (days)"},
+		"account.new_vault_capacity":       {"新仓库容量（MiB）", "New vault capacity (MiB)"},
+		"account.capacity_zero_note":       {"0 使用服务端默认容量策略。", "Use 0 for the server default."},
+		"account.upload_limit":             {"单文件上传大小（MiB）", "Single-file upload limit (MiB)"},
+		"account.save_preferences":         {"保存偏好", "Save preferences"},
+		"account.web_language":             {"网页语言", "Web language"},
+		"account.web_language_description": {"保存后，所有网页登录默认使用此语言。", "This language is used for every web-console sign-in."},
+		"account.language_label":           {"语言", "Language"},
+		"account.save_language":            {"保存语言", "Save language"},
+		"account.console_theme_heading":    {"服务器网页主题", "Server console theme"},
+		"account.console_theme_description": {"选择服务端提供的主题，只改变登录后服务器网页的外观。", "Choose a server-provided theme. Only affects the console appearance after sign-in."},
+		"account.theme_label":              {"网页主题", "Theme"},
+		"account.builtin_suffix":           {"（内置）", " (builtin)"},
+		"account.switch_theme":             {"切换主题", "Switch theme"},
+		"account.password_description":     {"先验证旧密码，再设置新密码。成功后当前网页会话保持有效，所有其他会话和插件 token 失效。", "Verify your current password, then set a new one. After saving, this session persists while all other sessions and plugin tokens are revoked."},
+		"account.password_hint":            {"至少 8 个字符、最多 72 字节", "At least 8 characters, up to 72 bytes"},
+		"account.confirm_new_password":     {"确认新密码", "Confirm new password"},
+		"account.update_password":          {"更新密码", "Update password"},
+	})
+}

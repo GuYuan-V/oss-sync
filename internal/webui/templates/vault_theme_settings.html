@@ -1,0 +1,139 @@
+{{define "vault-theme-settings"}}
+{{$papertrailLogoFallback := ""}}
+{{$papertrailNameFallback := ""}}
+{{$papertrailDescriptionFallback := ""}}
+{{range .Data.Fields}}
+  {{if eq .Schema.Key "logo_url"}}{{$papertrailLogoFallback = .Value}}{{end}}
+  {{if eq .Schema.Key "blog_name"}}{{$papertrailNameFallback = .Value}}{{end}}
+  {{if eq .Schema.Key "description"}}{{$papertrailDescriptionFallback = .Value}}{{end}}
+{{end}}
+
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Theme settings · {{.Data.ThemeName}}</span>
+    <h1>{{.Data.VaultName}} · {{.Data.SettingsLabel}} {{.Layout.T "common.settings"}}</h1>
+    <p class="lead">{{.Layout.T "vault.theme_settings_generated" .Data.ThemeName}}</p>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+{{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "vault.theme_settings_saved" .Data.SettingsLabel (.Layout.T "common.settings")}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="gate-panel">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">{{.Data.ThemeName}}</span>
+      <h2>{{.Data.SettingsLabel}} {{.Layout.T "common.settings"}}</h2>
+      {{if eq .Data.ThemeName "papertrail"}}
+        <div class="papertrail-preview" data-papertrail-preview>
+          <p>修改右侧表单时，预览会即时更新；模板选择和公开入口仍在仓库设置中管理。</p>
+          <section class="papertrail-preview__directory" aria-label="公开博客目录预览">
+            <span class="eyebrow">公开博客目录预览</span>
+            <div class="papertrail-preview__directory-card">
+              <img data-preview-logo data-preview-logo-fallback="{{if $papertrailLogoFallback}}{{$papertrailLogoFallback}}{{end}}" alt="" src="{{if $papertrailLogoFallback}}{{$papertrailLogoFallback}}{{end}}">
+              <div><strong data-preview-name>博客名称</strong><small data-preview-description>博客介绍</small></div>
+            </div>
+            <span class="button">进入博客</span>
+          </section>
+          <section class="papertrail-preview__home" aria-label="Papertrail 首页预览">
+            <span class="eyebrow">Papertrail 首页预览</span>
+            <div class="papertrail-preview__hero">
+              <img data-preview-logo data-preview-logo-fallback="{{if $papertrailLogoFallback}}{{$papertrailLogoFallback}}{{end}}" class="papertrail-preview__hero-logo" alt="" src="{{if $papertrailLogoFallback}}{{$papertrailLogoFallback}}{{end}}">
+              <div><span class="eyebrow">Public notebook</span><h3 data-preview-name>{{if $papertrailNameFallback}}{{$papertrailNameFallback}}{{end}}</h3><p data-preview-description>{{if $papertrailDescriptionFallback}}{{$papertrailDescriptionFallback}}{{end}}</p></div>
+            </div>
+            <div class="papertrail-preview__home-links" data-papertrail-home-links>
+              <span class="papertrail-preview__links-placeholder">未添加按钮，点击上方“添加按钮”可预览首页按钮。</span>
+            </div>
+          </section>
+        </div>
+      {{else}}<p>{{.Layout.T "vault.theme_managed_in_settings"}}</p>{{end}}
+    </div>
+    {{if .Data.Fields}}
+    <form method="post" action="/dashboard/vaults/{{.Data.VaultID}}/theme-settings" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+        {{range .Data.Fields}}
+          {{if eq .Schema.Type "group"}}
+          {{$field := .}}
+          <fieldset class="theme-setting-group" data-theme-setting-group data-theme-setting-group-key="{{.Schema.Key}}" data-max-items="{{.Schema.MaxItems}}">
+            <legend>{{.Schema.Label}}</legend>
+            <div class="theme-setting-rows" data-group-rows>
+              {{range $rowIndex, $row := .Rows}}
+              <div class="theme-setting-row" data-group-row>
+                <div class="theme-setting-row__fields">
+                  {{range $child := $field.Schema.Fields}}
+                  <label>
+                    <span>{{$child.Label}}</span>
+                    <input
+                      name="group_{{$field.Schema.Key}}_{{$child.Key}}"
+                      data-group-key="{{$field.Schema.Key}}"
+                      data-group-field-key="{{$child.Key}}"
+                      type="text"
+                      {{if eq $child.Type "url"}}inputmode="url"{{end}}
+                      value="{{index $row.Values $child.Key}}"
+                    maxlength="{{$child.MaxLength}}"
+                    {{if $child.Required}}required{{end}}
+                    {{if $child.Placeholder}}placeholder="{{$child.Placeholder}}"{{end}}>
+                </label>
+                {{end}}
+              </div>
+              <button class="button theme-setting-row__remove" type="button" data-group-remove>{{$.Layout.T "vault.theme_settings_delete_item"}}</button>
+            </div>
+            {{end}}
+          </div>
+          <template data-group-template>
+            <div class="theme-setting-row" data-group-row>
+                <div class="theme-setting-row__fields">
+                  {{range $child := $field.Schema.Fields}}
+                  <label>
+                    <span>{{$child.Label}}</span>
+                    <input
+                      data-input-name="group_{{$field.Schema.Key}}_{{$child.Key}}"
+                      data-group-key="{{$field.Schema.Key}}"
+                      data-group-field-key="{{$child.Key}}"
+                      type="text"
+                      {{if eq $child.Type "url"}}inputmode="url"{{end}}
+                      maxlength="{{$child.MaxLength}}"
+                    {{if $child.Required}}required{{end}}
+                    {{if $child.Placeholder}}placeholder="{{$child.Placeholder}}"{{end}}>
+                </label>
+                {{end}}
+              </div>
+              <button class="button theme-setting-row__remove" type="button" data-group-remove>{{$.Layout.T "vault.theme_settings_delete_item"}}</button>
+            </div>
+          </template>
+          <div class="theme-setting-group__actions">
+            <button class="button" type="button" data-group-add>{{$.Layout.T "vault.theme_settings_add_button"}}</button>
+            <small><span data-group-count>{{len .Rows}}</span> / {{.Schema.MaxItems}} {{$.Layout.T "vault.theme_settings_item_suffix"}}</small>
+          </div>
+        </fieldset>
+        {{else if eq .Schema.Type "choice"}}
+        {{$value := .Value}}
+        <label for="theme-setting-{{.Schema.Key}}">
+          <span>{{.Schema.Label}}</span>
+          <select id="theme-setting-{{.Schema.Key}}" name="setting_{{.Schema.Key}}" data-preview-field="{{.Schema.Key}}">
+            {{range .Schema.Choices}}<option value="{{.}}" {{if eq $value .}}selected{{end}}>{{.}}</option>{{end}}
+          </select>
+        </label>
+        {{else if eq .Schema.Type "textarea"}}
+        <label for="theme-setting-{{.Schema.Key}}">
+          <span>{{.Schema.Label}}</span>
+          <textarea id="theme-setting-{{.Schema.Key}}" name="setting_{{.Schema.Key}}" data-preview-field="{{.Schema.Key}}" rows="4" maxlength="{{.Schema.MaxLength}}" {{if .Schema.Required}}required{{end}} {{if .Schema.Placeholder}}placeholder="{{.Schema.Placeholder}}"{{end}}>{{.Value}}</textarea>
+        </label>
+        {{else}}
+        <label for="theme-setting-{{.Schema.Key}}">
+          <span>{{.Schema.Label}}</span>
+          <input id="theme-setting-{{.Schema.Key}}" name="setting_{{.Schema.Key}}" data-preview-field="{{.Schema.Key}}" type="text" {{if eq .Schema.Type "url"}}inputmode="url"{{end}} value="{{.Value}}" maxlength="{{.Schema.MaxLength}}" {{if .Schema.Required}}required{{end}} {{if .Schema.Placeholder}}placeholder="{{.Schema.Placeholder}}"{{end}}>
+        </label>
+        {{end}}
+      {{end}}
+      <button class="button button--primary" type="submit">{{.Layout.T "vault.theme_settings_save_button" .Data.SettingsLabel (.Layout.T "common.settings")}}</button>
+    </form>
+    {{else}}
+    <div class="panel-empty">
+      <p>{{.Layout.T "vault.theme_settings_no_config"}}</p>
+      <a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}/settings">{{.Layout.T "vault.theme_settings_back_to_settings"}}</a>
+    </div>
+    {{end}}
+  </article>
+</div>
+{{end}}

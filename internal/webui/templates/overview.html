@@ -1,0 +1,107 @@
+{{define "overview"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">{{.Layout.T "overview.home_eyebrow"}}</span>
+    <h1>{{.Layout.T "common.home"}}</h1>
+    <p class="lead">{{.Layout.T "overview.lead"}}</p>
+  </div>
+</section>
+
+<dl class="metric-grid" aria-label="{{.Layout.T "overview.metrics_label"}}" data-system-metrics data-system-metrics-url="/dashboard/metrics">
+  <div class="metric-card">
+    <dt data-system-metric="cpu-model">{{.Data.CPUModelName}}</dt>
+    <dd data-system-metric="cpu-usage">{{printf "%.1f%%" .Data.CPUUsagePercent}}</dd>
+    <span>{{.Data.CPUCores}} {{.Layout.T "admin.cpu_cores"}}</span>
+  </div>
+  <div class="metric-card">
+    <dt>{{.Layout.T "overview.process_memory"}}</dt>
+    <dd data-system-metric="memory-usage">{{printf "%.1f%%" .Data.MemoryUsagePercent}}</dd>
+    <span data-system-metric="memory-capacity">{{formatBytes .Data.MemoryBytes}} / {{formatBytes .Data.MemoryTotalBytes}}</span>
+  </div>
+  <div class="metric-card">
+    <dt>{{.Layout.T "overview.vault_count"}}</dt>
+    <dd>{{.Data.VaultCount}}</dd>
+    <a href="/dashboard/vaults">{{.Layout.T "common.enter"}}</a>
+  </div>
+  <div class="metric-card">
+    <dt>{{.Layout.T "overview.device_count"}}</dt>
+    <dd>{{.Data.DeviceCount}}</dd>
+    <a href="/dashboard/devices">{{.Layout.T "common.enter"}}</a>
+  </div>
+  <div class="metric-card">
+    <dt>{{.Layout.T "overview.file_count"}}</dt>
+    <dd>{{.Data.FileCount}}</dd>
+    <a href="/dashboard/vaults">{{.Layout.T "common.enter"}}</a>
+  </div>
+  <div class="metric-card">
+    <dt>{{.Layout.T "overview.storage"}}</dt>
+    <dd data-system-metric="vault-storage">{{formatBytes .Data.StorageUsed}} / {{if .Data.StorageQuota}}{{formatBytes .Data.StorageQuota}}{{else}}{{.Layout.T "overview.unlimited"}}{{end}}</dd>
+    <a href="/dashboard/vaults">{{.Layout.T "common.enter"}}</a>
+  </div>
+  <div class="metric-card">
+    <dt>{{.Layout.T "overview.pending_devices"}}</dt>
+    <dd>{{.Data.PendingDevices}}</dd>
+    <a href="/dashboard/devices">{{.Layout.T "common.enter"}}</a>
+  </div>
+</dl>
+
+<div class="control-grid overview-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">{{.Layout.T "overview.recent_activity"}}</span>
+        <h2>{{.Layout.T "overview.recent_history"}}</h2>
+      </div>
+      <span class="ledger-count">{{.Layout.T "overview.record_count" (len .Data.RecentHistory)}}</span>
+    </header>
+    {{if .Data.RecentHistory}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{.Layout.T "common.files"}}</th><th>{{.Layout.T "common.actions"}}</th><th>{{.Layout.T "overview.user"}}</th><th>{{.Layout.T "common.devices"}}</th><th>{{.Layout.T "common.time"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.RecentHistory}}
+          <tr>
+            <td><strong>{{.FilePath}}</strong></td>
+            <td><span class="role role--{{.Action}}">{{.Action}}</span></td>
+            <td>{{.Username}}</td>
+            <td>{{.DeviceName}}</td>
+            <td><time>{{timeFmt .CreatedAt}}</time></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="panel-empty">{{.Layout.T "overview.no_history"}}</p>
+    {{end}}
+  </article>
+
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">{{.Layout.T "overview.devices_eyebrow"}}</span>
+        <h2>{{.Layout.T "overview.recent_devices"}}</h2>
+      </div>
+      <span class="ledger-count">{{.Layout.T "overview.device_count_recent" (len .Data.RecentDevices)}}</span>
+    </header>
+    {{if .Data.RecentDevices}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{.Layout.T "common.devices"}}</th><th>{{.Layout.T "overview.vault"}}</th><th>{{.Layout.T "overview.last_sync"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.RecentDevices}}
+          <tr>
+            <td><strong>{{.DeviceName}}</strong></td>
+            <td>{{.VaultName}}</td>
+            <td><time>{{timeFmt .LastSyncAt}}</time></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="panel-empty">{{.Layout.T "overview.no_devices"}}</p>
+    {{end}}
+  </article>
+</div>
+{{end}}

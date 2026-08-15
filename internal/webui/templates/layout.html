@@ -1,0 +1,55 @@
+{{define "layout"}}<!doctype html>
+<html lang="{{if eq .Layout.Language "en"}}en{{else}}zh-CN{{end}}" data-theme-key="{{if eq .Layout.Page "blog"}}oss-blog-theme{{else}}oss-console-theme{{end}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Layout.Title}} · OSS Sync</title>
+  <script src="/ui/assets/theme.js?v=2"></script>
+  <link rel="stylesheet" href="/ui/assets/console.css?v=7">
+  {{if and .Layout.ConsoleThemeName (ne .Layout.ConsoleThemeName "default")}}
+  <link rel="stylesheet" href="/ui/themes/{{.Layout.ConsoleThemeName}}/theme.css">
+  {{end}}
+</head>
+<body class="{{if not .Layout.ShowSidebar}}body--auth{{else}}body--console{{end}}">
+  {{if .Layout.ShowSidebar}}
+  {{template "sidebar" .}}
+  <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
+  {{end}}
+
+  <div class="console">
+    {{if .Layout.ShowSidebar}}
+    <header class="console-topbar">
+      <button id="sidebar-toggle" class="icon-button sidebar-toggle" type="button" aria-label="{{.Layout.T "common.open_menu"}}" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <h1 class="console-title">{{.Layout.Title}}</h1>
+      <div class="console-identity">
+        <span class="console-username">{{.Layout.Username}}</span>
+        {{if .Layout.IsAdmin}}
+        <span class="role role--admin">{{.Layout.T "common.role.admin"}}</span>
+        {{else}}
+        <span class="role role--user">{{.Layout.T "common.role.user"}}</span>
+        {{end}}
+        <form method="post" action="/logout" class="inline-form">
+          <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+          <button class="text-button" type="submit">{{.Layout.T "common.logout"}}</button>
+        </form>
+      </div>
+    </header>
+    {{end}}
+
+    <main class="console-content">
+      {{if .Layout.Flash}}
+      <div class="flash flash--{{.Layout.FlashKind}}" role="status">
+        <span>{{.Layout.Flash}}</span>
+        <button class="flash__close" type="button" aria-label="{{.Layout.T "common.dismiss"}}">&times;</button>
+      </div>
+      {{end}}
+      {{.Layout.ContentHTML}}
+    </main>
+  </div>
+
+  <script src="/ui/assets/app.js?v=3"></script>
+  <script src="/ui/assets/metrics.js?v=2"></script>
+</body>
+</html>{{end}}

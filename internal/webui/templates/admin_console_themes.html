@@ -1,0 +1,145 @@
+{{define "admin-console-themes"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Admin · Console themes</span>
+    <h1>{{.Layout.T "admin.console_theme_management"}}</h1>
+    <p class="lead">{{.Layout.T "admin.console_theme_lead"}}</p>
+    <button class="button" type="button" data-modal-open="console-theme-guide" aria-haspopup="dialog">{{.Layout.T "admin.console_theme_guide"}}</button>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+{{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "admin.operation_successful"}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="gate-panel">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">Upload package</span>
+      <h2>{{.Layout.T "admin.upload_console_theme"}}</h2>
+      <p>{{.Layout.T "admin.upload_console_zip_desc"}}</p>
+    </div>
+    <form method="post" action="/dashboard/admin/console-themes/upload" enctype="multipart/form-data" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <label>
+        <span>{{.Layout.T "admin.theme_name"}}</span>
+        <input name="name" placeholder="my-console" maxlength="64">
+        <small>{{.Layout.T "admin.leave_empty_use_zip_name_console"}}</small>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.zip_file"}}</span>
+        <input type="file" name="file" accept=".zip" required>
+      </label>
+      <button class="button button--primary" type="submit">{{.Layout.T "admin.upload_theme_button"}}</button>
+    </form>
+  </article>
+
+  <article class="gate-panel">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">Create copy</span>
+      <h2>{{.Layout.T "admin.scaffold_console_from_existing"}}</h2>
+      <p>{{.Layout.T "admin.scaffold_console_desc"}}</p>
+    </div>
+    <form method="post" action="/dashboard/admin/console-themes/scaffold" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <label>
+        <span>{{.Layout.T "admin.source_console_theme"}}</span>
+        <select name="base">
+          {{range .Data.Themes}}<option value="{{.Name}}">{{.Name}}</option>{{end}}
+        </select>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.copy_name"}}</span>
+        <input name="name" placeholder="my-console" maxlength="64" required>
+      </label>
+      <button class="button button--primary" type="submit">{{.Layout.T "admin.create_copy"}}</button>
+    </form>
+  </article>
+
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Console theme ledger</span>
+        <h2>{{.Layout.T "admin.all_console_themes"}}</h2>
+      </div>
+      <span class="ledger-count">{{len .Data.Themes}} themes</span>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{.Layout.T "common.name"}}</th><th>{{.Layout.T "admin.source"}}</th><th>{{.Layout.T "admin.file_count"}}</th><th>{{.Layout.T "common.size"}}</th><th>{{.Layout.T "common.actions"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.Themes}}
+          <tr>
+            <td><strong>{{.Name}}</strong></td>
+            <td><span class="role role--{{.Source}}">{{.Source}}</span></td>
+            <td>{{.FileCount}}</td>
+            <td>{{formatBytes .Size}}</td>
+            <td class="action-cell">
+              {{if eq .Source "builtin"}}
+              <span class="panel-note">{{$.Layout.T "admin.read_only"}}</span>
+              {{else}}
+              <a class="quiet-link" href="/dashboard/admin/console-themes/{{.Name}}/download">{{$.Layout.T "common.download"}}</a>
+              <button class="text-button" type="button" data-modal-open="console-theme-edit-{{.Name}}">{{$.Layout.T "common.edit"}}</button>
+              <form method="post" action="/dashboard/admin/console-themes/{{.Name}}/delete" data-confirm="{{$.Layout.T "admin.delete_console_theme_confirm" .Name}}">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <button class="text-button text-button--danger" type="submit">{{$.Layout.T "common.delete"}}</button>
+              </form>
+              {{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</div>
+
+<div class="modal theme-guide-modal" id="console-theme-guide" role="dialog" aria-modal="true" aria-labelledby="console-theme-guide-title">
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel">
+    <div class="collaboration-modal__header">
+      <div>
+        <span class="eyebrow">Console theme handbook</span>
+        <h2 id="console-theme-guide-title">{{.Layout.T "admin.console_theme_guide_title"}}</h2>
+      </div>
+      <button class="text-button" type="button" data-modal-close>{{.Layout.T "common.close"}}</button>
+    </div>
+    <div class="markdown-guide">{{.Data.GuideHTML}}</div>
+  </div>
+</div>
+
+{{range .Data.Themes}}
+{{if ne .Source "builtin"}}
+{{$theme := .}}
+<div class="modal theme-file-modal" id="console-theme-edit-{{.Name}}" role="dialog" aria-modal="true" aria-labelledby="console-theme-edit-title-{{.Name}}">
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel">
+    <div class="collaboration-modal__header">
+      <div>
+        <span class="eyebrow">Theme files</span>
+        <h2 id="console-theme-edit-title-{{.Name}}">{{$.Layout.T "admin.edit_theme_name" .Name}}</h2>
+      </div>
+      <button class="text-button" type="button" data-modal-close>{{$.Layout.T "common.close"}}</button>
+    </div>
+    {{if .Files}}
+      {{range .Files}}
+      <details class="theme-file-editor" {{if eq .Path "theme.css"}}open{{end}}>
+        <summary>{{.Path}}</summary>
+        <form method="post" action="/dashboard/admin/console-themes/{{$theme.Name}}/files/save" class="stack-form">
+          <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+          <input type="hidden" name="path" value="{{.Path}}">
+          <label>
+            <span class="sr-only">{{$.Layout.T "admin.file_path_content" .Path}}</span>
+            <textarea name="content" rows="16" class="code-textarea">{{.Content}}</textarea>
+          </label>
+          <button class="button button--primary" type="submit">{{$.Layout.T "admin.save_file" .Path}}</button>
+        </form>
+      </details>
+      {{end}}
+    {{else}}
+    <p class="panel-empty">{{$.Layout.T "admin.no_editable_text_files"}}</p>
+    {{end}}
+  </div>
+</div>
+{{end}}
+{{end}}
+{{end}}

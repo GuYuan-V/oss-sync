@@ -1,0 +1,82 @@
+{{define "vault-settings"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Vault settings</span>
+    <h1>{{.Layout.T "common.vault_settings"}}</h1>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+{{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "vault.settings_saved"}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="gate-panel">
+      <div class="gate-panel__copy">
+        <span class="eyebrow">Publishing</span>
+        <h2>{{.Layout.T "vault.template_and_public_access"}}</h2>
+        <p>{{.Layout.T "vault.template_per_vault_desc"}}</p>
+        <p>{{.Layout.T "vault.custom_fragments_desc"}}</p>
+      </div>
+    <form method="post" action="/dashboard/vaults/{{.Data.VaultID}}/settings" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <label>
+        <span>{{.Layout.T "vault.blog_template"}}</span>
+        <select name="theme_name">
+          {{range .Data.Themes}}
+          <option value="{{.Name}}" {{if eq .Name $.Data.ThemeName}}selected{{end}}>{{.Name}}{{if eq .Source "builtin"}}{{$.Layout.T "vault.builtin_label"}}{{else}}{{$.Layout.T "vault.custom_label"}}{{end}}</option>
+          {{end}}
+        </select>
+        <small>{{.Layout.T "vault.template_note"}}</small>
+      </label>
+      <label>
+        <span>{{.Layout.T "vault.recycle_bin_days"}}</span>
+        <input type="number" name="recycle_bin_days" min="0" max="3650" value="{{.Data.RecycleBinDays}}">
+        <small>{{.Layout.T "vault.recycle_bin_days_hint" .Data.DefaultRecycleDays}}</small>
+      </label>
+      <label class="switch-control">
+        <input type="checkbox" name="is_public_blog" {{if .Data.IsPublicBlog}}checked{{end}}>
+        <span class="switch-control__track" aria-hidden="true"></span>
+        <span>{{.Layout.T "vault.public_blog"}}</span>
+        <small>{{.Layout.T "vault.public_blog_hint" .Data.VaultID}}</small>
+      </label>
+
+      {{if .Data.CanManage}}
+      {{if .Data.CustomFragmentsEnabled}}
+        <label>
+          <span>{{.Layout.T "vault.custom_header"}}</span>
+          <textarea name="custom_header" maxlength="2000" rows="8" autocomplete="off">{{.Data.CustomHeader}}</textarea>
+          <small>{{.Layout.T "vault.custom_header_hint"}}</small>
+        </label>
+        <label>
+          <span>{{.Layout.T "vault.custom_footer"}}</span>
+          <textarea name="custom_footer" maxlength="2000" rows="8" autocomplete="off">{{.Data.CustomFooter}}</textarea>
+          <small>{{.Layout.T "vault.custom_footer_hint"}}</small>
+        </label>
+      {{else}}
+      <p class="panel-note">{{.Layout.T "vault.custom_fragments_disabled"}}</p>
+      {{end}}
+      {{end}}
+
+      <button class="button button--primary" type="submit">{{.Layout.T "vault.save_settings"}}</button>
+    </form>
+  </article>
+
+  {{if .Data.CanManage}}
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Danger zone</span>
+      <h2>{{.Layout.T "vault.danger_zone"}}</h2>
+      </div>
+    </header>
+    <p class="panel-note">{{.Layout.T "vault.delete_vault_desc"}}</p>
+    <form method="post" action="/dashboard/vaults/{{.Data.VaultID}}/delete"
+          class="gate-form stack-form"
+          data-confirm="{{.Layout.T "vault.delete_vault_confirm" .Data.VaultName}}">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <button class="button button--danger" type="submit">{{.Layout.T "vault.delete_vault"}}</button>
+    </form>
+  </article>
+  {{end}}
+</div>
+{{end}}

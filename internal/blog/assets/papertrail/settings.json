@@ -1,0 +1,63 @@
+{
+  "settings": [
+    {
+      "key": "blog_name",
+      "label": "博客名称",
+      "type": "text",
+      "max_length": 120
+    },
+    {
+      "key": "description",
+      "label": "博客介绍",
+      "type": "textarea",
+      "max_length": 500
+    },
+    {
+      "key": "logo_url",
+      "label": "Logo URL",
+      "type": "url",
+      "max_length": 512
+    },
+    {
+      "key": "logo_size",
+      "label": "Logo 大小（像素）",
+      "type": "text",
+      "max_length": 3,
+      "placeholder": "10-192（默认 96）"
+    },
+    {
+      "key": "logo_shape",
+      "label": "Logo 形状",
+      "type": "choice",
+      "choices": ["square", "circle"]
+    },
+    {
+      "key": "buttons",
+      "label": "自定义按钮",
+      "type": "group",
+      "max_items": 5,
+      "fields": [
+        {
+          "key": "label",
+          "label": "按钮名称",
+          "type": "text",
+          "max_length": 40,
+          "required": true
+        },
+        {
+          "key": "url",
+          "label": "目标 URL",
+          "type": "url",
+          "max_length": 512,
+          "required": true
+        },
+        {
+          "key": "icon_url",
+          "label": "图标 URL",
+          "type": "url",
+          "max_length": 512
+        }
+      ]
+    }
+  ]
+}

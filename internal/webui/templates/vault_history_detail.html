@@ -1,0 +1,37 @@
+{{define "vault-history-detail"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">History detail</span>
+    <h1>{{.Layout.T "history.detail"}}</h1>
+    <p class="lead">{{.Data.FilePath}} · {{.Data.ActionLabel}} · {{.Layout.T "history.version"}} {{.Data.Version}}</p>
+  </div>
+</section>
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Change set</span>
+        <h2>{{.Layout.T "history.change_content"}}</h2>
+      </div>
+      <div class="action-cell">
+        <a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}/history?path={{.Data.FilePath}}">{{.Layout.T "history.back_to_history"}}</a>
+        {{if and .Data.HasSnapshot .Data.CanRestore}}
+        <form method="post" action="/dashboard/vaults/{{.Data.VaultID}}/history/{{.Data.ID}}/restore"
+              data-confirm="{{$.Layout.T "history.restore_confirm" .Data.FilePath}}">
+          <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+          <button class="text-button" type="submit">{{.Layout.T "history.restore_this_version"}}</button>
+        </form>
+        {{end}}
+      </div>
+    </header>
+    {{if and .Data.IsText .Data.HasSnapshot}}
+    <pre class="history-diff">{{range .Data.Diff}}<span class="history-diff__line history-diff__line--{{.Kind}}">{{.Prefix}}{{.Text}}</span>{{end}}</pre>
+    {{else if .Data.HasSnapshot}}
+    <p class="panel-empty">{{.Layout.T "history.binary_version"}}</p>
+    {{else}}
+    <p class="panel-empty">{{.Layout.T "history.no_snapshot"}}</p>
+    {{end}}
+  </article>
+</div>
+{{end}}

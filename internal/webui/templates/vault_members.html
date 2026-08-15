@@ -1,0 +1,101 @@
+{{define "vault-members"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Collaboration access</span>
+    <h1>{{.Layout.T "common.members"}}</h1>
+    <p class="lead">{{.Layout.T "member.manage_desc"}}</p>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+{{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "member.collab_updated"}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Access registry</span>
+        <h2>{{.Layout.T "member.authorized_members"}}</h2>
+      </div>
+      <span class="ledger-count">{{len .Data.Members}} collaborators</span>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{$.Layout.T "common.username"}}</th><th>{{$.Layout.T "member.authorized_articles"}}</th><th>{{$.Layout.T "common.actions"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.Members}}
+          <tr>
+            <td><strong>{{.Username}}</strong></td>
+            <td><span class="collaboration-member-count">{{$.Layout.T "member.article_count" (len .Articles)}}</span></td>
+            <td class="action-cell">
+              {{if $.Data.CanManage}}
+              <button class="text-button" type="button" data-modal-open="collaboration-member-{{.UserID}}">{{$.Layout.T "common.view"}}</button>
+              {{else}}
+              <span class="panel-note">{{$.Layout.T "member.read_only"}}</span>
+              {{end}}
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="3">{{$.Layout.T "member.no_authorized_members"}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</div>
+
+{{if .Data.CanManage}}
+{{range .Data.Members}}
+{{$member := .}}
+<div id="collaboration-member-{{.UserID}}" class="modal collaboration-modal" role="dialog" aria-modal="true" aria-labelledby="collaboration-member-title-{{.UserID}}">
+  <div class="modal__backdrop" aria-hidden="true"></div>
+  <div class="modal__panel">
+    <header class="collaboration-modal__header">
+      <div>
+        <span class="eyebrow">Authorized articles</span>
+        <h2 id="collaboration-member-title-{{.UserID}}">{{.Username}} · {{$.Layout.T "member.article_count" (len .Articles)}}</h2>
+      </div>
+      <button class="icon-button" type="button" data-modal-close aria-label="{{$.Layout.T "member.close_article_list"}}">×</button>
+    </header>
+
+    <form id="collaboration-bulk-{{.UserID}}" method="post" action="/dashboard/vaults/{{$.Data.VaultID}}/members/{{.UserID}}/collaborations/revoke" data-confirm="{{$.Layout.T "member.revoke_selected_confirm"}}">
+      <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+    </form>
+    <form id="collaboration-all-{{.UserID}}" method="post" action="/dashboard/vaults/{{$.Data.VaultID}}/members/{{.UserID}}/collaborations/revoke" data-confirm="{{$.Layout.T "member.revoke_all_confirm" .Username}}">
+      <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+      <input type="hidden" name="all" value="1">
+    </form>
+
+    <fieldset class="collaboration-selection" data-collaboration-selection>
+      <legend>{{$.Layout.T "member.select_articles"}}</legend>
+      <div class="collaboration-selection__toolbar">
+        <button class="text-button" type="button" data-select-all>{{$.Layout.T "member.select_all"}}</button>
+        <button class="text-button" type="button" data-clear-selection>{{$.Layout.T "member.deselect_all"}}</button>
+      </div>
+      <div class="collaboration-article-list">
+        {{range .Articles}}
+        <div class="collaboration-article-row">
+          <label class="collaboration-article-choice">
+            <input type="checkbox" name="collaboration_ids" value="{{.CollaborationID}}" form="collaboration-bulk-{{$member.UserID}}">
+            <span>{{.Path}}</span>
+          </label>
+          <form method="post" action="/dashboard/vaults/{{$.Data.VaultID}}/members/{{$member.UserID}}/collaborations/revoke" data-confirm="{{$.Layout.T "member.revoke_article_confirm" .Path}}">
+            <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+            <input type="hidden" name="collaboration_ids" value="{{.CollaborationID}}">
+            <button class="text-button text-button--danger" type="submit">{{$.Layout.T "member.revoke_authorization"}}</button>
+          </form>
+        </div>
+        {{end}}
+      </div>
+    </fieldset>
+
+    <div class="collaboration-modal__actions">
+      <button class="button button--danger" type="submit" form="collaboration-bulk-{{.UserID}}" data-selection-submit disabled>{{$.Layout.T "member.revoke_selected"}}</button>
+      <button class="button button--danger" type="submit" form="collaboration-all-{{.UserID}}">{{$.Layout.T "member.revoke_all"}}</button>
+      <button class="button" type="button" data-modal-close>{{$.Layout.T "common.close"}}</button>
+    </div>
+  </div>
+</div>
+{{end}}
+{{end}}
+{{end}}

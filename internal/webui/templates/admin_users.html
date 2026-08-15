@@ -1,0 +1,90 @@
+{{define "admin-users"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Admin · Users</span>
+    <h1>{{.Layout.T "common.user_management"}}</h1>
+  </div>
+  <dl class="summary-strip">
+    <div><dt>{{.Layout.T "admin.all_users"}}</dt><dd>{{.Data.UserCount}}</dd></div>
+    <div><dt>{{.Layout.T "admin.admin_count_label"}}</dt><dd>{{.Data.AdminCount}}</dd></div>
+  </dl>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+{{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "admin.settings_saved"}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Identity ledger</span>
+        <h2>{{.Layout.T "admin.registered_accounts"}}</h2>
+      </div>
+      <span class="ledger-count">{{.Data.UserCount}} records</span>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{.Layout.T "common.username"}}</th><th>{{.Layout.T "common.role"}}</th><th>{{.Layout.T "common.created"}}</th><th>{{.Layout.T "admin.vault_count"}}</th><th>{{.Layout.T "admin.device_count"}}</th><th>{{.Layout.T "common.actions"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.Users}}
+          <tr>
+            <td><strong>{{.Username}}</strong></td>
+            <td>
+              <form method="post" action="/dashboard/admin/users/{{.UserID}}/role" class="inline-form">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <select name="role" {{if .IsLastAdmin}}disabled title="{{$.Layout.T "admin.cannot_demote_last_admin"}}"{{end}}>
+                  <option value="user" {{if eq .Role "user"}}selected{{end}}>user</option>
+                  <option value="admin" {{if eq .Role "admin"}}selected{{end}}>admin</option>
+                </select>
+                {{if not .IsLastAdmin}}<button class="text-button" type="submit">{{$.Layout.T "common.save"}}</button>{{end}}
+              </form>
+            </td>
+            <td><time>{{timeFmt .CreatedAt}}</time></td>
+            <td>{{.VaultCount}}</td>
+            <td>{{.DeviceCount}}</td>
+            <td class="action-cell">
+              <button class="text-button" type="button" data-modal-open="reset-{{.UserID}}">{{$.Layout.T "admin.reset_password"}}</button>
+              {{if not .IsLastAdmin}}
+              <form method="post" action="/dashboard/admin/users/{{.UserID}}/delete"
+                    data-confirm="{{$.Layout.T "admin.delete_user_confirm" .Username}}">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <button class="text-button text-button--danger" type="submit">{{$.Layout.T "common.delete"}}</button>
+              </form>
+              {{end}}
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="6">{{$.Layout.T "admin.no_accounts_yet"}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</div>
+
+{{range .Data.Users}}
+{{if not .IsLastAdmin}}
+<div class="modal" id="reset-{{.UserID}}" role="dialog" aria-modal="true" aria-labelledby="reset-title-{{.UserID}}">
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel">
+    <h2 id="reset-title-{{.UserID}}">{{$.Layout.T "admin.reset_user_password" .Username}}</h2>
+    <form method="post" action="/dashboard/admin/users/{{.UserID}}/reset-password" class="stack-form">
+      <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+      <label>
+        <span>{{$.Layout.T "common.new_password"}}</span>
+        <input type="password" name="new_password" minlength="8" maxlength="128" autocomplete="new-password" required>
+      </label>
+      <label>
+        <span>{{$.Layout.T "common.confirm_password"}}</span>
+        <input type="password" name="new_password_confirm" minlength="8" maxlength="128" autocomplete="new-password" required>
+      </label>
+      <div class="action-row">
+        <button class="button button--primary" type="submit">{{$.Layout.T "common.save"}}</button>
+        <button class="text-button" type="button" data-modal-close>{{$.Layout.T "common.cancel"}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}
+{{end}}
+{{end}}
