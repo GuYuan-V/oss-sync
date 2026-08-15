@@ -1,24 +1,37 @@
 package server
 
 import (
+<<<<<<< HEAD
 	"errors"
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+<<<<<<< HEAD
 	"regexp"
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	"strings"
 	"testing"
 
 	"github.com/oss/oss-server/internal/models"
+<<<<<<< HEAD
 	"gorm.io/gorm"
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 )
 
 func TestShareAndBlogFlow(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	router := srv.Router()
 	token := registerAndLogin(t, router, "bob", "password123")
+<<<<<<< HEAD
 	uploadFile(t, router, token, "Notes/Go.md", "# Go\n\n## Introduction\n\nLink: [[Rust]]", 1700000000000)
+=======
+	uploadFile(t, router, token, "Notes/Go.md", "# Go\nLink: [[Rust]]", 1700000000000)
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 	code, body := doJSON(t, router, "POST", "/api/shares", token, map[string]any{
 		"target_path": "Notes/Go.md", "is_folder": false, "allow_copy": true, "recursive_backlinks": false,
@@ -38,6 +51,7 @@ func TestShareAndBlogFlow(t *testing.T) {
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `unshared-link`) {
 		t.Errorf("blog render: status=%d body=%s", w.Code, w.Body.String())
 	}
+<<<<<<< HEAD
 	if !strings.Contains(w.Body.String(), `data-theme-key="oss-blog-theme"`) ||
 		!strings.Contains(w.Body.String(), "theme-switcher") {
 		t.Error("expected blog theme switching markup")
@@ -51,6 +65,10 @@ func TestShareAndBlogFlow(t *testing.T) {
 		if !strings.Contains(w.Body.String(), marker) {
 			t.Errorf("default share missing mobile TOC marker %s", marker)
 		}
+=======
+	if !strings.Contains(w.Body.String(), `<script>window.__THEME_CONFIG__`) {
+		t.Error("expected ThemeConfig injection")
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}
 
 	req = httptest.NewRequest("GET", "/p/ZZZZZZ", nil)
@@ -218,6 +236,7 @@ func TestDefaultThemeCSSAvailable(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestPublicRoutesDoNotRenderCustomFragmentsWhenPolicyDisabled(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -345,6 +364,8 @@ func TestPublicHomeEmptyStateLinksItsLayoutStyles(t *testing.T) {
 	}
 }
 
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func TestCustomThemeRendersVaultBlogAndServesAssets(t *testing.T) {
 	srv, db, dataDir := newTestServer(t)
 	router := srv.Router()
@@ -385,7 +406,11 @@ func TestFolderShareEscapesLikeWildcardsAndLinkAttributes(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "folder-safe", "password123")
 	uploadFile(t, router, token, `A_/safe.md`, "# safe", 1700000000000)
+<<<<<<< HEAD
 	uploadFile(t, router, token, `A_/quote#.md`, "# quote", 1700000000001)
+=======
+	uploadFile(t, router, token, `A_/quote".md`, "# quote", 1700000000001)
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	uploadFile(t, router, token, `AB/secret.md`, "# secret", 1700000000002)
 	code, body := doJSON(t, router, http.MethodPost, "/api/shares", token, map[string]any{"target_path": "A_", "is_folder": true})
 	if code != http.StatusOK {
@@ -399,7 +424,11 @@ func TestFolderShareEscapesLikeWildcardsAndLinkAttributes(t *testing.T) {
 	if w.Code != http.StatusOK || strings.Contains(page, "secret") {
 		t.Fatalf("folder share leaked wildcard sibling: %d %s", w.Code, page)
 	}
+<<<<<<< HEAD
 	if !strings.Contains(page, "%23") || strings.Contains(page, `href="/p/`+shareID+`/quote#`) {
+=======
+	if !strings.Contains(page, "%22") || strings.Contains(page, `href="/p/`+shareID+`/quote"`) {
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		t.Fatalf("folder link was not safely escaped: %s", page)
 	}
 }

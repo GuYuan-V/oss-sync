@@ -1,6 +1,59 @@
 import assert from "node:assert/strict";
+<<<<<<< HEAD
 import test from "node:test";
 import { loadSyncEngine } from "./helpers/sync-engine-loader.mjs";
+=======
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import { pathToFileURL } from "node:url";
+import { build } from "esbuild";
+
+async function loadSyncEngine() {
+  const dir = await mkdtemp(join(tmpdir(), "oss-sync-engine-"));
+  const outfile = join(dir, "sync-engine.mjs");
+  await build({
+    entryPoints: ["src/sync-engine.ts"],
+    outfile,
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    plugins: [
+      {
+        name: "obsidian-stub",
+        setup(builder) {
+          builder.onResolve({ filter: /^obsidian$/ }, () => ({
+            path: "obsidian",
+            namespace: "obsidian-stub",
+          }));
+          builder.onLoad({ filter: /.*/, namespace: "obsidian-stub" }, () => ({
+            contents: `
+              export class App {}
+              export class Vault {}
+              export class Notice {}
+              export class TFile {
+                static [Symbol.hasInstance](value) {
+                  return value?.__tfile === true;
+                }
+              }
+              export async function requestUrl() {
+                throw new Error("not implemented");
+              }
+            `,
+            loader: "js",
+          }));
+        },
+      },
+    ],
+  });
+  const module = await import(pathToFileURL(outfile).href);
+  return {
+    SyncEngine: module.SyncEngine,
+    cleanup: () => rm(dir, { recursive: true, force: true }),
+  };
+}
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 test("successful rename replaces the stale manifest view for the same run", async () => {
   const { SyncEngine, cleanup } = await loadSyncEngine();
@@ -474,9 +527,12 @@ test("source-side rename conflict preserves remote source and queues local targe
         syncIntervalSec: 300,
         remotePollIntervalSec: 30,
       },
+<<<<<<< HEAD
       t(key) {
         return key;
       },
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
     };
     const engine = new SyncEngine({ vault }, api, baseline, plugin);
     const remote = new Map([["Notes/A.md", currentSource]]);

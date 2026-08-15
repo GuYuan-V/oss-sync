@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 (() => {
   "use strict";
 
@@ -331,3 +332,6 @@
     initBackToTop();
   });
 })();
+=======
+document.documentElement.classList.add("oss-theme-ready");
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b

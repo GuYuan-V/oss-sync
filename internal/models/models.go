@@ -51,8 +51,11 @@ type User struct {
 	PasswordHash string `gorm:"size:128;not null"`
 	Role         string `gorm:"size:16;not null;default:'user'"` // admin / user
 	StorageQuota int64  `gorm:"not null;default:0"`              // 字节数，0 表示不限
+<<<<<<< HEAD
 	// TokenVersion 在修改密码或重置密码时递增，用于使旧 JWT 失效。
 	TokenVersion uint `gorm:"not null;default:0"`
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    gorm.DeletedAt `gorm:"index"`
@@ -61,13 +64,19 @@ type User struct {
 // SystemSetting 保存由管理员在网页面板修改的服务端运行设置。
 // 单例记录固定使用 ID=1，避免部署配置覆盖管理员已经保存的选择。
 type SystemSetting struct {
+<<<<<<< HEAD
 	ID                     uint `gorm:"primaryKey"`
 	RegistrationEnabled    bool `gorm:"not null"`
 	CustomFragmentsEnabled bool `gorm:"not null;default:false"`
+=======
+	ID                  uint `gorm:"primaryKey"`
+	RegistrationEnabled bool `gorm:"not null"`
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	// JWTSecret is generated on the first server start and is deliberately not
 	// sourced from a checked-in configuration file. It must remain stable so
 	// existing sessions stay valid after a restart.
 	JWTSecret string `gorm:"type:text"`
+<<<<<<< HEAD
 	// PublicHomeVaultID 是旧版单仓库首页字段，仅为无损兼容保留；根路径不再读取它。
 	PublicHomeVaultID string `gorm:"size:36"`
 	// DefaultRecycleBinDays 是仓库回收站保留天数的系统默认值。
@@ -80,6 +89,10 @@ type SystemSetting struct {
 	MaxUploadSizeBytes    int64  `gorm:"not null;default:0"`
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
+=======
+	CreatedAt time.Time
+	UpdatedAt time.Time
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 // Vault 是一个独立的 Obsidian 笔记仓库。同步 revision、文件路径和配置均按 Vault 隔离。
@@ -128,12 +141,17 @@ type VaultSetting struct {
 	CustomHeader      string  `gorm:"type:text"`
 	CustomFooter      string  `gorm:"type:text"`
 	KeepDirectoryTree bool    `gorm:"not null;default:true"`
+<<<<<<< HEAD
 	// RecycleBinDays 仓库回收站保留天数，0 表示继承系统默认值。
 	RecycleBinDays int `gorm:"not null;default:0"`
 	// IsPublicBlog controls /b/:vault_id access and root-directory discovery.
 	IsPublicBlog bool `gorm:"not null;default:false"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+=======
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 // VaultSyncState 保存某个 Vault 当前的服务端单调递增 revision。
@@ -146,6 +164,7 @@ type VaultSyncState struct {
 
 // ClientDevice 是用户的一台客户端设备。
 type ClientDevice struct {
+<<<<<<< HEAD
 	ID       uint   `gorm:"primaryKey"`
 	UserID   uint   `gorm:"index;not null;uniqueIndex:idx_user_client"`
 	ClientID string `gorm:"size:64;not null;uniqueIndex:idx_user_client"`
@@ -171,6 +190,16 @@ type DeviceVaultAccess struct {
 	GrantedByUserID uint   `gorm:"not null"`
 	GrantedAt       time.Time
 	CreatedAt       time.Time
+=======
+	ID         uint   `gorm:"primaryKey"`
+	UserID     uint   `gorm:"index;not null;uniqueIndex:idx_user_client"`
+	ClientID   string `gorm:"size:64;not null;uniqueIndex:idx_user_client"`
+	Name       string `gorm:"size:128"`
+	LastSeenAt time.Time
+	RevokedAt  sql.NullTime `gorm:"index"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 // DeviceVault 记录设备对 Vault 的同步进度，便于诊断和后续墓碑回收。
@@ -202,6 +231,7 @@ type StorageIssue struct {
 
 // UserSetting 保存兼容旧版本的用户级配置。
 type UserSetting struct {
+<<<<<<< HEAD
 	UserID                uint    `gorm:"uniqueIndex;not null"`
 	SyncInterval          int     `gorm:"not null;default:300"` // 秒，默认 5 分钟
 	LongPollWaitSec       int     `gorm:"not null;default:30"`
@@ -218,6 +248,17 @@ type UserSetting struct {
 	KeepDirectoryTree     bool    `gorm:"not null;default:true"`
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
+=======
+	UserID            uint    `gorm:"uniqueIndex;not null"`
+	SyncInterval      int     `gorm:"not null;default:300"` // 秒，默认 5 分钟
+	ThemeName         string  `gorm:"size:64;not null;default:'default'"`
+	ThemeConfig       JSONMap `gorm:"type:json"`
+	CustomHeader      string  `gorm:"type:text"`
+	CustomFooter      string  `gorm:"type:text"`
+	KeepDirectoryTree bool    `gorm:"not null;default:true"`
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 // File 保存文件元数据和同步墓碑。
@@ -264,6 +305,7 @@ type Collaboration struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
+<<<<<<< HEAD
 
 // FileHistory 保存文件的修改记录。ContentKey 指向 gzip 快照，create 无快照。
 type FileHistory struct {
@@ -286,3 +328,5 @@ type FileHistory struct {
 	ClientID   string    `gorm:"size:64"`
 	CreatedAt  time.Time `gorm:"index"`
 }
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b

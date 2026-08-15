@@ -15,15 +15,22 @@ import (
 	"github.com/oss/oss-server/internal/models"
 )
 
+<<<<<<< HEAD
 //go:embed assets/default/* assets/development-template/* assets/papertrail/* assets/scaffold/*
+=======
+//go:embed assets/default/* assets/development-template/*
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 var themeAssetsFS embed.FS
 
 type blogAssetResolver struct{ shareID string }
 
+<<<<<<< HEAD
 func NewAssetResolver(shareID string) markdown.AssetResolver {
 	return blogAssetResolver{shareID: shareID}
 }
 
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func (r blogAssetResolver) ResolveAsset(reference string) string {
 	if isRemoteReference(reference) {
 		return reference
@@ -50,7 +57,10 @@ func (h *Handler) handleSharedAsset(c *gin.Context) {
 		return
 	}
 	abs := filestore.DiskPath(h.Cfg.Storage.DataDir, file)
+<<<<<<< HEAD
 	c.Header("X-Content-Type-Options", "nosniff")
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	c.File(abs)
 }
 
@@ -112,7 +122,11 @@ func (h *Handler) resolveAssetFile(userID uint, vaultID, reference string) (mode
 }
 
 func (h *Handler) serveDefaultTheme(c *gin.Context, filename string) bool {
+<<<<<<< HEAD
 	if filename != "style.css" && filename != "theme.js" && filename != "template.html" {
+=======
+	if filename != "style.css" && filename != "theme.js" {
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		return false
 	}
 	content, err := themeAssetsFS.ReadFile("assets/default/" + filename)
@@ -123,13 +137,17 @@ func (h *Handler) serveDefaultTheme(c *gin.Context, filename string) bool {
 	if filename == "style.css" {
 		contentType = "text/css; charset=utf-8"
 	}
+<<<<<<< HEAD
 	if filename == "template.html" {
 		contentType = "text/html; charset=utf-8"
 	}
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	c.Data(http.StatusOK, contentType, content)
 	return true
 }
 
+<<<<<<< HEAD
 // serveBuiltinTheme 提供内置主题（default / papertrail）的静态资源。
 func (h *Handler) serveBuiltinTheme(c *gin.Context, theme, filename string) bool {
 	switch theme {
@@ -156,6 +174,8 @@ func (h *Handler) serveBuiltinTheme(c *gin.Context, theme, filename string) bool
 	return false
 }
 
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func isRemoteReference(reference string) bool {
 	lower := strings.ToLower(reference)
 	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") || strings.HasPrefix(lower, "data:")

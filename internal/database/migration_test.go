@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm/logger"
 
 	"github.com/oss/oss-server/internal/models"
+<<<<<<< HEAD
 	"github.com/oss/oss-server/internal/settingspolicy"
 )
 
@@ -30,6 +31,10 @@ func (legacySystemSetting) TableName() string {
 	return "system_settings"
 }
 
+=======
+)
+
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func TestAutoMigrateCreatesDefaultVaultAndBackfillsLegacyRows(t *testing.T) {
 	db, err := gorm.Open(
 		sqlite.Open(filepath.Join(t.TempDir(), "migration.db")),
@@ -38,9 +43,12 @@ func TestAutoMigrateCreatesDefaultVaultAndBackfillsLegacyRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+<<<<<<< HEAD
 	if sqlDB, err := db.DB(); err == nil {
 		t.Cleanup(func() { _ = sqlDB.Close() })
 	}
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if err := AutoMigrate(db); err != nil {
 		t.Fatal(err)
 	}
@@ -122,9 +130,12 @@ func TestAutoMigrateDoesNotCreateVaultForEmptyAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+<<<<<<< HEAD
 	if sqlDB, err := db.DB(); err == nil {
 		t.Cleanup(func() { _ = sqlDB.Close() })
 	}
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if err := AutoMigrate(db); err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +155,7 @@ func TestAutoMigrateDoesNotCreateVaultForEmptyAccount(t *testing.T) {
 		t.Fatalf("migration created %d vaults for an empty account, want 0", vaultCount)
 	}
 }
+<<<<<<< HEAD
 
 func TestAutoMigrate_whenPolicySettingsExist_preservesValuesAndInheritance(t *testing.T) {
 	// Given
@@ -288,3 +300,5 @@ func TestAutoMigrate_whenSystemSettingsAreLegacy_addsCustomFragmentsEnabledWithD
 		t.Fatal("legacy migration should default custom fragments to false")
 	}
 }
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b

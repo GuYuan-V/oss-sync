@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Operating system and editor files
 .DS_Store
 Thumbs.db
@@ -16,11 +17,20 @@ configs/config.local.yaml
 configs/*.local.yaml
 
 # Runtime data: databases, uploaded files, themes, recovery snapshots, and logs
+=======
+# 二进制
+/oss-server
+/bin/
+*.exe
+
+# 运行期数据（含 SQLite、用户文件、附件）
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 /data/
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+<<<<<<< HEAD
 *.sqlite
 *.sqlite3
 *.log
@@ -57,3 +67,26 @@ coverage.out
 
 # Private working notes
 /项目技术需求说明书.md
+=======
+
+# 本地配置覆盖
+configs/config.local.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Claude Code 本地会话
+.claude/
+.omo/
+
+# Go 工作区
+vendor/
+
+# 插件构建产物
+plugin/node_modules/
+plugin/main.js
+plugin/*.js.map
+plugin/dist/
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b

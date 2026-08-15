@@ -38,9 +38,12 @@ func newTestServer(t *testing.T) (*Server, *gorm.DB, string) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+<<<<<<< HEAD
 	if sqlDB, err := db.DB(); err == nil {
 		t.Cleanup(func() { _ = sqlDB.Close() })
 	}
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if err := database.AutoMigrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -144,6 +147,7 @@ func intToStr(n int64) string {
 	return strconv.FormatInt(n, 10)
 }
 
+<<<<<<< HEAD
 func TestLegacyUpload_whenUserUploadPreferenceTightensAdminCeiling_rejectsOversizedContent(t *testing.T) {
 	// Given
 	srv, db, _ := newTestServer(t)
@@ -165,6 +169,8 @@ func TestLegacyUpload_whenUserUploadPreferenceTightensAdminCeiling_rejectsOversi
 	}
 }
 
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func TestFullSyncFlow(t *testing.T) {
 	srv, db, dataDir := newTestServer(t)
 	router := srv.Router()

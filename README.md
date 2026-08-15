@@ -1,7 +1,10 @@
 # OSS Sync
 
+<<<<<<< HEAD
 项目地址：https://github.com/helantianshen/oss-sync
 
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 OSS Sync 是一个自托管的 Obsidian 同步与分享项目，由 Gin 后端和 Obsidian 插件组成。后端保存账户、Vault、设备游标和文件元数据，插件负责监听本地文件变化、维护同步基线并处理冲突。
 
 ## 功能
@@ -10,6 +13,7 @@ OSS Sync 是一个自托管的 Obsidian 同步与分享项目，由 Gin 后端�
 - 文件新增、修改、删除和重命名
 - 全量清单校验与基于 revision 的增量同步
 - 多 Vault 隔离，一个账户可管理多个笔记仓库
+<<<<<<< HEAD
 - 设备状态机：待批准 / 已批准 / 已吊销，仓库级设备授权
 - 冲突检测及远端覆盖、本地覆盖、保留双方三种处理方式
 - 文件与文件夹公开分享、允许复制开关
@@ -24,13 +28,28 @@ OSS Sync 是一个自托管的 Obsidian 同步与分享项目，由 Gin 后端�
 - 启动及定时存储对账
 
 同步只使用 HTTP API。插件按服务端策略使用短轮询（`changes?wait=0`）或长轮询（`changes?wait=30`），服务端最长等待 30 秒，不依赖 WebSocket。协作事件使用账户级实时通道：HTTPS 或本机地址优先使用 SSE，服务器仅为 Obsidian 桌面的 `app://obsidian.md` Origin 返回跨域许可；局域网明文 HTTP 自动使用账户级长轮询，事件到达即唤醒，不等待 30 秒超时。
+=======
+- 多设备游标、设备重命名和吊销
+- 冲突检测及远端覆盖、本地覆盖、保留双方三种处理方式
+- 文件和文件夹公开分享
+- Markdown、Obsidian 双链和本地图片渲染
+- 网页注册页和管理员控制台
+- SQLite 默认存储，可切换 PostgreSQL
+- 启动及定时存储对账
+
+同步只使用 HTTP API。插件默认定时轮询远端 revision，服务端变更接口也支持最长 30 秒的等待参数，不依赖 WebSocket。
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 ## 项目结构
 
 ```text
 cmd/server/          后端入口
 configs/             开发和生产配置
+<<<<<<< HEAD
 internal/            认证、同步、Vault、设备、历史、回收站、协作、模板和存储逻辑
+=======
+internal/            认证、同步、Vault、设备、分享和存储逻辑
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 plugin/src/          Obsidian 插件源码
 plugin/tests/        插件同步逻辑测试
 ```
@@ -108,6 +127,7 @@ export OSS_ADMIN_PASSWORD='replace-with-a-strong-password'
 go run ./cmd/server
 ```
 
+<<<<<<< HEAD
 ### 切换 SQLite / PostgreSQL
 
 数据库驱动只能在启动时通过配置文件或环境变量选择，不能在网页中热切换。当前使用的驱动会显示在管理员网页的“系统设置 → 数据库配置”中，但修改配置后必须重启服务。
@@ -131,6 +151,8 @@ database:
 
 切换到 PostgreSQL 会连接一个独立数据库并自动创建表结构，但不会迁移现有 SQLite 数据；请在切换前备份 SQLite 数据库并自行完成数据迁移。
 
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 ### 用户注册
 
 服务启动流程如下：
@@ -138,11 +160,19 @@ database:
 1. 数据库没有管理员时，从 `OSS_ADMIN_PASSWORD` 创建管理员，或等待终端隐藏输入密码。
 2. 数据库已有管理员时直接启动，不修改现有管理员。
 3. 新数据库默认开放普通用户注册。
+<<<<<<< HEAD
 4. 管理员访问 `http://localhost:8080/login` 登录统一网页控制台，在"管理后台 → 系统设置"打开或关闭注册。
 5. 普通用户访问 `http://localhost:8080/register` 创建账户，再使用相同用户名和密码登录 Obsidian 插件或网页控制台。
 6. 登录后在插件的 Vault 区域手动创建服务端仓库，或明确选择已有仓库；只有这两种操作才会绑定并执行全量同步。
 
 网页注册只能创建 `user` 角色，不能获取管理员权限，也不会自动创建 Vault。关闭注册只阻止新账户创建，已有账户仍可登录和同步。网页会话使用独立 HttpOnly cookie，与插件的 JWT Bearer token 互不混用；修改状态的网页请求必须携带 CSRF token。
+=======
+4. 管理员访问 `http://localhost:8080/admin` 登录，在控制台打开或关闭注册。
+5. 普通用户访问 `http://localhost:8080/register` 创建账户，再使用相同用户名和密码登录 Obsidian 插件。
+6. 登录后在插件的 Vault 区域手动创建服务端仓库，或明确选择已有仓库；只有这两种操作才会绑定并执行全量同步。
+
+网页注册只能创建 `user` 角色，不能获取管理员权限，也不会自动创建 Vault。关闭注册只阻止新账户创建，已有账户仍可登录和同步。
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 配置中的 `allow_anonymous_registration`（或对应环境变量）只决定新数据库第一次创建注册设置时的初始值。管理员在网页保存后，选择会写入数据库，重启不会被配置覆盖：
 
@@ -218,12 +248,17 @@ data/
 
 ## 分享
 
+<<<<<<< HEAD
 登录用户可以从 Obsidian 文件菜单或网页控制台创建文章或文件夹分享。公开地址格式为：
+=======
+登录用户可以从 Obsidian 文件菜单创建文章或文件夹分享。公开地址格式为：
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 ```text
 http://<server>/p/<share-id>
 ```
 
+<<<<<<< HEAD
 分享页面支持 GFM、Obsidian 双链、本地图片以及可按 Vault 指定的主题。只有被分享内容实际引用的附件才能通过公开资源接口访问。Vault 所有者或管理员在仓库设置中开启“公开首页博客”后，服务器根路径会列出该 Vault，并通过 `/b/<vault-id>` 提供博客首页。博客首页只列出该仓库已单篇分享且仍存在的 Markdown 文章；未开启的 Vault 和未分享文章不会出现在公开页面。
 
 ## 博客模板
@@ -239,10 +274,24 @@ http://<server>/p/<share-id>
 5. 删除未被仓库使用的自定义模板。
 
 创建副本会生成以下目录，已有同名目录绝不会被覆盖：
+=======
+分享页面支持 GFM、Obsidian 双链、本地图片以及可按 Vault 指定的主题。只有被分享内容实际引用的附件才能通过公开资源接口访问。
+
+### 自定义博客主题
+
+Vault 的成员权限和博客主题均由平台管理员在 `/admin` 管理。打开某个 Vault 的“管理成员”页面，在“博客模板”区可以：
+
+1. 输入 `default` 以使用内置主题；
+2. 创建一份开发模板并自动启用；或
+3. 启用已经放入数据目录的主题。
+
+创建开发模板会生成以下目录，已有同名目录绝不会被覆盖：
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 ```text
 data/
 └── themes/
+<<<<<<< HEAD
     └── my-blog/
         ├── template.html
         ├── style.css
@@ -296,6 +345,16 @@ Markdown 文件协作：owner 或 manager 邀请用户；插件通过账户级�
 ## 日志与排障
 
 服务器和插件默认不输出启动、关闭、轮询成功、定时任务成功或诊断日志。控制台仅保留错误和失败日志；日志不得包含密码、JWT、cookie、授权头或 SSE token。部署监控应使用 `/healthz`、`/readyz` 和失败日志。
+=======
+    └── my-field-notes/
+        ├── template.html
+        ├── style.css
+        ├── theme.js
+        └── README.md
+```
+
+修改这些文件后刷新公开分享页即可生效，无需重启服务。`README.md` 列出模板可用字段；页面布局使用 Go `html/template` 语法，例如 `{{.Title}}`、`{{.ContentHTML}}` 与 `{{.ThemeBaseURL}}`。主题的 CSS、JS 和其他静态文件通过 `/themes/<主题名>/...` 提供。主题名只能使用字母、数字、`-` 和 `_`，且仅应由受信任的服务器管理员编辑。
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 ## 测试
 
@@ -320,7 +379,11 @@ npm run build
 
 - 使用反向代理提供 HTTPS
 - 备份数据库中的 JWT 签名密钥（与数据库一并备份即可）
+<<<<<<< HEAD
 - 完成用户开户后在"系统设置"关闭新用户注册
+=======
+- 完成用户开户后在 `/admin` 关闭新用户注册
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 - 首次启动后从部署环境中移除 `OSS_ADMIN_PASSWORD`
 - 定期备份数据库和存储目录
 - 监控 `/readyz` 和服务日志

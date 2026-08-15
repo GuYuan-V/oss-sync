@@ -26,8 +26,11 @@ func TestVaultRolesAuthorizeSyncAndManagement(t *testing.T) {
 	if code != http.StatusNoContent {
 		t.Fatalf("add manager: %d", code)
 	}
+<<<<<<< HEAD
 	// 设备属于 manager 用户，由 manager 自己批准并授权该仓库。
 	approveDevice(t, router, managerToken, "manager-device", vaultID)
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	code, _ = doJSON(t, router, http.MethodPost, "/api/vaults/"+url.PathEscape(vaultID)+"/members", managerToken, map[string]string{"username": "vault-participant", "role": "participant"})
 	if code != http.StatusNoContent {
 		t.Fatalf("manager add participant: %d", code)

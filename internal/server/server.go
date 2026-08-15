@@ -9,7 +9,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+<<<<<<< HEAD
 	"github.com/oss/oss-server/internal/admin"
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	"github.com/oss/oss-server/internal/auth"
 	"github.com/oss/oss-server/internal/blog"
 	"github.com/oss/oss-server/internal/config"
@@ -43,7 +46,11 @@ func (s *Server) Router() *gin.Engine {
 	gin.SetMode(s.Cfg.Server.Mode)
 	r := gin.New()
 	r.Use(gin.Recovery())
+<<<<<<< HEAD
 	r.Use(accessLogger())
+=======
+	r.Use(gin.Logger())
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 	// 超出内存上限的 multipart 内容由 Gin 写入临时文件。
 	r.MaxMultipartMemory = s.Cfg.Server.MaxMultipartMemoryMB << 20
@@ -54,9 +61,12 @@ func (s *Server) Router() *gin.Engine {
 	authH := auth.NewHandler(s.DB, s.Cfg)
 	authH.Register(r)
 
+<<<<<<< HEAD
 	adminH := admin.New(s.DB, s.Cfg)
 	adminH.Register(r)
 
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	webH, err := webui.New(s.DB, s.Cfg)
 	if err != nil {
 		panic("webui.New: " + err.Error())

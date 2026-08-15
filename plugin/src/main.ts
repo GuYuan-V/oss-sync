@@ -2,7 +2,10 @@
 
 import {
   App,
+<<<<<<< HEAD
   getLanguage as getObsidianLanguage,
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   Notice,
   Plugin,
   PluginManifest,
@@ -11,14 +14,19 @@ import {
   TFolder,
   Vault,
 } from "obsidian";
+<<<<<<< HEAD
 import type { Command } from "obsidian";
 import { OSSApiClient, VaultOut } from "./api";
 import type { ShareOut } from "./api";
 import type { AuthResponse } from "./api";
+=======
+import { OSSApiClient, VaultOut } from "./api";
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 import { BaselineStore } from "./baseline";
 import { ConflictModal, ConflictResolution } from "./conflict-modal";
 import { OSSSettingTab } from "./settings-tab";
 import { DEFAULT_SETTINGS, OSSSettings } from "./settings";
+<<<<<<< HEAD
 import { Diagnostics } from "./diagnostics";
 import type { DiagnosticEvent } from "./diagnostics";
 import { ShareModal } from "./share-modal";
@@ -43,6 +51,10 @@ import {
   type TranslationParams,
 } from "./i18n";
 import { localizeError } from "./localized-error";
+=======
+import { ShareModal } from "./share-modal";
+import { SyncEngine, SyncState } from "./sync-engine";
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 interface PluginData extends OSSSettings {
   token?: string;
@@ -53,6 +65,7 @@ export default class OSSPlugin extends Plugin {
   api: OSSApiClient;
   baseline!: BaselineStore;
   syncEngine!: SyncEngine;
+<<<<<<< HEAD
   collabManager!: CollabManager;
   sidebarView?: SidebarView;
 
@@ -61,16 +74,26 @@ export default class OSSPlugin extends Plugin {
   private statusBarEl?: HTMLElement;
   private ribbonEl?: HTMLElement;
   private readonly localizedCommands: Array<{ command: Command; key: TranslationKey }> = [];
+=======
+
+  private token?: string;
+  private statusBarEl?: HTMLElement;
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   availableVaults: VaultOut[] = [];
 
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
+<<<<<<< HEAD
     this.api = new OSSApiClient(this.settings, this.diagnostics);
+=======
+    this.api = new OSSApiClient(this.settings);
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 
   async onload(): Promise<void> {
     await this.loadSettings();
 
+<<<<<<< HEAD
     this.api = new OSSApiClient(this.settings, this.diagnostics);
     if (this.token) this.api.setToken(this.token);
 
@@ -96,11 +119,21 @@ export default class OSSPlugin extends Plugin {
     this.ribbonEl.addClass("oss-ribbon-button");
     this.ribbonEl.setAttribute("data-oss-sync-ribbon", "true");
 
+=======
+    this.api = new OSSApiClient(this.settings);
+    if (this.token) this.api.setToken(this.token);
+
+    this.baseline = new BaselineStore(this.app.vault);
+    this.syncEngine = new SyncEngine(this.app, this.api, this.baseline, this);
+    this.syncEngine.start();
+
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
     this.statusBarEl = this.addStatusBarItem();
     this.statusBarEl.addClass("oss-status-bar");
     this.setSyncState("idle");
 
     this.statusBarEl.onClickEvent(() => {
+<<<<<<< HEAD
       void this.activateSidebar();
     });
 
@@ -112,6 +145,26 @@ export default class OSSPlugin extends Plugin {
           this.collabManager.handleLocalEdit(f.path);
           return;
         }
+=======
+      if (!this.settings.vaultId) {
+        new Notice("OSS: 请先在插件设置中创建并绑定服务端 Vault");
+        return;
+      }
+      this.syncEngine.runOnce({ forceFull: true });
+    });
+
+    this.addRibbonIcon("refresh-cw", "OSS force sync", async () => {
+      if (!this.settings.vaultId) {
+        new Notice("OSS: 请先在插件设置中创建并绑定服务端 Vault");
+        return;
+      }
+      new Notice("OSS: 触发全量同步");
+      await this.syncEngine.runOnce({ forceFull: true });
+    });
+
+    this.registerEvent(
+      this.app.vault.on("create", (f: TAbstractFile) => {
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
         if (f instanceof TFile && !this.syncEngine.isSuppressed(f.path)) {
           this.syncEngine.enqueueUpsert(normalizeRel(f.path));
         }
@@ -119,10 +172,13 @@ export default class OSSPlugin extends Plugin {
     );
     this.registerEvent(
       this.app.vault.on("modify", (f: TAbstractFile) => {
+<<<<<<< HEAD
         if (f instanceof TFile && isCollabPath(f.path)) {
           this.collabManager.handleLocalEdit(f.path);
           return;
         }
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
         if (f instanceof TFile && !this.syncEngine.isSuppressed(f.path)) {
           this.syncEngine.enqueueUpsert(normalizeRel(f.path));
         }
@@ -130,7 +186,10 @@ export default class OSSPlugin extends Plugin {
     );
     this.registerEvent(
       this.app.vault.on("delete", (f: TAbstractFile) => {
+<<<<<<< HEAD
         if (isCollabPath(f.path)) return;
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
         if (f instanceof TFile && !this.syncEngine.isSuppressed(f.path)) {
           this.syncEngine.enqueueDelete(normalizeRel(f.path));
         } else if (f instanceof TFolder && !this.syncEngine.isSuppressed(f.path)) {
@@ -140,7 +199,10 @@ export default class OSSPlugin extends Plugin {
     );
     this.registerEvent(
       this.app.vault.on("rename", (f: TAbstractFile, oldPath: string) => {
+<<<<<<< HEAD
         if (isCollabPath(f.path) || isCollabPath(oldPath)) return;
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
         if (f instanceof TFile && !this.syncEngine.isSuppressed(f.path)) {
           this.syncEngine.enqueueRename(normalizeRel(oldPath), normalizeRel(f.path));
         } else if (f instanceof TFolder) {
@@ -158,6 +220,7 @@ export default class OSSPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
+<<<<<<< HEAD
         if (file instanceof TFile) {
           menu.addItem((item) => {
             item
@@ -187,6 +250,16 @@ export default class OSSPlugin extends Plugin {
                 void this.toggleShare(file);
               });
             void this.updateShareMenuItem(item, file);
+=======
+        if (file instanceof TFile || file instanceof TFolder) {
+          menu.addItem((item) => {
+            item
+              .setTitle("分享至轻博客")
+              .setIcon("share")
+              .onClick(() => {
+                new ShareModal(this.app, this, file).open();
+              });
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
           });
         }
       })
@@ -198,11 +271,18 @@ export default class OSSPlugin extends Plugin {
       if (this.token) {
         void this.ensureVaultBinding().then(() => {
           if (this.settings.vaultId) {
+<<<<<<< HEAD
             this.collabManager.start();
             void this.syncEngine.runOnce({ forceFull: true });
           }
         }).catch((error: unknown) => {
           new Notice(this.t("notice.loadVaultsFailed", { error: this.localizedError(error) }));
+=======
+            void this.syncEngine.runOnce({ forceFull: true });
+          }
+        }).catch((error: unknown) => {
+          new Notice("OSS: 无法加载仓库列表 " + errorMessage(error));
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
         });
       }
     });
@@ -210,6 +290,7 @@ export default class OSSPlugin extends Plugin {
 
   onunload(): void {
     this.syncEngine?.stop();
+<<<<<<< HEAD
     this.collabManager?.stop();
     this.app.workspace.detachLeavesOfType(SIDEBAR_VIEW_TYPE);
   }
@@ -276,6 +357,8 @@ export default class OSSPlugin extends Plugin {
     if (!leaf) return;
     await leaf.setViewState({ type: SIDEBAR_VIEW_TYPE, active: true });
     await this.app.workspace.revealLeaf(leaf);
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 
   async loadSettings(): Promise<void> {
@@ -289,7 +372,14 @@ export default class OSSPlugin extends Plugin {
     // Passwords from older plugin versions are never retained after loading.
     this.settings.password = "";
     if (!this.settings.clientId) {
+<<<<<<< HEAD
       this.settings.clientId = createClientID();
+=======
+      this.settings.clientId =
+        typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
       await this.saveSettings();
     }
     if (!this.settings.deviceName) {
@@ -303,6 +393,7 @@ export default class OSSPlugin extends Plugin {
     await this.saveData(data);
   }
 
+<<<<<<< HEAD
   getLanguage(): PluginLanguage {
     return resolveLanguage(this.settings.language, getObsidianLanguage());
   }
@@ -422,6 +513,14 @@ export default class OSSPlugin extends Plugin {
     } catch {
       // Keep the default share action when the current share state cannot load.
     }
+=======
+  async login(): Promise<void> {
+    const res = await this.api.login();
+    this.token = res.token;
+    this.settings.password = "";
+    await this.saveSettings();
+    await this.ensureVaultBinding();
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 
   async refreshVaults(): Promise<VaultOut[]> {
@@ -441,7 +540,10 @@ export default class OSSPlugin extends Plugin {
         this.settings.vaultId = "";
         this.settings.vaultName = "";
         await this.saveSettings();
+<<<<<<< HEAD
         this.collabManager.stop();
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
       }
       return;
     }
@@ -455,7 +557,10 @@ export default class OSSPlugin extends Plugin {
       this.settings.vaultId = "";
       this.settings.vaultName = "";
       await this.saveSettings();
+<<<<<<< HEAD
       this.collabManager.stop();
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
     }
   }
 
@@ -468,11 +573,18 @@ export default class OSSPlugin extends Plugin {
     if (this.baseline.bindVault(vault.id)) {
       await this.baseline.save();
     }
+<<<<<<< HEAD
     this.collabManager.start();
     if (changed) {
       return this.syncEngine.runOnce({ forceFull: true });
     }
     return true;
+=======
+    if (changed) {
+      return this.syncEngine.runOnce({ forceFull: true });
+    }
+	return true;
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 
   setSyncState(state: SyncState, label?: string): void {
@@ -483,6 +595,7 @@ export default class OSSPlugin extends Plugin {
     const span = this.statusBarEl.createSpan();
     if (state === "syncing") {
       this.statusBarEl.addClass("is-syncing");
+<<<<<<< HEAD
       span.setText(this.t("status.syncing", { detail: text }));
     } else if (state === "error") {
       this.statusBarEl.addClass("is-error");
@@ -491,14 +604,28 @@ export default class OSSPlugin extends Plugin {
       span.setText(this.t("status.idle"));
     }
     this.sidebarView?.refresh();
+=======
+      span.setText("🔄 OSS syncing" + text);
+    } else if (state === "error") {
+      this.statusBarEl.addClass("is-error");
+      span.setText("🔴 OSS error" + (text ? " " + text : ""));
+    } else {
+      span.setText("🟢 OSS idle");
+    }
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 
   openConflictModal(path: string): void {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
+<<<<<<< HEAD
       new Notice(this.t("notice.conflictFileMissing", { path }));
       this.syncEngine.dismissConflict(path);
       this.sidebarView?.refresh();
+=======
+      new Notice("OSS: 冲突文件已不存在 " + path);
+      this.syncEngine.dismissConflict(path);
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
       return;
     }
     void (async () => {
@@ -506,7 +633,11 @@ export default class OSSPlugin extends Plugin {
       try {
         const conflict = this.syncEngine.getConflict(path);
         if (!conflict || conflict.remoteDeleted) {
+<<<<<<< HEAD
           new Notice(this.t("notice.conflictTextUnavailable"));
+=======
+          new Notice("OSS: 该冲突无法使用文本 Diff 处理");
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
           return;
         }
         const res = await this.api.downloadV2(
@@ -516,7 +647,11 @@ export default class OSSPlugin extends Plugin {
         );
         remote = new TextDecoder().decode(new Uint8Array(res.content));
       } catch (e) {
+<<<<<<< HEAD
         new Notice(this.t("notice.fetchRemoteFailed", { error: this.localizedError(e) }));
+=======
+        new Notice("OSS: 拉取云端版本失败 " + (e as Error).message);
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
         return;
       }
       new ConflictModal(this.app, this, this.api, file, remote, async (r) => {
@@ -527,12 +662,16 @@ export default class OSSPlugin extends Plugin {
 
   async applyConflictResolution(path: string, r: ConflictResolution): Promise<void> {
     await this.syncEngine.resolveConflict(path, r);
+<<<<<<< HEAD
     const resolutionKeys: Record<ConflictResolution, TranslationKey> = {
       accept_remote: "conflict.acceptRemoteButton",
       force_local: "conflict.forceLocalButton",
       keep_both: "conflict.keepBothButton",
     };
     new Notice(this.t("notice.conflictResolved", { resolution: this.t(resolutionKeys[r]) }), 4000);
+=======
+    new Notice(`OSS: 冲突已解决 (${r})`, 4000);
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 }
 
@@ -540,6 +679,7 @@ function normalizeRel(p: string): string {
   return p.replace(/\\/g, "/").replace(/^\.\/+/, "");
 }
 
+<<<<<<< HEAD
 function findShare(shares: { readonly shares: readonly ShareOut[] }, file: TFile | TFolder): ShareOut | undefined {
   return shares.shares.find(
     (share) => share.target_path === file.path && share.is_folder === (file instanceof TFolder)
@@ -556,4 +696,8 @@ function isSettingsController(value: unknown): value is SettingsController {
   const open = Reflect.get(value, "open");
   const openTabById = Reflect.get(value, "openTabById");
   return typeof open === "function" && typeof openTabById === "function";
+=======
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "未知错误";
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }

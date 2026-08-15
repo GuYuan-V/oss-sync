@@ -19,7 +19,10 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/oss/oss-server/internal/config"
+<<<<<<< HEAD
 	"github.com/oss/oss-server/internal/deviceauth"
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	"github.com/oss/oss-server/internal/jwt"
 	"github.com/oss/oss-server/internal/models"
 )
@@ -45,12 +48,15 @@ func (h *Handler) Register(r *gin.Engine) {
 		g.GET("/status", h.Status)
 		g.POST("/register", OptionalMiddleware(h.DB, h.Cfg), h.RegisterUser)
 		g.POST("/login", h.Login)
+<<<<<<< HEAD
 		g.GET("/device-status", Middleware(h.DB, h.Cfg), h.DeviceStatus)
 	}
 
 	accountGroup := r.Group("/api/account", Middleware(h.DB, h.Cfg))
 	{
 		accountGroup.POST("/password", h.ChangePassword)
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}
 }
 
@@ -71,10 +77,13 @@ type AuthResponse struct {
 	UserID    uint   `json:"user_id"`
 	Username  string `json:"username"`
 	Role      string `json:"role"`
+<<<<<<< HEAD
 	// DeviceStatus 仅在插件登录时返回：pending / approved / revoked。
 	DeviceStatus string `json:"device_status,omitempty"`
 	// DeviceName 服务端确认的设备名称。
 	DeviceName string `json:"device_name,omitempty"`
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 // RegisterUser 处理 POST /api/auth/register。
@@ -121,12 +130,16 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 			})
 			return
 		}
+<<<<<<< HEAD
 		// 无管理员时第一个注册账户自动成为 admin。
 		role, err = ResolveRegistrationRole(h.DB)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取管理员状态失败"})
 			return
 		}
+=======
+		role = "user"
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	} else if cur.Role != "admin" {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": "仅 admin 可创建其他用户，当前用户 " + cur.Username + " 无权限",
@@ -200,12 +213,17 @@ func (h *Handler) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "sign failed: " + err.Error()})
 		return
 	}
+<<<<<<< HEAD
 	resp := AuthResponse{
+=======
+	c.JSON(http.StatusOK, AuthResponse{
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		Token:     token,
 		ExpiresIn: expiresIn,
 		UserID:    u.ID,
 		Username:  u.Username,
 		Role:      u.Role,
+<<<<<<< HEAD
 	}
 
 	// 插件登录携带设备头：登记设备并返回设备授权状态。
@@ -296,6 +314,8 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 		"message":    "密码已更新",
 		"token":      token,
 		"expires_in": expiresIn,
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	})
 }
 
@@ -333,8 +353,11 @@ func authenticateBearer(db *gorm.DB, cfg *config.Config, token string) (*models.
 	if err := db.First(&u, claims.UserID).Error; err != nil {
 		return nil, errUserNotFound
 	}
+<<<<<<< HEAD
 	if claims.TokenVersion != u.TokenVersion {
 		return nil, errBadCred
 	}
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	return &u, nil
 }

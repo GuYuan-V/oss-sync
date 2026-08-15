@@ -1,6 +1,9 @@
 // 插件设置及默认值。
+<<<<<<< HEAD
 import type { LanguagePreference } from "./i18n";
 
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 export interface OSSSettings {
   /** 服务端 URL（不含尾斜杠），例如 http://localhost:8080 */
   serverUrl: string;
@@ -26,6 +29,7 @@ export interface OSSSettings {
   deviceName: string;
   /** 没有本地变更时轮询远端 revision 的间隔。 */
   remotePollIntervalSec: number;
+<<<<<<< HEAD
   /** 协作事件仅使用 SSE，连接失败时不回退长轮询。 */
   forceSSE: boolean;
   /** 是否将安全的传输事件写入开发者控制台。 */
@@ -34,13 +38,19 @@ export interface OSSSettings {
   vaultSyncMode: "short_poll" | "long_poll";
   /** 插件界面语言；auto 跟随 Obsidian。 */
   language: LanguagePreference;
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 export const DEFAULT_SETTINGS: OSSSettings = {
   serverUrl: "http://localhost:8080",
   username: "",
   password: "",
+<<<<<<< HEAD
   syncIntervalSec: 3,
+=======
+  syncIntervalSec: 300,
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   maxConcurrency: 6,
   syncPoisonObsidianFiles: false,
   incrementalCheck: true,
@@ -50,8 +60,11 @@ export const DEFAULT_SETTINGS: OSSSettings = {
   clientId: "",
   deviceName: "",
   remotePollIntervalSec: 30,
+<<<<<<< HEAD
   forceSSE: false,
   diagnosticsEnabled: false,
   vaultSyncMode: "short_poll",
   language: "auto",
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 };

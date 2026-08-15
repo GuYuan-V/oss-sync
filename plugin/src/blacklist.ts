@@ -8,8 +8,11 @@ const ABSOLUTE_BLACKLIST: BlacklistEntry[] = [
   { kind: "exact", value: "Thumbs.db" },
   { kind: "prefix", value: ".git/" },
   { kind: "prefix", value: ".trash/" },
+<<<<<<< HEAD
   // 协作目录只通过协作 API 同步，绝不进入普通同步路径。
   { kind: "prefix", value: "协作oss/" },
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 ];
 
 const DEVICE_LOCAL_OBSIDIAN: BlacklistEntry[] = [
@@ -24,7 +27,16 @@ interface BlacklistEntry {
   value: string;
 }
 
+<<<<<<< HEAD
 /** 判断路径是否应同步。 */
+=======
+/**
+ * 判断 Vault 相对路径是否应进入同步队列。
+ *
+ * @param relativePath vault 内相对路径（Posix 风格 / 分隔）
+ * @param allowDeviceLocalObsidian 是否允许同步设备相关的 Obsidian 状态文件
+ */
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 export function shouldSync(relativePath: string, allowDeviceLocalObsidian: boolean): boolean {
   const p = normalize(relativePath);
   if (p === "") return false;

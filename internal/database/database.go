@@ -5,13 +5,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+<<<<<<< HEAD
 	"time"
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+<<<<<<< HEAD
 	"gorm.io/gorm/clause"
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	"gorm.io/gorm/logger"
 
 	"github.com/oss/oss-server/internal/config"
@@ -77,19 +83,26 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.VaultSyncState{},
 		&models.ClientDevice{},
 		&models.DeviceVault{},
+<<<<<<< HEAD
 		&models.DeviceVaultAccess{},
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		&models.StorageIssue{},
 		&models.UserSetting{},
 		&models.File{},
 		&models.Share{},
 		&models.Collaboration{},
+<<<<<<< HEAD
 		&models.FileHistory{},
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	); err != nil {
 		return fmt.Errorf("AutoMigrate 失败: %w", err)
 	}
 	if err := backfillLegacyVaults(db); err != nil {
 		return err
 	}
+<<<<<<< HEAD
 	if err := backfillVaultRevisions(db); err != nil {
 		return err
 	}
@@ -97,6 +110,9 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	return backfillVaultSettings(db)
+=======
+	return backfillVaultRevisions(db)
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 // backfillLegacyVaults 只为升级前没有 VaultID 的历史内容创建承载 Vault。
@@ -252,6 +268,7 @@ func backfillVaultRevisions(db *gorm.DB) error {
 	}
 	return nil
 }
+<<<<<<< HEAD
 
 // backfillDeviceStates 为旧版设备补齐状态，并为已有同步绑定补齐仓库授权。
 // 未吊销的旧设备回填为 approved，避免升级后把现有设备锁在外面。
@@ -299,3 +316,5 @@ func backfillVaultSettings(db *gorm.DB) error {
 	}
 	return nil
 }
+=======
+>>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
