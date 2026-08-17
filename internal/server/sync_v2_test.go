@@ -16,13 +16,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-<<<<<<< HEAD
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/recycle"
-=======
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/models"
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 )
 
 func uploadV2(
@@ -48,10 +43,7 @@ func uploadV2(
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-OSS-Client-ID", clientID)
-<<<<<<< HEAD
 	req.Header.Set("X-OSS-Device-Name", url.QueryEscape("device-"+clientID))
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	return w.Code, decodeMap(w.Body.Bytes())
@@ -145,7 +137,6 @@ func createVaultViaAPI(t *testing.T, router *gin.Engine, token, name string) str
 	return body["id"].(string)
 }
 
-<<<<<<< HEAD
 func approveDevice(t *testing.T, router *gin.Engine, token, clientID string, vaultIDs ...string) {
 	t.Helper()
 	code, body := doJSON(t, router, http.MethodPut,
@@ -306,8 +297,6 @@ func TestVaultCreate_whenUserCapacityIsWithinAdminCeiling_seedsEffectiveQuota(t 
 	}
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func TestSyncV2MultiVaultIsolationCASAndSharing(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	router := srv.Router()
@@ -315,13 +304,10 @@ func TestSyncV2MultiVaultIsolationCASAndSharing(t *testing.T) {
 	defaultVault := defaultVaultIDFromAPI(t, router, token)
 	secondVault := createVaultViaAPI(t, router, token, "Second")
 
-<<<<<<< HEAD
 	approveDevice(t, router, token, "device-a", defaultVault, secondVault)
 	approveDevice(t, router, token, "device-b", defaultVault, secondVault)
 	approveDevice(t, router, token, "device-test", defaultVault, secondVault)
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	code, first := uploadV2(
 		t, router, token, defaultVault, "Notes/Same.md", "# Default Vault",
 		0, "device-a", "default-create",
@@ -470,12 +456,9 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "v2-mutations", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
-<<<<<<< HEAD
 	approveDevice(t, router, token, "device-a", vaultID)
 	approveDevice(t, router, token, "device-b", vaultID)
 	approveDevice(t, router, token, "device-test", vaultID)
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 	code, created := uploadV2(
 		t, router, token, vaultID, "Notes/Changed.md", "one",
@@ -535,17 +518,12 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	if !deletedFile.IsDeleted {
 		t.Fatal("delete did not create a synchronization tombstone")
 	}
-<<<<<<< HEAD
 	// 删除后正文进入回收站，原始 files 路径不再存在。
 	if _, err := os.Stat(recycle.DiskPath(dataDir, deletedFile)); os.IsNotExist(err) {
 		t.Fatalf("deleted content missing from recycle bin: %v", err)
 	}
 	if !strings.HasPrefix(deletedFile.StorageKey, "vaults/"+vaultID+"/recycle/") {
 		t.Fatalf("deleted file storage key should point to recycle bin: %q", deletedFile.StorageKey)
-=======
-	if _, err := os.Stat(filestore.DiskPath(dataDir, deletedFile)); !os.IsNotExist(err) {
-		t.Fatalf("deleted content remains on disk: %v", err)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}
 	deletedRevision := revisionOf(t, deleted)
 	code, retryDelete := doJSON(t, router, http.MethodPost,
@@ -666,11 +644,8 @@ func TestSyncV2ConcurrentUploadsHaveUniqueRevisions(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "v2-concurrent", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
-<<<<<<< HEAD
 	approveDevice(t, router, token, "device-a", vaultID)
 	approveDevice(t, router, token, "device-b", vaultID)
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 	const uploads = 12
 	type result struct {
@@ -737,11 +712,8 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "devices", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
-<<<<<<< HEAD
 	approveDevice(t, router, token, "device-a", vaultID)
 	approveDevice(t, router, token, "device-b", vaultID)
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 	code, created := uploadV2(
 		t, router, token, vaultID, "Device.md", "content",
@@ -808,7 +780,6 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 		"Laptop A",
 		map[string]any{"name": "Laptop B"},
 	)
-<<<<<<< HEAD
 	if code != http.StatusConflict {
 		t.Fatalf("approved device rename: %d %v, want 409", code, body)
 	}
@@ -818,10 +789,6 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 	}
 	if lockedDevice.Name != "device-b" {
 		t.Fatalf("approved device name changed: %q", lockedDevice.Name)
-=======
-	if code != http.StatusOK {
-		t.Fatalf("rename device: %d %v", code, body)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}
 	code, body = doJSONAsDevice(
 		t,
@@ -929,11 +896,8 @@ func TestSyncV2CompactedHistoryRequiresRecoverySnapshot(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "compacted", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
-<<<<<<< HEAD
 	approveDevice(t, router, token, "device-a", vaultID)
 	approveDevice(t, router, token, "device-b", vaultID)
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 	code, created := uploadV2(
 		t, router, token, vaultID, "Deleted.md", "content",

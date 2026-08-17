@@ -118,7 +118,6 @@ func Create(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup
 }
 
 func Purge(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup, error) {
-<<<<<<< HEAD
 	return purge(db, dataDir, vault, false)
 }
 
@@ -128,8 +127,6 @@ func PurgeWithTx(tx *gorm.DB, dataDir string, vault models.Vault) (models.VaultB
 }
 
 func purge(db *gorm.DB, dataDir string, vault models.Vault, insideTx bool) (models.VaultBackup, error) {
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	backup, err := Create(db, dataDir, vault)
 	if err != nil {
 		return models.VaultBackup{}, err
@@ -138,34 +135,23 @@ func purge(db *gorm.DB, dataDir string, vault models.Vault, insideTx bool) (mode
 	if err := db.Where("vault_id = ? AND storage_key = ''", vault.ID).Find(&legacyFiles).Error; err != nil {
 		return models.VaultBackup{}, err
 	}
-<<<<<<< HEAD
 	cleanup := func(tx *gorm.DB) error {
 		for _, model := range []any{
 			&models.VaultMember{}, &models.VaultSetting{}, &models.VaultSyncState{},
 			&models.DeviceVault{}, &models.DeviceVaultAccess{}, &models.StorageIssue{},
 			&models.Share{}, &models.Collaboration{}, &models.File{}, &models.FileHistory{},
-=======
-	if err := db.Transaction(func(tx *gorm.DB) error {
-		for _, model := range []any{
-			&models.VaultMember{}, &models.VaultSetting{}, &models.VaultSyncState{},
-			&models.DeviceVault{}, &models.StorageIssue{}, &models.Share{}, &models.Collaboration{}, &models.File{},
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		} {
 			if err := tx.Where("vault_id = ?", vault.ID).Delete(model).Error; err != nil {
 				return err
 			}
 		}
 		return tx.Unscoped().Delete(&models.Vault{}, "id = ?", vault.ID).Error
-<<<<<<< HEAD
 	}
 	if insideTx {
 		if err := cleanup(db); err != nil {
 			return models.VaultBackup{}, err
 		}
 	} else if err := db.Transaction(cleanup); err != nil {
-=======
-	}); err != nil {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		return models.VaultBackup{}, err
 	}
 	if err := os.RemoveAll(filepath.Join(dataDir, "vaults", vault.ID)); err != nil {

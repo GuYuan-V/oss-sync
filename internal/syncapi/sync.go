@@ -27,10 +27,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/oss/oss-server/internal/auth"
-<<<<<<< HEAD
 	"github.com/oss/oss-server/internal/collaboration"
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	"github.com/oss/oss-server/internal/config"
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/models"
@@ -40,7 +37,6 @@ type Handler struct {
 	DB      *gorm.DB
 	Cfg     *config.Config
 	signals sync.Map
-<<<<<<< HEAD
 	broker  *collaboration.Broker
 	collab  *collaboration.Service
 }
@@ -51,12 +47,6 @@ func New(db *gorm.DB, cfg *config.Config) *Handler {
 		broker: collaboration.NewBroker(),
 		collab: collaboration.New(db),
 	}
-=======
-}
-
-func New(db *gorm.DB, cfg *config.Config) *Handler {
-	return &Handler{DB: db, Cfg: cfg}
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 // Register 挂载需要身份认证的同步路由。
@@ -78,7 +68,6 @@ func (h *Handler) Register(r *gin.Engine) {
 		v2.GET("/download", h.V2Download)
 		v2.POST("/delete", h.V2Delete)
 		v2.POST("/rename", h.V2Rename)
-<<<<<<< HEAD
 		v2.GET("/strategy", h.V2Strategy)
 		v2.GET("/history", h.V2HistoryList)
 		v2.GET("/history/:history_id", h.V2HistoryDetail)
@@ -116,8 +105,6 @@ func (h *Handler) Register(r *gin.Engine) {
 	{
 		collabEvents.GET("/stream", h.CollabSSE)
 		collabEvents.GET("/poll", h.CollabPoll)
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}
 }
 

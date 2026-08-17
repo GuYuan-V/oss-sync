@@ -32,7 +32,6 @@ func ValidateAccountInput(username, password string) error {
 	return nil
 }
 
-<<<<<<< HEAD
 // ResolveRegistrationRole 在注册锁内调用：系统中还没有管理员时，
 // 第一个注册账户自动成为 admin，之后一律为 user。
 func ResolveRegistrationRole(db *gorm.DB) (string, error) {
@@ -46,8 +45,6 @@ func ResolveRegistrationRole(db *gorm.DB) (string, error) {
 	return "user", nil
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 // CreateAccount 创建用户及默认用户设置。Vault 必须由用户登录后手动创建。
 func CreateAccount(db *gorm.DB, username, password, role string) (*models.User, error) {
 	username = strings.TrimSpace(username)
@@ -106,23 +103,16 @@ func AuthenticateToken(db *gorm.DB, cfg *config.Config, token string) (*models.U
 func IssueToken(cfg *config.Config, user models.User) (string, int64, error) {
 	ttl := time.Duration(cfg.Auth.JWTTTLHours) * time.Hour
 	token, err := jwt.Sign(cfg.Auth.JWTSecret, jwt.Claims{
-<<<<<<< HEAD
 		UserID:       user.ID,
 		Username:     user.Username,
 		Role:         user.Role,
 		TokenVersion: user.TokenVersion,
-=======
-		UserID:   user.ID,
-		Username: user.Username,
-		Role:     user.Role,
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}, ttl)
 	if err != nil {
 		return "", 0, err
 	}
 	return token, int64(ttl / time.Second), nil
 }
-<<<<<<< HEAD
 
 // ChangePassword 校验旧密码后更新用户密码并递增 token 版本。
 // 所有旧 JWT 在版本递增后立即失效。
@@ -163,5 +153,3 @@ func updatePassword(db *gorm.DB, userID uint, newPassword string) error {
 		"token_version": gorm.Expr("token_version + 1"),
 	}).Error
 }
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b

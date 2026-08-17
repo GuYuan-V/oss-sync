@@ -16,15 +16,10 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/oss/oss-server/internal/auth"
-<<<<<<< HEAD
 	"github.com/oss/oss-server/internal/collaboration"
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/settingspolicy"
-=======
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/models"
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 )
 
 const fallbackMaxFileSizeMB = 100
@@ -57,20 +52,12 @@ func (h *Handler) Upload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "mtime must be integer milliseconds"})
 		return
 	}
-<<<<<<< HEAD
 	effective, err := settingspolicy.EffectiveForUser(h.DB, u.ID, h.maxUploadBytes())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	maxBytes := effective.UploadSizeBytes
-=======
-	maxBytes := int64(h.Cfg.Server.MaxFileSizeMB)
-	if maxBytes <= 0 {
-		maxBytes = fallbackMaxFileSizeMB
-	}
-	maxBytes *= 1 << 20
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	src, declaredSize, err := uploadSource(c, rawUpload)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -152,15 +139,12 @@ func (h *Handler) Upload(c *gin.Context) {
 	}
 	_ = os.Remove(backupPath)
 	h.notifyRevision(saved.VaultID)
-<<<<<<< HEAD
 	if userIDs := h.collaborationEventUsers(saved.VaultID, saved.ID); len(userIDs) > 0 {
 		h.publishCollaborationEvent(collaboration.Event{
 			VaultID: saved.VaultID, FileID: saved.ID, FilePath: saved.Path,
 			Kind: "changed", At: time.Now().UnixMilli(),
 		}, userIDs)
 	}
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	c.JSON(http.StatusOK, gin.H{
 		"path": path, "hash": hash, "mtime": mtime, "server_time": time.Now().UnixMilli(),
 	})
@@ -186,31 +170,22 @@ func (h *Handler) upsertFile(
 	vaultID, path, fileType, hash, storageKey string,
 	mtime, size int64,
 ) (models.File, error) {
-<<<<<<< HEAD
 	effective, err := settingspolicy.EffectiveForUser(h.DB, userID, h.maxUploadBytes())
 	if err != nil {
 		return models.File{}, err
 	}
 	var saved models.File
 	err = h.DB.Transaction(func(tx *gorm.DB) error {
-=======
-	var saved models.File
-	err := h.DB.Transaction(func(tx *gorm.DB) error {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		var existing models.File
 		err := tx.Where("user_id = ? AND vault_id = ? AND path = ?", userID, vaultID, path).First(&existing).Error
 		exists := err == nil
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-<<<<<<< HEAD
 		if err := ensureVaultQuota(tx, vaultQuotaChange{
 			VaultID: vaultID, NewSize: size, Current: existing, Exists: exists,
 			PolicyLimit: effective.VaultStorageBytes,
 		}); err != nil {
-=======
-		if err := ensureVaultQuota(tx, vaultID, size, existing, exists); err != nil {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 			return err
 		}
 		revision, revisionErr := nextVaultRevision(tx, vaultID)

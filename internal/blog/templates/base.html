@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 <!doctype html>
 <html lang="zh-CN" data-theme-key="oss-blog-theme">
 <head>
@@ -68,40 +67,5 @@
   {{end}}
   {{if .FooterNotice}}<aside class="oss-notice">{{.FooterNotice}}</aside>{{end}}
   <p class="reading-status" data-copy-status role="status" aria-live="polite"></p>
-=======
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}}</title>
-  <meta name="generator" content="OSS Blog">
-  <meta name="powered-by" content="oss-sync">
-
-  <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css">
-  <script defer src="{{.ThemeBaseURL}}/theme.js"></script>
-
-  <script>window.__THEME_CONFIG__ = {{.ThemeConfigJS}};</script>
-
-  {{if .CustomHeader}}{{.CustomHeader}}{{end}}
-</head>
-<body>
-  <article class="oss-content">
-    {{- if .IsFolder -}}
-      <h1 class="oss-folder-title">{{.FolderTitle}}</h1>
-      <nav class="oss-tree">
-        {{.ContentHTML}}
-      </nav>
-    {{- else -}}
-      {{.ContentHTML}}
-    {{- end -}}
-  </article>
-
-  {{if .CustomFooter}}{{.CustomFooter}}{{end}}
-
-  {{if .FooterNotice}}
-  <div class="oss-notice">{{.FooterNotice}}</div>
-  {{end}}
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 </body>
 </html>

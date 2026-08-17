@@ -211,7 +211,6 @@ func Env() string {
 	}
 	return e
 }
-<<<<<<< HEAD
 
 // SaveDatabaseConfig stores database startup settings in the active YAML file.
 // It never changes the database connection of the current process.
@@ -257,5 +256,3 @@ func configPath() (string, error) {
 	}
 	return filepath.Join("configs", fmt.Sprintf("config.%s.yaml", env)), nil
 }
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b

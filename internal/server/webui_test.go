@@ -1,10 +1,7 @@
 package server
 
 import (
-<<<<<<< HEAD
 	"encoding/json"
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -28,11 +25,7 @@ func TestWebRegistrationCreatesPluginLoginAccount(t *testing.T) {
 	page := doForm(t, router, http.MethodGet, "/register", nil, nil)
 	if page.Code != http.StatusOK ||
 		!strings.Contains(page.Body.String(), "创建账户") ||
-<<<<<<< HEAD
 		!strings.Contains(page.Header().Get("Content-Security-Policy"), "connect-src 'self'") {
-=======
-		page.Header().Get("Content-Security-Policy") == "" {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		t.Fatalf("registration page: status=%d headers=%v body=%s", page.Code, page.Header(), page.Body)
 	}
 
@@ -49,14 +42,9 @@ func TestWebRegistrationCreatesPluginLoginAccount(t *testing.T) {
 	if err := db.Where("username = ?", "web-user").First(&user).Error; err != nil {
 		t.Fatalf("query registered user: %v", err)
 	}
-<<<<<<< HEAD
 	// 首个注册用户自动成为管理员。
 	if user.Role != "admin" {
 		t.Fatalf("registered role = %q, want admin", user.Role)
-=======
-	if user.Role != "user" {
-		t.Fatalf("registered role = %q, want user", user.Role)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}
 	var vaultCount int64
 	if err := db.Model(&models.Vault{}).Where("owner_id = ?", user.ID).Count(&vaultCount).Error; err != nil {
@@ -70,16 +58,11 @@ func TestWebRegistrationCreatesPluginLoginAccount(t *testing.T) {
 		"username": "web-user",
 		"password": "password123",
 	})
-<<<<<<< HEAD
 	if code != http.StatusOK || body["token"] == "" || body["role"] != "admin" {
-=======
-	if code != http.StatusOK || body["token"] == "" || body["role"] != "user" {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		t.Fatalf("plugin login after web registration: status=%d body=%v", code, body)
 	}
 }
 
-<<<<<<< HEAD
 func TestDashboardMetricsRequiresSessionAndReturnsLiveFields(t *testing.T) {
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
@@ -112,9 +95,6 @@ func TestDashboardMetricsRequiresSessionAndReturnsLiveFields(t *testing.T) {
 }
 
 func TestAdminSystemControlsRegistration(t *testing.T) {
-=======
-func TestAdminPanelControlsRegistration(t *testing.T) {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
@@ -122,7 +102,6 @@ func TestAdminPanelControlsRegistration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-<<<<<<< HEAD
 	login := doForm(t, router, http.MethodPost, "/login", url.Values{
 		"username": {"admin"},
 		"password": {"admin-password-123"},
@@ -146,34 +125,6 @@ func TestAdminPanelControlsRegistration(t *testing.T) {
 	}
 
 	closed := doForm(t, router, http.MethodPost, "/dashboard/admin/system", validAdminSystemForm(), session, csrf)
-=======
-	login := doForm(t, router, http.MethodPost, "/admin/login", url.Values{
-		"username": {"admin"},
-		"password": {"admin-password-123"},
-	}, nil)
-	if login.Code != http.StatusSeeOther || login.Header().Get("Location") != "/admin" {
-		t.Fatalf("admin login: status=%d location=%q body=%s", login.Code, login.Header().Get("Location"), login.Body)
-	}
-	var session *http.Cookie
-	for _, cookie := range login.Result().Cookies() {
-		if cookie.Name == "oss_admin_session" {
-			session = cookie
-			break
-		}
-	}
-	if session == nil || !session.HttpOnly || session.SameSite != http.SameSiteStrictMode {
-		t.Fatalf("admin session cookie is missing security flags: %#v", session)
-	}
-
-	dashboard := doForm(t, router, http.MethodGet, "/admin", nil, session)
-	if dashboard.Code != http.StatusOK ||
-		!strings.Contains(dashboard.Body.String(), "允许新用户注册") ||
-		!strings.Contains(dashboard.Body.String(), "admin") {
-		t.Fatalf("admin dashboard: status=%d body=%s", dashboard.Code, dashboard.Body)
-	}
-
-	closed := doForm(t, router, http.MethodPost, "/admin/registration", url.Values{}, session)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if closed.Code != http.StatusSeeOther {
 		t.Fatalf("close registration: status=%d body=%s", closed.Code, closed.Body)
 	}
@@ -198,15 +149,9 @@ func TestAdminPanelControlsRegistration(t *testing.T) {
 		t.Fatalf("registration after close: status=%d body=%s", blocked.Code, blocked.Body)
 	}
 
-<<<<<<< HEAD
 	openForm := validAdminSystemForm()
 	openForm.Set("registration_enabled", "on")
 	opened := doForm(t, router, http.MethodPost, "/dashboard/admin/system", openForm, session, csrf)
-=======
-	opened := doForm(t, router, http.MethodPost, "/admin/registration", url.Values{
-		"registration_enabled": {"on"},
-	}, session)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if opened.Code != http.StatusSeeOther {
 		t.Fatalf("open registration: status=%d body=%s", opened.Code, opened.Body)
 	}
@@ -230,19 +175,11 @@ func TestAdminPanelControlsRegistration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-<<<<<<< HEAD
 	download := doForm(t, router, http.MethodGet, "/dashboard/admin/backups/"+backup.ID+"/download", nil, session, csrf)
 	if download.Code != http.StatusOK || download.Body.String() != "archive" {
 		t.Fatalf("backup download: status=%d body=%q", download.Code, download.Body.String())
 	}
 	deleted := doForm(t, router, http.MethodPost, "/dashboard/admin/backups/"+backup.ID+"/delete", nil, session, csrf)
-=======
-	download := doForm(t, router, http.MethodGet, "/admin/backups/"+backup.ID+"/download", nil, session)
-	if download.Code != http.StatusOK || download.Body.String() != "archive" {
-		t.Fatalf("backup download: status=%d body=%q", download.Code, download.Body.String())
-	}
-	deleted := doForm(t, router, http.MethodPost, "/admin/backups/"+backup.ID+"/delete", nil, session)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if deleted.Code != http.StatusSeeOther {
 		t.Fatalf("backup delete: %d", deleted.Code)
 	}
@@ -254,7 +191,6 @@ func TestAdminPanelControlsRegistration(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 func TestAdminSystemSyncMode_whenSaved_persistsGlobalPolicy(t *testing.T) {
 	t.Chdir(t.TempDir())
 
@@ -343,8 +279,6 @@ func TestAdminSystemCustomFragmentsToggle_roundTrip(t *testing.T) {
 	}
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func TestAdminPanelRejectsRegularUser(t *testing.T) {
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
@@ -352,7 +286,6 @@ func TestAdminPanelRejectsRegularUser(t *testing.T) {
 		t.Fatal(err)
 	}
 
-<<<<<<< HEAD
 	// 普通用户可登录统一入口，但无法进入管理后台。
 	login := doForm(t, router, http.MethodPost, "/login", url.Values{
 		"username": {"member"},
@@ -368,31 +301,17 @@ func TestAdminPanelRejectsRegularUser(t *testing.T) {
 	denied := doForm(t, router, http.MethodGet, "/dashboard/admin", nil, session)
 	if denied.Code != http.StatusSeeOther || denied.Header().Get("Location") != "/dashboard" {
 		t.Fatalf("regular user admin access: status=%d location=%q", denied.Code, denied.Header().Get("Location"))
-=======
-	login := doForm(t, router, http.MethodPost, "/admin/login", url.Values{
-		"username": {"member"},
-		"password": {"password123"},
-	}, nil)
-	if login.Code != http.StatusUnauthorized ||
-		!strings.Contains(login.Body.String(), "管理员账号或密码不正确") {
-		t.Fatalf("regular user admin login: status=%d body=%s", login.Code, login.Body)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}
 }
 
 func TestAdminPlatformManagesVaultMembers(t *testing.T) {
-<<<<<<< HEAD
 	srv, db, _ := newTestServer(t)
-=======
-	srv, db, dataDir := newTestServer(t)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	router := srv.Router()
 	if _, err := auth.CreateAccount(db, "platform-admin", "admin-password-123", "admin"); err != nil {
 		t.Fatal(err)
 	}
 	ownerToken := registerAndLogin(t, router, "platform-owner", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, ownerToken)
-<<<<<<< HEAD
 	code, _ := doJSON(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{"username": "platform-member", "password": "password123"})
 	if code != http.StatusOK {
 		t.Fatalf("register member: %d", code)
@@ -400,51 +319,16 @@ func TestAdminPlatformManagesVaultMembers(t *testing.T) {
 
 	login := doForm(t, router, http.MethodPost, "/login", url.Values{"username": {"platform-admin"}, "password": {"admin-password-123"}}, nil)
 	session, csrf := webCookies(t, login)
-=======
-	code, memberLogin := doJSON(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{"username": "platform-member", "password": "password123"})
-	if code != http.StatusOK {
-		t.Fatalf("register member: %d %v", code, memberLogin)
-	}
-
-	login := doForm(t, router, http.MethodPost, "/admin/login", url.Values{"username": {"platform-admin"}, "password": {"admin-password-123"}}, nil)
-	var session *http.Cookie
-	for _, cookie := range login.Result().Cookies() {
-		if cookie.Name == "oss_admin_session" {
-			session = cookie
-		}
-	}
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if session == nil {
 		t.Fatal("admin session missing")
 	}
 
-<<<<<<< HEAD
 	// 管理员进入任意仓库的协作成员页；Vault 角色仍由下方独立路由管理。
 	page := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/members", nil, session, csrf)
 	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "已授权协作成员") {
 		t.Fatalf("member page: %d %s", page.Code, page.Body.String())
 	}
 	added := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/members", url.Values{"username": {"platform-member"}, "role": {"participant"}}, session, csrf)
-=======
-	page := doForm(t, router, http.MethodGet, "/admin/vaults/"+vaultID, nil, session)
-	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "已授权成员") || !strings.Contains(page.Body.String(), "创建开发模板") {
-		t.Fatalf("member page: %d %s", page.Code, page.Body.String())
-	}
-	createdTheme := doForm(t, router, http.MethodPost, "/admin/vaults/"+vaultID+"/theme/development", url.Values{"theme_name": {"field-notes"}}, session)
-	if createdTheme.Code != http.StatusSeeOther {
-		t.Fatalf("create development theme: %d body=%s", createdTheme.Code, createdTheme.Body.String())
-	}
-	for _, filename := range []string{"template.html", "style.css", "theme.js", "README.md"} {
-		if _, err := os.Stat(filepath.Join(dataDir, "themes", "field-notes", filename)); err != nil {
-			t.Fatalf("development theme file %s: %v", filename, err)
-		}
-	}
-	var setting models.VaultSetting
-	if err := db.Where("vault_id = ?", vaultID).First(&setting).Error; err != nil || setting.ThemeName != "field-notes" {
-		t.Fatalf("development theme was not enabled: %#v err=%v", setting, err)
-	}
-	added := doForm(t, router, http.MethodPost, "/admin/vaults/"+vaultID+"/members", url.Values{"username": {"platform-member"}, "role": {"participant"}}, session)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if added.Code != http.StatusSeeOther {
 		t.Fatalf("add member: %d", added.Code)
 	}
@@ -456,22 +340,14 @@ func TestAdminPlatformManagesVaultMembers(t *testing.T) {
 	if err := db.Where("vault_id = ? AND user_id = ?", vaultID, user.ID).First(&member).Error; err != nil || member.Role != "participant" {
 		t.Fatalf("participant membership: %#v err=%v", member, err)
 	}
-<<<<<<< HEAD
 	updated := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/members/"+strconv.FormatUint(uint64(user.ID), 10)+"/role", url.Values{"role": {"manager"}}, session, csrf)
-=======
-	updated := doForm(t, router, http.MethodPost, "/admin/vaults/"+vaultID+"/members/"+strconv.FormatUint(uint64(user.ID), 10)+"/role", url.Values{"role": {"manager"}}, session)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if updated.Code != http.StatusSeeOther {
 		t.Fatalf("update member role: %d", updated.Code)
 	}
 	if err := db.Where("vault_id = ? AND user_id = ?", vaultID, user.ID).First(&member).Error; err != nil || member.Role != "manager" {
 		t.Fatalf("manager membership: %#v err=%v", member, err)
 	}
-<<<<<<< HEAD
 	removed := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/members/"+strconv.FormatUint(uint64(user.ID), 10)+"/delete", nil, session, csrf)
-=======
-	removed := doForm(t, router, http.MethodPost, "/admin/vaults/"+vaultID+"/members/"+strconv.FormatUint(uint64(user.ID), 10)+"/delete", nil, session)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if removed.Code != http.StatusSeeOther {
 		t.Fatalf("remove member: %d", removed.Code)
 	}
@@ -480,7 +356,6 @@ func TestAdminPlatformManagesVaultMembers(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 // webCookies 从登录响应中提取会话与 CSRF cookie。
 func webCookies(t *testing.T, res *httptest.ResponseRecorder) (*http.Cookie, *http.Cookie) {
 	t.Helper()
@@ -496,15 +371,12 @@ func webCookies(t *testing.T, res *httptest.ResponseRecorder) (*http.Cookie, *ht
 	return session, csrf
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func doForm(
 	t *testing.T,
 	router *gin.Engine,
 	method string,
 	path string,
 	form url.Values,
-<<<<<<< HEAD
 	cookies ...*http.Cookie,
 ) *httptest.ResponseRecorder {
 	t.Helper()
@@ -521,16 +393,10 @@ func doForm(
 			csrf = c
 		}
 	}
-=======
-	cookie *http.Cookie,
-) *httptest.ResponseRecorder {
-	t.Helper()
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	body := ""
 	if form != nil {
 		body = form.Encode()
 	}
-<<<<<<< HEAD
 	if form == nil && csrf != nil && method != http.MethodGet && method != http.MethodHead {
 		form = url.Values{"_csrf": {csrf.Value}}
 		body = form.Encode()
@@ -550,20 +416,11 @@ func doForm(
 	}
 	if csrf != nil {
 		req.AddCookie(csrf)
-=======
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
-	if form != nil {
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	}
-	if cookie != nil {
-		req.AddCookie(cookie)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, req)
 	return recorder
 }
-<<<<<<< HEAD
 
 func validAdminSystemForm() url.Values {
 	return url.Values{
@@ -576,5 +433,3 @@ func validAdminSystemForm() url.Values {
 		"max_upload_size_mb":       {"100"},
 	}
 }
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b

@@ -5,10 +5,6 @@
   "minAppVersion": "1.4.0",
   "description": "Self-hosted sync & share for Obsidian: Markdown + attachments + .obsidian config, LWW-based multi-device sync, lightweight blog publishing, and collaboration editing.",
   "author": "OSS Project",
-<<<<<<< HEAD
   "authorUrl": "https://github.com/helantianshen/oss-sync",
-=======
-  "authorUrl": "https://github.com/oss/oss-plugin",
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   "isDesktopOnly": false
 }

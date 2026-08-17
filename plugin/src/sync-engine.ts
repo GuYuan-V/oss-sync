@@ -8,7 +8,6 @@ import {
   normalizePath,
   PendingOperation,
 } from "./baseline";
-<<<<<<< HEAD
 import { OSSApiClient, OSSApiError, SyncFileMeta, SyncMode } from "./api";
 import { TaskPool } from "./task-pool";
 import { shouldSync } from "./blacklist";
@@ -17,13 +16,6 @@ import { SyncStrategyManager } from "./strategy";
 import type { ConflictResolution } from "./conflict-modal";
 import type { Diagnostics } from "./diagnostics";
 import { localizeError } from "./localized-error";
-=======
-import { OSSApiClient, OSSApiError, SyncFileMeta } from "./api";
-import { TaskPool } from "./task-pool";
-import { shouldSync } from "./blacklist";
-import { SyncRunCoordinator } from "./sync-run-coordinator";
-import type { ConflictResolution } from "./conflict-modal";
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 export type SyncState = "idle" | "syncing" | "error";
 
@@ -62,39 +54,26 @@ export class SyncEngine {
   private readonly vault: Vault;
   private readonly runCoordinator = new SyncRunCoordinator();
   private readonly suppressed = new Set<string>();
-<<<<<<< HEAD
   private readonly strategy: SyncStrategyManager;
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   private debounceFn: (() => void) & { cancel: () => void };
   private enqueueChain: Promise<void> = Promise.resolve();
   private pollTimer: number | null = null;
   private stopped = false;
-<<<<<<< HEAD
   private effectiveMode: SyncMode = "short_poll";
   private longPollGen = 0;
   private longPollController: AbortController | null = null;
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
   constructor(
     app: App,
     api: OSSApiClient,
     baseline: BaselineStore,
-<<<<<<< HEAD
     private plugin: OSSPlugin,
     private readonly diagnostics?: Diagnostics
-=======
-    private plugin: OSSPlugin
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   ) {
     this.api = api;
     this.baseline = baseline;
     this.vault = app.vault;
-<<<<<<< HEAD
     this.strategy = new SyncStrategyManager(api);
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
     this.debounceFn = this.createDebounce();
   }
 
@@ -106,14 +85,7 @@ export class SyncEngine {
   stop(): void {
     this.stopped = true;
     this.debounceFn.cancel();
-<<<<<<< HEAD
     this.stopCurrentPolling();
-=======
-    if (this.pollTimer !== null) {
-      window.clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 
   resetDebounce(): void {
@@ -121,7 +93,6 @@ export class SyncEngine {
     this.debounceFn = this.createDebounce();
   }
 
-<<<<<<< HEAD
   /** 重启仓库轮询。 */
   resetPolling(): void {
     this.stopCurrentPolling();
@@ -131,10 +102,6 @@ export class SyncEngine {
       this.startLongPoll();
       return;
     }
-=======
-  resetPolling(): void {
-    if (this.pollTimer !== null) window.clearInterval(this.pollTimer);
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
     const seconds = Math.max(10, this.plugin.settings.remotePollIntervalSec);
     this.pollTimer = window.setInterval(() => {
       if (!this.stopped && this.plugin.settings.vaultId && this.api.hasToken()) {
@@ -143,7 +110,6 @@ export class SyncEngine {
     }, seconds * 1000);
   }
 
-<<<<<<< HEAD
   private stopCurrentPolling(): void {
     if (this.pollTimer !== null) {
       window.clearInterval(this.pollTimer);
@@ -234,20 +200,15 @@ export class SyncEngine {
     }
   }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   isSuppressed(path: string): boolean {
     return this.suppressed.has(normalizePath(path));
   }
 
-<<<<<<< HEAD
   /** 侧边栏展示的同步模式文案。 */
   getEffectiveModeLabel(): string {
     return this.plugin.t(this.effectiveMode === "long_poll" ? "common.longPoll" : "common.shortPoll");
   }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   enqueueUpsert(path: string): void {
     this.enqueue({
       id: operationID(),
@@ -294,13 +255,9 @@ export class SyncEngine {
         if (paths.size > 0) this.debounceFn();
       })
       .catch((error: unknown) => {
-<<<<<<< HEAD
         new Notice(this.plugin.t("sync.saveDeleteQueueFailed", {
           error: errorMessage(error, this.plugin.t("common.unknownError")),
         }));
-=======
-        new Notice("OSS: 无法保存文件夹删除队列 " + errorMessage(error));
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
       });
   }
 
@@ -328,13 +285,9 @@ export class SyncEngine {
       await this.baseline.save();
       this.debounceFn();
     }).catch((error: unknown) => {
-<<<<<<< HEAD
       new Notice(this.plugin.t("sync.saveQueueFailed", {
         error: errorMessage(error, this.plugin.t("common.unknownError")),
       }));
-=======
-      new Notice("OSS: 无法保存同步队列 " + errorMessage(error));
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
     });
   }
 
@@ -349,14 +302,10 @@ export class SyncEngine {
   private async executeRun(forceFull: boolean): Promise<boolean> {
     const vaultID = this.plugin.settings.vaultId;
     if (!this.api.hasToken() || !vaultID) {
-<<<<<<< HEAD
       this.plugin.setSyncState(
         "error",
         this.plugin.t(!this.api.hasToken() ? "sync.notLoggedIn" : "sync.vaultNotBound")
       );
-=======
-      this.plugin.setSyncState("error", !this.api.hasToken() ? "not logged in" : "vault not bound");
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
       return false;
     }
     this.plugin.setSyncState("syncing");
@@ -364,10 +313,7 @@ export class SyncEngine {
     forceFull = forceFull || !this.plugin.settings.incrementalCheck;
 
     try {
-<<<<<<< HEAD
       await this.applyStrategy();
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
       await this.baseline.load();
       if (this.baseline.bindVault(vaultID)) {
         forceFull = true;
@@ -424,38 +370,24 @@ export class SyncEngine {
 
       if (this.api.isClockDriftLarge()) {
         new Notice(
-<<<<<<< HEAD
           this.plugin.t("sync.clockDrift", {
             seconds: Math.round(this.api.getTimeOffset() / 1000),
           }),
-=======
-          `OSS: 本地时钟与服务端偏差 ${Math.round(this.api.getTimeOffset() / 1000)}s。`,
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
           8000
         );
       }
       if (failures.length > 0) {
-<<<<<<< HEAD
         const failureSummary = this.plugin.t("notice.syncFailures", { count: failures.length });
         this.plugin.setSyncState("error", failureSummary);
         new Notice(failureSummary, 6000);
-=======
-        this.plugin.setSyncState("error", `${failures.length} failed`);
-        new Notice(`OSS: ${failures.length} 个同步任务失败，将在下次重试`, 6000);
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
       } else {
         this.plugin.setSyncState("idle");
       }
 		return failures.length === 0;
     } catch (error: unknown) {
-<<<<<<< HEAD
       const message = localizeError(error, this.plugin.t.bind(this.plugin), this.plugin.t("common.unknownError"));
       this.plugin.setSyncState("error", message);
       new Notice(this.plugin.t("sync.error", { error: message }), 8000);
-=======
-      this.plugin.setSyncState("error", errorMessage(error));
-      new Notice("OSS sync error: " + errorMessage(error), 8000);
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		return false;
     }
   }
@@ -617,11 +549,7 @@ export class SyncEngine {
       oldPath: undefined,
     });
     new Notice(
-<<<<<<< HEAD
       this.plugin.t("sync.remoteRenameConflict", { path: operation.oldPath ?? operation.path }),
-=======
-      `OSS: ${operation.oldPath} 在其他设备已更新，已保留远端原路径和本地新路径`,
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
       8000
     );
   }
@@ -795,13 +723,9 @@ export class SyncEngine {
     switch (action.kind) {
       case "upload": {
         const file = this.vault.getAbstractFileByPath(action.path);
-<<<<<<< HEAD
     if (!(file instanceof TFile)) {
       throw new Error(this.plugin.t("sync.localFileMissing", { path: action.path }));
     }
-=======
-        if (!(file instanceof TFile)) throw new Error("local file vanished: " + action.path);
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
         const content = await this.vault.readBinary(file);
         const result = await this.api.uploadV2(vaultID, {
           path: action.path,
@@ -813,10 +737,7 @@ export class SyncEngine {
         });
         this.baseline.set(action.path, baselineFromRemote(result, action.local));
         if (action.operation) this.baseline.removePending(action.operation.id);
-<<<<<<< HEAD
         new Notice(this.plugin.t("sync.uploaded", { path: action.path }));
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
         return;
       }
       case "delete_remote": {
@@ -872,10 +793,7 @@ export class SyncEngine {
       mtime: result.meta.mtime,
     }));
     this.baseline.removePendingForPath(remote.path);
-<<<<<<< HEAD
     new Notice(this.plugin.t("sync.downloaded", { path: remote.path }));
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 
   private async applyRemoteDelete(remote: SyncFileMeta): Promise<void> {
@@ -910,22 +828,14 @@ export class SyncEngine {
     if (!existed && !remote.deleted && remote.type === "markdown" && local) {
       this.plugin.openConflictModal(path);
     } else if (!existed) {
-<<<<<<< HEAD
       new Notice(this.plugin.t("sync.conflictPaused", { path }), 8000);
-=======
-      new Notice(`OSS: ${path} 存在同步冲突，已暂停该文件`, 8000);
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
     }
   }
 
   async resolveConflict(path: string, resolution: ConflictResolution): Promise<void> {
     const vaultID = this.plugin.settings.vaultId;
     const conflict = this.baseline.getConflict(path);
-<<<<<<< HEAD
     if (!vaultID || !conflict) throw new Error(this.plugin.t("sync.conflictNotFound"));
-=======
-    if (!vaultID || !conflict) throw new Error("conflict not found");
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
     const file = this.vault.getAbstractFileByPath(path);
 
     if (resolution === "accept_remote") {
@@ -937,11 +847,7 @@ export class SyncEngine {
     } else if (resolution === "force_local") {
       if (file instanceof TFile) {
         const local = await this.localMeta(path);
-<<<<<<< HEAD
         if (!local) throw new Error(this.plugin.t("sync.localFileMissing", { path }));
-=======
-        if (!local) throw new Error("local file vanished");
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
         const result = await this.api.uploadV2(vaultID, {
           path,
           baseRevision: conflict.remoteRevision,
@@ -961,13 +867,9 @@ export class SyncEngine {
         this.baseline.set(path, baselineFromRemote(result, null));
       }
     } else {
-<<<<<<< HEAD
       if (!(file instanceof TFile)) {
         throw new Error(this.plugin.t("sync.localFileMissing", { path }));
       }
-=======
-      if (!(file instanceof TFile)) throw new Error("local file vanished");
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
       const copyPath = conflictCopyPath(path);
       await this.ensureParentFolders(copyPath);
       const copy = await this.vault.createBinary(copyPath, await this.vault.readBinary(file));
@@ -1027,13 +929,9 @@ export class SyncEngine {
         try {
           await this.vault.createFolder(current);
         } catch {
-<<<<<<< HEAD
         if (!this.vault.getAbstractFileByPath(current)) {
           throw new Error(this.plugin.t("sync.mkdirFailed", { path: current }));
         }
-=======
-          if (!this.vault.getAbstractFileByPath(current)) throw new Error("cannot create folder: " + current);
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
         }
       }
     }
@@ -1048,22 +946,15 @@ export class SyncEngine {
   private createDebounce(): (() => void) & { cancel: () => void } {
     return debounce(
       () => void this.runOnce({ forceFull: false }),
-<<<<<<< HEAD
       Math.max(this.strategy.getMinDebounceSec(), this.plugin.settings.syncIntervalSec) * 1000
-=======
-      Math.max(5, this.plugin.settings.syncIntervalSec) * 1000
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
     );
   }
 }
 
-<<<<<<< HEAD
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 function baselineFromRemote(remote: SyncFileMeta, local: LocalMeta | null): BaselineEntry {
   return {
     serverRevision: remote.revision,
@@ -1141,11 +1032,6 @@ async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
     .join("");
 }
 
-<<<<<<< HEAD
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
-=======
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "unknown error";
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }

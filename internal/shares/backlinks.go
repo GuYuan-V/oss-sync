@@ -73,19 +73,11 @@ func (h *Handler) collectBacklinks(userID uint, vaultID, sourcePath string) ([]s
 }
 
 func isSafeSharePath(p string) bool {
-<<<<<<< HEAD
 	if p == "" || filepath.IsAbs(p) || strings.HasPrefix(p, "/") || strings.HasPrefix(p, "\\") {
 		return false
 	}
 	clean := filepath.Clean(p)
 	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || strings.HasPrefix(clean, "../") {
-=======
-	if p == "" || filepath.IsAbs(p) {
-		return false
-	}
-	clean := filepath.Clean(p)
-	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		return false
 	}
 	if strings.Contains(p, ":") && !strings.HasSuffix(p, ":") {

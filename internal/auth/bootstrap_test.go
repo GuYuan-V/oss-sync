@@ -1,11 +1,6 @@
 package auth_test
 
 import (
-<<<<<<< HEAD
-=======
-	"bytes"
-	"os"
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,11 +26,7 @@ func TestEnsureBootstrapAdminFromEnvironment(t *testing.T) {
 		},
 	}
 
-<<<<<<< HEAD
 	created, err := auth.EnsureBootstrapAdmin(db, cfg)
-=======
-	created, err := auth.EnsureBootstrapAdmin(db, cfg, nil, &bytes.Buffer{})
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if err != nil {
 		t.Fatalf("bootstrap admin: %v", err)
 	}
@@ -59,11 +50,7 @@ func TestEnsureBootstrapAdminFromEnvironment(t *testing.T) {
 	}
 
 	t.Setenv("OSS_ADMIN_PASSWORD", "")
-<<<<<<< HEAD
 	created, err = auth.EnsureBootstrapAdmin(db, cfg)
-=======
-	created, err = auth.EnsureBootstrapAdmin(db, cfg, nil, &bytes.Buffer{})
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if err != nil {
 		t.Fatalf("second bootstrap: %v", err)
 	}
@@ -72,11 +59,7 @@ func TestEnsureBootstrapAdminFromEnvironment(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 func TestEnsureBootstrapAdminWithoutPasswordDefersToFirstRegistration(t *testing.T) {
-=======
-func TestEnsureBootstrapAdminRequiresSecretWithoutTerminal(t *testing.T) {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	db := newAuthTestDB(t)
 	t.Setenv("OSS_ADMIN_PASSWORD", "")
 	cfg := &config.Config{
@@ -86,7 +69,6 @@ func TestEnsureBootstrapAdminRequiresSecretWithoutTerminal(t *testing.T) {
 			BootstrapAdminUsername: "admin",
 		},
 	}
-<<<<<<< HEAD
 
 	created, err := auth.EnsureBootstrapAdmin(db, cfg)
 	if err != nil {
@@ -120,17 +102,6 @@ func TestEnsureBootstrapAdminRequiresSecretWithoutTerminal(t *testing.T) {
 	}
 	if role != "user" {
 		t.Fatalf("second registration role = %q, want user", role)
-=======
-	input, err := os.Open(os.DevNull)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer input.Close()
-
-	created, err := auth.EnsureBootstrapAdmin(db, cfg, input, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "OSS_ADMIN_PASSWORD") {
-		t.Fatalf("expected non-interactive password guidance, got created=%v err=%v", created, err)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}
 }
 
@@ -173,7 +144,6 @@ func TestValidateAccountInputRejectsBcryptOverflow(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 func TestChangePasswordInvalidatesOldToken(t *testing.T) {
 	db := newAuthTestDB(t)
 	user, err := auth.CreateAccount(db, "change-me", "password123", "user")
@@ -204,8 +174,6 @@ func TestChangePasswordInvalidatesOldToken(t *testing.T) {
 	}
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func newAuthTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "auth.db")), &gorm.Config{
@@ -214,12 +182,9 @@ func newAuthTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-<<<<<<< HEAD
 	if sqlDB, err := db.DB(); err == nil {
 		t.Cleanup(func() { _ = sqlDB.Close() })
 	}
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if err := database.AutoMigrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

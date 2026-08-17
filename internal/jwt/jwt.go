@@ -25,15 +25,10 @@ type Claims struct {
 	UserID   uint   `json:"uid"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
-<<<<<<< HEAD
 	// TokenVersion 用于密码修改后使旧 token 失效。
 	TokenVersion uint   `json:"tv"`
 	IssuedAt     int64  `json:"iat"`
 	ExpAt        int64  `json:"exp"`
-=======
-	IssuedAt int64  `json:"iat"`
-	ExpAt    int64  `json:"exp"`
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 type header struct {

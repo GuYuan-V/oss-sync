@@ -14,18 +14,14 @@ const (
 	RoleOwner       = "owner"
 	RoleManager     = "manager"
 	RoleParticipant = "participant"
-<<<<<<< HEAD
 	// RoleAdmin 表示管理员通过平台权限访问任意仓库。
 	RoleAdmin = "admin"
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 )
 
 func ValidMemberRole(role string) bool {
 	return role == RoleManager || role == RoleParticipant
 }
 
-<<<<<<< HEAD
 // CanManage 判断角色是否可管理仓库（成员、分享、博客设置、恢复、永久删除）。
 func CanManage(role string) bool {
 	return role == RoleOwner || role == RoleManager || role == RoleAdmin
@@ -33,14 +29,6 @@ func CanManage(role string) bool {
 
 func CanDelete(role string) bool {
 	return role == RoleOwner || role == RoleAdmin
-=======
-func CanManage(role string) bool {
-	return role == RoleOwner || role == RoleManager
-}
-
-func CanDelete(role string) bool {
-	return role == RoleOwner
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 // Resolve returns an active Vault and the caller's role. A missing membership

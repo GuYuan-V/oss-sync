@@ -4,10 +4,7 @@
 // 失效或登录失败时抛错，由调用方决定 UI 提示。
 
 import { requestUrl } from "obsidian";
-<<<<<<< HEAD
 import type { Diagnostics } from "./diagnostics";
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 import type { OSSSettings } from "./settings";
 
 export interface AuthResponse {
@@ -16,11 +13,8 @@ export interface AuthResponse {
   user_id: number;
   username: string;
   role: string;
-<<<<<<< HEAD
   device_status?: "pending" | "approved" | "revoked";
   device_name?: string;
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 export interface AuthStatus {
@@ -129,7 +123,6 @@ export interface SyncManifestResponse {
   files: SyncFileMeta[];
 }
 
-<<<<<<< HEAD
 export type SyncMode = "short_poll" | "long_poll";
 
 export interface SyncStrategyResponse {
@@ -182,8 +175,6 @@ export interface CollabEntry {
   created_at: string;
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 export class OSSApiError extends Error {
   constructor(
     message: string,
@@ -203,14 +194,10 @@ export class OSSApiClient {
   private timeOffset = 0;
   private token: string | null = null;
 
-<<<<<<< HEAD
   constructor(
     private settings: OSSSettings,
     private readonly diagnostics?: Diagnostics
   ) {}
-=======
-  constructor(private settings: OSSSettings) {}
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
   setToken(token: string | null): void {
     this.token = token;
@@ -321,11 +308,8 @@ export class OSSApiClient {
       content: ArrayBuffer;
     }
   ): Promise<SyncFileMeta> {
-<<<<<<< HEAD
     const startedAt = Date.now();
     let status: number | undefined;
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
     const query = new URLSearchParams({
       path: input.path,
       base_revision: String(input.baseRevision),
@@ -334,7 +318,6 @@ export class OSSApiClient {
       client_id: this.settings.clientId,
       operation_id: input.operationID,
     });
-<<<<<<< HEAD
     try {
       const res = await requestUrl({
         url: this.url(`/api/vaults/${encodeURIComponent(vaultID)}/sync/upload?${query.toString()}`),
@@ -358,19 +341,6 @@ export class OSSApiClient {
         bytes: input.content.byteLength,
       });
     }
-=======
-    const res = await requestUrl({
-      url: this.url(`/api/vaults/${encodeURIComponent(vaultID)}/sync/upload?${query.toString()}`),
-      method: "POST",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        ...this.authHeaders(),
-      },
-      body: input.content,
-      throw: false,
-    });
-    return this.parseResponse<SyncFileMeta>(res.status, res.json, res.text);
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 
   async downloadV2(
@@ -378,7 +348,6 @@ export class OSSApiClient {
     path: string,
     revision: number
   ): Promise<{ content: ArrayBuffer; meta: SyncFileMeta }> {
-<<<<<<< HEAD
     const startedAt = Date.now();
     let status: number | undefined;
     let bytes: number | undefined;
@@ -417,30 +386,6 @@ export class OSSApiClient {
         ...(bytes === undefined ? {} : { bytes }),
       });
     }
-=======
-    const query = new URLSearchParams({ path, revision: String(revision) });
-    const res = await requestUrl({
-      url: this.url(`/api/vaults/${encodeURIComponent(vaultID)}/sync/download?${query.toString()}`),
-      method: "GET",
-      headers: this.authHeaders(),
-      throw: false,
-    });
-    if (res.status >= 400) {
-      this.parseResponse<never>(res.status, res.json, res.text);
-    }
-    return {
-      content: res.arrayBuffer,
-      meta: {
-        path,
-        type: classifyPath(path),
-        hash: header(res.headers, "x-oss-hash"),
-        size: res.arrayBuffer.byteLength,
-        mtime: parseInt(header(res.headers, "x-oss-mtime") || "0", 10),
-        revision: parseInt(header(res.headers, "x-oss-revision") || "0", 10),
-        deleted: false,
-      },
-    };
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 
   async deleteV2(
@@ -491,7 +436,6 @@ export class OSSApiClient {
     );
   }
 
-<<<<<<< HEAD
   /** 获取仓库同步策略，effective_mode 由服务端根据仓库策略与客户端偏好计算。 */
   async syncStrategy(vaultID: string, mode: SyncMode): Promise<SyncStrategyResponse> {
     return this.doRequest<SyncStrategyResponse>(
@@ -736,8 +680,6 @@ export class OSSApiClient {
     }
   }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   /** 调用旧版同步检查接口，并更新本地时钟偏移。 */
   async check(files: CheckFileIn[], mode: "full" | "incremental"): Promise<CheckResponse> {
     const localBefore = Date.now();
@@ -807,15 +749,12 @@ export class OSSApiClient {
     return this.doRequest<{ shares: ShareOut[] }>("GET", `/api/shares${query}`);
   }
 
-<<<<<<< HEAD
   async updateShareAllowCopy(shareID: string, allowCopy: boolean): Promise<ShareOut> {
     return this.doRequest<ShareOut>("PATCH", `/api/shares/${encodeURIComponent(shareID)}`, {
       allow_copy: allowCopy,
     });
   }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   async deleteShare(shareID: string): Promise<void> {
     await this.doRequest<void>("DELETE", `/api/shares/${encodeURIComponent(shareID)}`);
   }
@@ -833,7 +772,6 @@ export class OSSApiClient {
     return headers;
   }
 
-<<<<<<< HEAD
   private async doRequest<T>(
     method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
@@ -868,20 +806,6 @@ export class OSSApiClient {
     startedAt: number
   ): void {
     this.diagnostics?.record({ kind: "api", at: Date.now(), method, status, durationMs: Date.now() - startedAt });
-=======
-  private async doRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await requestUrl({
-      url: this.url(path),
-      method: method as any,
-      headers: {
-        "Content-Type": "application/json",
-        ...this.authHeaders(),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      throw: false,
-    });
-    return this.parseResponse<T>(res.status, res.json, res.text);
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
   }
 
   private parseResponse<T>(status: number, json: any, text: string): T {
@@ -920,7 +844,6 @@ function header(headers: Record<string, string>, name: string): string {
   return "";
 }
 
-<<<<<<< HEAD
 export function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (normalized === "localhost" || normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") {
@@ -929,8 +852,6 @@ export function isLoopbackHostname(hostname: string): boolean {
   return /^127(?:\.\d{1,3}){3}$/.test(normalized);
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 function classifyPath(path: string): "markdown" | "attachment" | "config" {
   const lower = path.toLowerCase();
   if (lower.endsWith(".md")) return "markdown";

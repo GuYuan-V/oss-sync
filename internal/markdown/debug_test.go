@@ -1,10 +1,6 @@
 package markdown
 
 import (
-<<<<<<< HEAD
-=======
-	"fmt"
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	"testing"
 
 	"github.com/yuin/goldmark"
@@ -22,13 +18,8 @@ type debugNode struct {
 
 var kindDebug = gast.NewNodeKind("Debug")
 
-<<<<<<< HEAD
 func (n *debugNode) Kind() gast.NodeKind           { return kindDebug }
 func (n *debugNode) Text(source []byte) []byte     { return []byte(n.Raw) }
-=======
-func (n *debugNode) Kind() gast.NodeKind { return kindDebug }
-func (n *debugNode) Text(source []byte) []byte { return []byte(n.Raw) }
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func (n *debugNode) Dump(source []byte, level int) {}
 
 type debugParser struct{}
@@ -36,18 +27,10 @@ type debugParser struct{}
 func (p *debugParser) Trigger() []byte { return []byte{'['} }
 func (p *debugParser) Parse(parent gast.Node, block text.Reader, pc parser.Context) gast.Node {
 	line, _ := block.PeekLine()
-<<<<<<< HEAD
 	if len(line) < 2 || line[0] != '[' || line[1] != '[' {
 		return nil
 	}
 	// 查找闭合标记。
-=======
-	fmt.Printf("DEBUG Parse called: line=%q\n", string(line))
-	if len(line) < 2 || line[0] != '[' || line[1] != '[' {
-		return nil
-	}
-	// find ]]
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	end := -1
 	for i := 2; i < len(line); i++ {
 		if line[i] == ']' && i+1 < len(line) && line[i+1] == ']' {
@@ -60,10 +43,6 @@ func (p *debugParser) Parse(parent gast.Node, block text.Reader, pc parser.Conte
 	}
 	inner := string(line[2:end])
 	block.Advance(end + 2)
-<<<<<<< HEAD
-=======
-	fmt.Printf("DEBUG consumed: inner=%q\n", inner)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	return &debugNode{Raw: inner}
 }
 
@@ -75,11 +54,7 @@ func (r *debugRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 			return gast.WalkContinue, nil
 		}
 		n := node.(*debugNode)
-<<<<<<< HEAD
 		_, _ = w.WriteString("[[" + n.Raw + "]]")
-=======
-		fmt.Fprintf(w, "[[DEBUG:%s]]", n.Raw)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		return gast.WalkContinue, nil
 	})
 }
@@ -98,13 +73,9 @@ func TestDebugWikilink(t *testing.T) {
 	if err := md.Convert([]byte(src), w); err != nil {
 		t.Fatalf("convert: %v", err)
 	}
-<<<<<<< HEAD
 	if got := string(out); got != "<p>hello [[world]] end</p>\n" {
 		t.Fatalf("rendered output = %q", got)
 	}
-=======
-	t.Logf("output: %s", string(out))
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 type debugExt struct{}

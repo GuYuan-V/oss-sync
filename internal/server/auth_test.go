@@ -28,13 +28,8 @@ func TestRegistrationOpenByDefault(t *testing.T) {
 	code, first := doJSON(t, router, "POST", "/api/auth/register", "", map[string]string{
 		"username": "first", "password": "password123",
 	})
-<<<<<<< HEAD
 	if code != http.StatusOK || first["role"] != "admin" {
 		t.Fatalf("first public register must become admin: status=%d body=%v", code, first)
-=======
-	if code != http.StatusOK || first["role"] != "user" {
-		t.Fatalf("first public register: status=%d body=%v", code, first)
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	}
 	code, second := doJSON(t, router, "POST", "/api/auth/register", "", map[string]string{
 		"username": "second", "password": "password123",
@@ -60,15 +55,10 @@ func TestRegistrationClosedBlocksAnonymous(t *testing.T) {
 }
 
 func TestAnonymousRegistrationCannotCreateAdmin(t *testing.T) {
-<<<<<<< HEAD
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	// 已有管理员后，匿名注册携带 role=admin 也不能提权。
 	createAdminToken(t, srv, db, "platform-admin", "password123")
-=======
-	srv, _, _ := newTestServer(t)
-	router := srv.Router()
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 
 	code, body := doJSON(t, router, "POST", "/api/auth/register", "", map[string]string{
 		"username": "member", "password": "password123", "role": "admin",
@@ -83,11 +73,7 @@ func TestPublicRegistrationCreatesUserSettingsWithoutVault(t *testing.T) {
 	code, body := doJSON(t, srv.Router(), "POST", "/api/auth/register", "", map[string]string{
 		"username": "owner", "password": "password123", "role": "user",
 	})
-<<<<<<< HEAD
 	if code != http.StatusOK || body["role"] == "" {
-=======
-	if code != http.StatusOK || body["role"] != "user" {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		t.Errorf("public register: status=%d body=%v", code, body)
 	}
 	var settingsCount int64
@@ -141,11 +127,7 @@ func TestLoginAcceptsCorrectPassword(t *testing.T) {
 	code, body := doJSON(t, router, "POST", "/api/auth/login", "", map[string]string{
 		"username": "owner", "password": "password123",
 	})
-<<<<<<< HEAD
 	if code != http.StatusOK || body["token"] == "" || body["role"] == "" {
-=======
-	if code != http.StatusOK || body["token"] == "" || body["role"] != "user" {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		t.Errorf("login: status=%d body=%v", code, body)
 	}
 }
@@ -197,14 +179,9 @@ func TestAdminCanRegisterAdmin(t *testing.T) {
 }
 
 func TestNonAdminCannotRegisterUser(t *testing.T) {
-<<<<<<< HEAD
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	createAdminToken(t, srv, db, "admin", "password123")
-=======
-	srv, _, _ := newTestServer(t)
-	router := srv.Router()
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	memberToken := registerAndLogin(t, router, "member", "password123")
 
 	code, _ := doJSON(t, router, "POST", "/api/auth/register", memberToken, map[string]string{

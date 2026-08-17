@@ -8,10 +8,6 @@ package blog
 import (
 	"bytes"
 	"embed"
-<<<<<<< HEAD
-=======
-	"encoding/json"
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	"errors"
 	"fmt"
 	"html/template"
@@ -30,10 +26,7 @@ import (
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/markdown"
 	"github.com/oss/oss-server/internal/models"
-<<<<<<< HEAD
 	"github.com/oss/oss-server/internal/settingspolicy"
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 )
 
 //go:embed templates/*.html
@@ -55,11 +48,8 @@ func New(db *gorm.DB, cfg *config.Config) (*Handler, error) {
 
 // Register 挂载无需登录的公开分享路由。
 func (h *Handler) Register(r *gin.Engine) {
-<<<<<<< HEAD
 	r.GET("/", h.handleHome)
 	r.GET("/b/:vault_id", h.handleVaultBlog)
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	r.GET("/p/:share_id", h.handleSingle)
 	r.GET("/p/:share_id/*subpath", h.handleFolder)
 	r.GET("/assets/:share_id", h.handleSharedAsset)
@@ -151,7 +141,6 @@ type renderParams struct {
 	IsFolder      bool
 	FolderTitle   string
 	FooterNotice  template.HTML
-<<<<<<< HEAD
 	// papertrail 博客字段。
 	IsHome      bool
 	ShareID     string
@@ -202,8 +191,6 @@ func trimByRunes(value string, maxLen int) string {
 		return string(runes[:maxLen])
 	}
 	return string(runes)
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 }
 
 // loadVaultSettings 优先读取 Vault 配置，并兼容旧版用户级配置。
@@ -232,7 +219,6 @@ func (h *Handler) loadVaultSettings(userID uint, vaultID string) (*models.VaultS
 }
 
 func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
-<<<<<<< HEAD
 	if IsBuiltinTheme(p.ThemeName) {
 		if p.ThemeName == "papertrail" {
 			h.renderBuiltinTheme(c, p, "papertrail")
@@ -241,9 +227,6 @@ func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
 		p.ThemeName = "default"
 		p.ThemeBaseURL = "/themes/default"
 	} else {
-=======
-	if p.ThemeName != "default" {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		if custom, err := h.customThemeTemplate(p.ThemeName); err == nil {
 			var rendered bytes.Buffer
 			if err := custom.Execute(&rendered, p); err == nil {
@@ -263,7 +246,6 @@ func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
 	}
 }
 
-<<<<<<< HEAD
 // renderBuiltinTheme 使用内置模板渲染（papertrail 等）。
 func (h *Handler) renderBuiltinTheme(c *gin.Context, p renderParams, themeName string) {
 	raw, err := themeAssetsFS.ReadFile("assets/" + themeName + "/template.html")
@@ -294,8 +276,6 @@ func (h *Handler) renderBuiltinTheme(c *gin.Context, p renderParams, themeName s
 	_, _ = c.Writer.Write(rendered.Bytes())
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func (h *Handler) renderRemoved(c *gin.Context) {
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.Status(http.StatusNotFound)
@@ -340,22 +320,9 @@ func (h *Handler) handleSingle(c *gin.Context) {
 	}
 
 	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
-<<<<<<< HEAD
 	params := h.shareRenderParams(share, us)
 	params.Title = basenameNoExt(f.Path) + " · OSS"
 	params.ContentHTML = template.HTML(html)
-=======
-	themeConfigJSON, _ := json.Marshal(us.ThemeConfig)
-	params := renderParams{
-		Title:         basenameNoExt(f.Path) + " · OSS",
-		ThemeName:     us.ThemeName,
-		ThemeBaseURL:  themeBaseURL(us.ThemeName),
-		ThemeConfigJS: template.JS(themeConfigJSON),
-		CustomHeader:  template.HTML(us.CustomHeader),
-		CustomFooter:  template.HTML(us.CustomFooter),
-		ContentHTML:   template.HTML(html),
-	}
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	h.renderTemplate(c, params)
 }
 
@@ -413,26 +380,11 @@ func (h *Handler) renderFolderTree(c *gin.Context, share models.Share, files []m
 	b.WriteString("</ul>")
 
 	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
-<<<<<<< HEAD
 	params := h.shareRenderParams(share, us)
 	params.Title = "Folder · " + share.TargetPath
 	params.IsFolder = true
 	params.FolderTitle = share.TargetPath
 	params.ContentHTML = template.HTML(b.String())
-=======
-	themeConfigJSON, _ := json.Marshal(us.ThemeConfig)
-	params := renderParams{
-		Title:         "Folder · " + share.TargetPath,
-		ThemeName:     us.ThemeName,
-		ThemeBaseURL:  themeBaseURL(us.ThemeName),
-		ThemeConfigJS: template.JS(themeConfigJSON),
-		CustomHeader:  template.HTML(us.CustomHeader),
-		CustomFooter:  template.HTML(us.CustomFooter),
-		IsFolder:      true,
-		FolderTitle:   share.TargetPath,
-		ContentHTML:   template.HTML(b.String()),
-	}
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	h.renderTemplate(c, params)
 }
 
@@ -451,22 +403,9 @@ func (h *Handler) renderFolderFile(c *gin.Context, share models.Share, f models.
 	}
 
 	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
-<<<<<<< HEAD
 	params := h.shareRenderParams(share, us)
 	params.Title = basenameNoExt(f.Path) + " · " + share.TargetPath
 	params.ContentHTML = template.HTML(html)
-=======
-	themeConfigJSON, _ := json.Marshal(us.ThemeConfig)
-	params := renderParams{
-		Title:         basenameNoExt(f.Path) + " · " + share.TargetPath,
-		ThemeName:     us.ThemeName,
-		ThemeBaseURL:  themeBaseURL(us.ThemeName),
-		ThemeConfigJS: template.JS(themeConfigJSON),
-		CustomHeader:  template.HTML(us.CustomHeader),
-		CustomFooter:  template.HTML(us.CustomFooter),
-		ContentHTML:   template.HTML(html),
-	}
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	h.renderTemplate(c, params)
 }
 
@@ -478,16 +417,12 @@ func (h *Handler) handleThemeAsset(c *gin.Context) {
 		return
 	}
 	fp = strings.TrimPrefix(fp, "/")
-<<<<<<< HEAD
 	if h.serveBuiltinTheme(c, theme, fp) {
 		return
 	}
 	if theme == "default" {
 		// default 是内置只读主题，不允许从磁盘加载同名自定义目录。
 		c.Status(http.StatusNotFound)
-=======
-	if theme == "default" && h.serveDefaultTheme(c, fp) {
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		return
 	}
 	abs := filepath.Join(h.Cfg.Storage.DataDir, "themes", theme, fp)

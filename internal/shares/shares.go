@@ -40,13 +40,10 @@ type createRequest struct {
 	RecursiveBacklinks bool   `json:"recursive_backlinks"`
 }
 
-<<<<<<< HEAD
 type updateRequest struct {
 	AllowCopy *bool `json:"allow_copy" binding:"required"`
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 type shareOut struct {
 	ShareID    string `json:"share_id"`
 	VaultID    string `json:"vault_id"`
@@ -72,15 +69,11 @@ func (h *Handler) Register(r *gin.Engine) {
 		g.POST("", h.Create)
 		g.GET("", h.List)
 		g.GET("/:id", h.Get)
-<<<<<<< HEAD
 		g.PATCH("/:id", h.Update)
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 		g.DELETE("/:id", h.Delete)
 	}
 }
 
-<<<<<<< HEAD
 // CreateWeb 是网页控制台使用的分享创建服务，校验文件存在并生成分享 ID。
 func (h *Handler) CreateWeb(userID uint, vaultID, targetPath string, isFolder, allowCopy bool) (string, error) {
 	targetPath = strings.TrimSpace(targetPath)
@@ -94,8 +87,6 @@ func (h *Handler) CreateWeb(userID uint, vaultID, targetPath string, isFolder, a
 	return so.ShareID, nil
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func (h *Handler) Create(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {
@@ -274,7 +265,6 @@ func (h *Handler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, toOut(s))
 }
 
-<<<<<<< HEAD
 func (h *Handler) Update(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {
@@ -303,8 +293,6 @@ func (h *Handler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, toOut(share))
 }
 
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 func (h *Handler) Delete(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {

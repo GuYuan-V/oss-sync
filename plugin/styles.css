@@ -7,7 +7,6 @@
 .oss-status-bar.is-syncing { opacity: 0.7; }
 .oss-status-bar.is-error { color: var(--text-error); }
 
-<<<<<<< HEAD
 .oss-conflict-modal .modal-title,
 .oss-history-detail-modal .modal-title {
   overflow-wrap: break-word;
@@ -450,16 +449,3 @@
   justify-content: flex-end;
   margin-block-end: 6px;
 }
-=======
-.oss-conflict-modal .diff-pane {
-  font-family: var(--font-monospace);
-  font-size: 12px;
-  white-space: pre-wrap;
-  padding: 8px;
-  border-radius: 4px;
-}
-.oss-conflict-modal .diff-local { background: rgba(255, 100, 100, 0.08); }
-.oss-conflict-modal .diff-remote { background: rgba(100, 200, 100, 0.08); }
-.oss-conflict-modal .diff-insert { background: rgba(100, 200, 100, 0.25); }
-.oss-conflict-modal .diff-delete { background: rgba(255, 100, 100, 0.25); text-decoration: line-through; }
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b

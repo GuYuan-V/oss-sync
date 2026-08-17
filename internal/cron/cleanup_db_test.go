@@ -15,10 +15,7 @@ import (
 	"github.com/oss/oss-server/internal/database"
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/models"
-<<<<<<< HEAD
 	"github.com/oss/oss-server/internal/recycle"
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 )
 
 func sqlNullTime(t time.Time) sql.NullTime {
@@ -33,12 +30,9 @@ func setupCleanup(t *testing.T, fixedNow time.Time) (*Cleanup, *gorm.DB, string)
 	if err != nil {
 		t.Fatal(err)
 	}
-<<<<<<< HEAD
 	if sqlDB, err := db.DB(); err == nil {
 		t.Cleanup(func() { _ = sqlDB.Close() })
 	}
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
 	if err := database.AutoMigrate(db); err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +357,6 @@ func setFileMtime(t *testing.T, path string, mtime time.Time) {
 		t.Fatal(err)
 	}
 }
-<<<<<<< HEAD
 
 func TestCompactTombstones_RespectsRecycleRetention(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -430,5 +423,3 @@ func TestCompactTombstones_RespectsRecycleRetention(t *testing.T) {
 		t.Fatalf("expired recycle item retained: %d", gone)
 	}
 }
-=======
->>>>>>> 3b7aaacb143eff9df5a728b914a633fc58e70a6b
