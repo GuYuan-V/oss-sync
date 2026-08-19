@@ -23,7 +23,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
 	}
-	log.Printf("[OSS] 当前环境 OSS_ENV=%s, db driver=%s", config.Env(), cfg.Database.Driver)
 
 	db, err := database.Init(cfg)
 	if err != nil {
@@ -36,21 +35,13 @@ func main() {
 	if err := auth.EnsureRegistrationSetting(db, cfg.Auth.AllowAnonymousRegistration); err != nil {
 		log.Fatalf("初始化注册设置失败: %v", err)
 	}
-	createdAdmin, err := auth.EnsureBootstrapAdmin(db, cfg, os.Stdin, os.Stdout)
+	_, err = auth.EnsureBootstrapAdmin(db, cfg)
 	if err != nil {
 		log.Fatalf("初始化管理员失败: %v", err)
 	}
-	if createdAdmin {
-		log.Printf(
-			"[OSS] 已创建初始管理员 %q；请访问 /admin 登录并按需调整注册开关",
-			cfg.Auth.EffectiveBootstrapAdminUsername(),
-		)
-	}
-	reconcileReport, err := reconcile.New(db, cfg).Run(true)
+	_, err = reconcile.New(db, cfg).Run(true)
 	if err != nil {
 		log.Printf("[OSS] 启动存储对账失败: %v", err)
-	} else {
-		log.Printf("[OSS] 启动存储对账完成: %s", reconcileReport.String())
 	}
 
 	srv, err := server.New(cfg, db)
@@ -75,7 +66,6 @@ func main() {
 	}()
 
 	go func() {
-		log.Printf("[OSS] HTTP 监听 %s", addr)
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("ListenAndServe 失败: %v", err)
 		}
@@ -84,8 +74,6 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("[OSS] 收到退出信号，正在优雅关闭...")
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := httpSrv.Shutdown(ctx); err != nil {
@@ -94,5 +82,4 @@ func main() {
 	if sqlDB, err := db.DB(); err == nil {
 		_ = sqlDB.Close()
 	}
-	log.Println("[OSS] 已退出")
 }

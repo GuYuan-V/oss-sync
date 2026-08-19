@@ -118,6 +118,15 @@ func Create(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup
 }
 
 func Purge(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup, error) {
+	return purge(db, dataDir, vault, false)
+}
+
+// PurgeWithTx 在调用方事务内执行仓库删除清理，用于管理员删除用户时的批量操作。
+func PurgeWithTx(tx *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup, error) {
+	return purge(tx, dataDir, vault, true)
+}
+
+func purge(db *gorm.DB, dataDir string, vault models.Vault, insideTx bool) (models.VaultBackup, error) {
 	backup, err := Create(db, dataDir, vault)
 	if err != nil {
 		return models.VaultBackup{}, err
@@ -126,17 +135,23 @@ func Purge(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup,
 	if err := db.Where("vault_id = ? AND storage_key = ''", vault.ID).Find(&legacyFiles).Error; err != nil {
 		return models.VaultBackup{}, err
 	}
-	if err := db.Transaction(func(tx *gorm.DB) error {
+	cleanup := func(tx *gorm.DB) error {
 		for _, model := range []any{
 			&models.VaultMember{}, &models.VaultSetting{}, &models.VaultSyncState{},
-			&models.DeviceVault{}, &models.StorageIssue{}, &models.Share{}, &models.Collaboration{}, &models.File{},
+			&models.DeviceVault{}, &models.DeviceVaultAccess{}, &models.StorageIssue{},
+			&models.Share{}, &models.Collaboration{}, &models.File{}, &models.FileHistory{},
 		} {
 			if err := tx.Where("vault_id = ?", vault.ID).Delete(model).Error; err != nil {
 				return err
 			}
 		}
 		return tx.Unscoped().Delete(&models.Vault{}, "id = ?", vault.ID).Error
-	}); err != nil {
+	}
+	if insideTx {
+		if err := cleanup(db); err != nil {
+			return models.VaultBackup{}, err
+		}
+	} else if err := db.Transaction(cleanup); err != nil {
 		return models.VaultBackup{}, err
 	}
 	if err := os.RemoveAll(filepath.Join(dataDir, "vaults", vault.ID)); err != nil {

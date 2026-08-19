@@ -1,0 +1,121 @@
+{{define "sidebar"}}
+<aside id="app-sidebar" class="sidebar" aria-label="{{.Layout.T "common.main_navigation"}}">
+  <div class="sidebar__head">
+    <a class="wordmark" href="/dashboard" aria-label="{{.Layout.T "common.site_console"}}">
+      <span class="wordmark__mark">OS</span>
+      <span><strong>OSS Sync</strong><small>Vault console</small></span>
+    </a>
+    <button id="sidebar-close" class="icon-button sidebar-close" type="button" aria-label="{{.Layout.T "common.close_menu"}}">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5H5v14h4M13 8l4 4-4 4M8 12h9"/></svg>
+    </button>
+  </div>
+
+  <nav class="side-nav">
+    <ul class="side-nav__list">
+      <li class="side-nav__section-label">{{.Layout.T "common.user_settings"}}</li>
+      <li class="side-nav__item">
+        <a class="side-nav__link{{if eq .Layout.ActivePage "overview"}} is-active{{end}}" href="/dashboard">
+          <span class="side-nav__icon" data-nav-icon="overview" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 13h6V4H4v9Zm10 7h6V11h-6v9ZM4 20h6v-3H4v3Zm10-13h6V4h-6v3Z"/></svg>
+          </span>
+          {{.Layout.T "common.home"}}
+        </a>
+      </li>
+
+      <li class="side-nav__item{{if or (eq .Layout.ActiveGroup "vaults") (eq .Layout.ActiveGroup "vault")}} is-open{{end}}">
+        <button class="side-nav__toggle" type="button" aria-expanded="{{if or (eq .Layout.ActiveGroup "vaults") (eq .Layout.ActiveGroup "vault")}}true{{else}}false{{end}}">
+          <span class="side-nav__icon" data-nav-icon="vaults" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M3.5 6.5h6l2 2H20.5v10h-17v-12Z"/><path d="M3.5 10.5h17"/></svg>
+          </span>
+          {{.Layout.T "common.vault_management"}}
+          <span class="side-nav__arrow" aria-hidden="true"></span>
+        </button>
+        <ul class="side-nav__sub">
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vaults"}} is-active{{end}}" href="/dashboard/vaults">{{.Layout.T "common.my_vaults"}}</a></li>
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vaults-new"}} is-active{{end}}" href="/dashboard/vaults/new">{{.Layout.T "common.new_vault"}}</a></li>
+        </ul>
+      </li>
+
+      {{if .Layout.CurrentVault}}
+      <li class="side-nav__item is-open">
+        <button class="side-nav__toggle" type="button" aria-expanded="true">
+          <span class="side-nav__icon" data-nav-icon="current-vault" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 5.5h14v15H5v-15Z"/><path d="M8 3.5h8M9 9h6M9 13h6M9 17h4"/></svg>
+          </span>
+          <span class="side-nav__current">
+            <span>{{.Layout.T "common.current_vault"}}</span>
+            <span class="side-nav__current-name">{{.Layout.CurrentVault.Name}}</span>
+          </span>
+          <span class="side-nav__arrow" aria-hidden="true"></span>
+        </button>
+        <ul class="side-nav__sub">
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vault-files"}} is-active{{end}}" href="/dashboard/vaults/{{.Layout.CurrentVault.ID}}">{{.Layout.T "common.files"}}</a></li>
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vault-shares"}} is-active{{end}}" href="/dashboard/vaults/{{.Layout.CurrentVault.ID}}/shares">{{.Layout.T "common.shares"}}</a></li>
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vault-recycle"}} is-active{{end}}" href="/dashboard/vaults/{{.Layout.CurrentVault.ID}}/recycle">{{.Layout.T "common.recycle"}}</a></li>
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vault-history"}} is-active{{end}}" href="/dashboard/vaults/{{.Layout.CurrentVault.ID}}/history">{{.Layout.T "common.history"}}</a></li>
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vault-members"}} is-active{{end}}" href="/dashboard/vaults/{{.Layout.CurrentVault.ID}}/members">{{.Layout.T "common.members"}}</a></li>
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vault-settings"}} is-active{{end}}" href="/dashboard/vaults/{{.Layout.CurrentVault.ID}}/settings">{{.Layout.T "common.vault_settings"}}</a></li>
+          {{if .Layout.CurrentVault.HasThemeSettings}}
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vault-theme-settings"}} is-active{{end}}" href="/dashboard/vaults/{{.Layout.CurrentVault.ID}}/theme-settings">{{if .Layout.CurrentVault.ThemeSettingsLabel}}{{.Layout.CurrentVault.ThemeSettingsLabel}} {{.Layout.T "common.settings"}}{{else}}{{.Layout.T "common.template_settings"}}{{end}}</a></li>
+          {{end}}
+        </ul>
+      </li>
+      {{end}}
+
+      <li class="side-nav__item">
+        <a class="side-nav__link{{if eq .Layout.ActivePage "devices"}} is-active{{end}}" href="/dashboard/devices">
+          <span class="side-nav__icon" data-nav-icon="devices" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="12" rx="1"/><path d="M9 20h6M12 16v4"/></svg>
+          </span>
+          {{.Layout.T "common.device_management"}}
+        </a>
+      </li>
+
+      <li class="side-nav__item{{if eq .Layout.ActiveGroup "account"}} is-open{{end}}">
+        <button class="side-nav__toggle" type="button" aria-expanded="{{if eq .Layout.ActiveGroup "account"}}true{{else}}false{{end}}">
+          <span class="side-nav__icon" data-nav-icon="account" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.7-4 3-6 7-6s6.3 2 7 6"/></svg>
+          </span>
+          {{.Layout.T "common.personal_center"}}
+          <span class="side-nav__arrow" aria-hidden="true"></span>
+        </button>
+        <ul class="side-nav__sub" data-account-navigation>
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "account"}} is-active{{end}}" href="/dashboard/account" data-account-section="info">{{.Layout.T "common.account_info"}}</a></li>
+          <li><a class="side-nav__sublink" href="/dashboard/account#sync-settings" data-account-section="sync-settings">{{.Layout.T "common.sync_storage_preferences"}}</a></li>
+          <li><a class="side-nav__sublink" href="/dashboard/account#password" data-account-section="password">{{.Layout.T "common.change_password"}}</a></li>
+        </ul>
+      </li>
+
+      {{if .Layout.IsAdmin}}
+      <li class="side-nav__section-label side-nav__section-label--admin">{{.Layout.T "common.admin_settings"}}</li>
+      <li class="side-nav__item{{if eq .Layout.ActiveGroup "admin"}} is-open{{end}}">
+        <button class="side-nav__toggle" type="button" aria-expanded="{{if eq .Layout.ActiveGroup "admin"}}true{{else}}false{{end}}">
+          <span class="side-nav__icon" data-nav-icon="admin" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"/></svg>
+          </span>
+          {{.Layout.T "common.system_management"}}
+          <span class="side-nav__arrow" aria-hidden="true"></span>
+        </button>
+         <ul class="side-nav__sub">
+           <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-data"}} is-active{{end}}" href="/dashboard/admin/data">{{.Layout.T "common.data_information"}}</a></li>
+           <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-users"}} is-active{{end}}" href="/dashboard/admin">{{.Layout.T "common.user_management"}}</a></li>
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-vaults"}} is-active{{end}}" href="/dashboard/admin/vaults">{{.Layout.T "common.all_vaults"}}</a></li>
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-devices"}} is-active{{end}}" href="/dashboard/admin/devices">{{.Layout.T "common.all_devices"}}</a></li>
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-themes"}} is-active{{end}}" href="/dashboard/admin/themes">{{.Layout.T "common.template_management"}}</a></li>
+           <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-console-themes"}} is-active{{end}}" href="/dashboard/admin/console-themes">{{.Layout.T "common.server_themes"}}</a></li>
+           <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-system"}} is-active{{end}}" href="/dashboard/admin/system">{{.Layout.T "common.system_settings"}}</a></li>
+        </ul>
+      </li>
+      {{end}}
+    </ul>
+  </nav>
+
+  <div class="sidebar__foot">
+    <div id="theme-switcher" class="theme-switcher" role="group" aria-label="{{.Layout.T "common.theme_mode"}}">
+      <button type="button" class="button theme-switcher__btn" data-theme-pref="auto" aria-pressed="false">{{.Layout.T "common.theme_modes.system"}}</button>
+      <button type="button" class="button theme-switcher__btn" data-theme-pref="light" aria-pressed="false">{{.Layout.T "common.theme_modes.light"}}</button>
+      <button type="button" class="button theme-switcher__btn" data-theme-pref="dark" aria-pressed="false">{{.Layout.T "common.theme_modes.dark"}}</button>
+    </div>
+  </div>
+</aside>
+{{end}}

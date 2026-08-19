@@ -16,8 +16,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/models"
+	"github.com/oss/oss-server/internal/recycle"
 )
 
 func uploadV2(
@@ -43,6 +43,7 @@ func uploadV2(
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-OSS-Client-ID", clientID)
+	req.Header.Set("X-OSS-Device-Name", url.QueryEscape("device-"+clientID))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	return w.Code, decodeMap(w.Body.Bytes())
@@ -136,12 +137,176 @@ func createVaultViaAPI(t *testing.T, router *gin.Engine, token, name string) str
 	return body["id"].(string)
 }
 
+func approveDevice(t *testing.T, router *gin.Engine, token, clientID string, vaultIDs ...string) {
+	t.Helper()
+	code, body := doJSON(t, router, http.MethodPut,
+		"/api/devices/"+url.PathEscape(clientID)+"/authorization",
+		token,
+		map[string]any{"status": "approved", "name": clientID, "vault_ids": vaultIDs},
+	)
+	if code != http.StatusOK {
+		t.Fatalf("approve device %s: %d %v", clientID, code, body)
+	}
+}
+
+func TestSyncStrategy_whenUserPreferencesAreWithinAdministratorCeilings_returnsEffectiveTiming(t *testing.T) {
+	// Given
+	srv, db, _ := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "strategy-user", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, token)
+	approveDevice(t, router, token, "device-policy", vaultID)
+	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Updates(map[string]any{
+		"max_long_poll_wait_sec": 20,
+		"max_sync_debounce_sec":  60,
+	}).Error; err != nil {
+		t.Fatalf("set strategy ceilings: %v", err)
+	}
+	if err := db.Model(&models.UserSetting{}).Where("user_id = 1").Updates(map[string]any{
+		"long_poll_wait_sec": 18,
+		"sync_debounce_sec":  12,
+	}).Error; err != nil {
+		t.Fatalf("set strategy preferences: %v", err)
+	}
+
+	// When
+	code, body := doJSONAsDevice(
+		t,
+		router,
+		http.MethodGet,
+		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/strategy?client_id=device-policy&mode=long_poll",
+		token,
+		"device-policy",
+		"Policy device",
+		nil,
+	)
+
+	// Then
+	if code != http.StatusOK {
+		t.Fatalf("strategy response: %d %v", code, body)
+	}
+	if body["long_poll_wait_sec"] != float64(18) || body["min_debounce_sec"] != float64(12) {
+		t.Errorf("strategy timing = %v/%v, want 18/12", body["long_poll_wait_sec"], body["min_debounce_sec"])
+	}
+}
+
+func TestSyncStrategy_whenGlobalModeIsForced_ignoresClientPreference(t *testing.T) {
+	// Given
+	srv, db, _ := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "global-strategy-user", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, token)
+	approveDevice(t, router, token, "global-policy-device", vaultID)
+	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("sync_mode", "long_poll").Error; err != nil {
+		t.Fatalf("set global sync mode: %v", err)
+	}
+	// When
+	code, body := doJSONAsDevice(
+		t,
+		router,
+		http.MethodGet,
+		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/strategy?client_id=global-policy-device&mode=short_poll",
+		token,
+		"global-policy-device",
+		"Global policy device",
+		nil,
+	)
+
+	// Then
+	if code != http.StatusOK {
+		t.Fatalf("strategy response: %d %v", code, body)
+	}
+	if body["policy"] != "long_poll" || body["effective_mode"] != "long_poll" {
+		t.Fatalf("strategy policy/effective = %v/%v, want long_poll/long_poll", body["policy"], body["effective_mode"])
+	}
+}
+
+func TestV2Upload_whenUserUploadPreferenceTightensAdminCeiling_rejectsOversizedContent(t *testing.T) {
+	// Given
+	srv, db, _ := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "v2-upload-limit", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, token)
+	approveDevice(t, router, token, "device-upload-limit", vaultID)
+	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("max_upload_size_bytes", 10).Error; err != nil {
+		t.Fatalf("set upload ceiling: %v", err)
+	}
+	if err := db.Model(&models.UserSetting{}).Where("user_id = 1").Update("upload_size_bytes", 5).Error; err != nil {
+		t.Fatalf("set upload preference: %v", err)
+	}
+
+	// When
+	code, body := uploadV2(
+		t, router, token, vaultID, "Notes/Large.md", "123456",
+		0, "device-upload-limit", "upload-over-limit",
+	)
+
+	// Then
+	if code != http.StatusRequestEntityTooLarge {
+		t.Errorf("oversized v2 upload: status=%d body=%v, want 413", code, body)
+	}
+}
+
+func TestV2Upload_whenUserVaultCapacityIsExceeded_rejectsWrite(t *testing.T) {
+	// Given
+	srv, db, _ := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "v2-vault-limit", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, token)
+	approveDevice(t, router, token, "device-vault-limit", vaultID)
+	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("max_vault_storage_bytes", 10).Error; err != nil {
+		t.Fatalf("set vault ceiling: %v", err)
+	}
+	if err := db.Model(&models.UserSetting{}).Where("user_id = 1").Update("vault_storage_bytes", 5).Error; err != nil {
+		t.Fatalf("set vault preference: %v", err)
+	}
+
+	// When
+	code, body := uploadV2(
+		t, router, token, vaultID, "Notes/Capacity.md", "123456",
+		0, "device-vault-limit", "upload-over-capacity",
+	)
+
+	// Then
+	if code != http.StatusInternalServerError || body["error"] != "vault storage quota exceeded" {
+		t.Errorf("capacity overflow: status=%d body=%v, want quota error", code, body)
+	}
+}
+
+func TestVaultCreate_whenUserCapacityIsWithinAdminCeiling_seedsEffectiveQuota(t *testing.T) {
+	// Given
+	srv, db, _ := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "vault-default-limit", "password123")
+	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("max_vault_storage_bytes", 10).Error; err != nil {
+		t.Fatalf("set vault ceiling: %v", err)
+	}
+	if err := db.Model(&models.UserSetting{}).Where("user_id = 1").Update("vault_storage_bytes", 8).Error; err != nil {
+		t.Fatalf("set vault preference: %v", err)
+	}
+
+	// When
+	code, body := doJSON(t, router, http.MethodPost, "/api/vaults", token, map[string]any{"name": "Policy Vault"})
+
+	// Then
+	if code != http.StatusCreated {
+		t.Fatalf("create policy vault: %d %v", code, body)
+	}
+	if body["storage_quota"] != float64(8) {
+		t.Errorf("storage quota = %v, want 8", body["storage_quota"])
+	}
+}
+
 func TestSyncV2MultiVaultIsolationCASAndSharing(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	router := srv.Router()
 	token := registerAndLogin(t, router, "v2-isolation", "password123")
 	defaultVault := defaultVaultIDFromAPI(t, router, token)
 	secondVault := createVaultViaAPI(t, router, token, "Second")
+
+	approveDevice(t, router, token, "device-a", defaultVault, secondVault)
+	approveDevice(t, router, token, "device-b", defaultVault, secondVault)
+	approveDevice(t, router, token, "device-test", defaultVault, secondVault)
 
 	code, first := uploadV2(
 		t, router, token, defaultVault, "Notes/Same.md", "# Default Vault",
@@ -291,6 +456,9 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "v2-mutations", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
+	approveDevice(t, router, token, "device-a", vaultID)
+	approveDevice(t, router, token, "device-b", vaultID)
+	approveDevice(t, router, token, "device-test", vaultID)
 
 	code, created := uploadV2(
 		t, router, token, vaultID, "Notes/Changed.md", "one",
@@ -350,8 +518,12 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	if !deletedFile.IsDeleted {
 		t.Fatal("delete did not create a synchronization tombstone")
 	}
-	if _, err := os.Stat(filestore.DiskPath(dataDir, deletedFile)); !os.IsNotExist(err) {
-		t.Fatalf("deleted content remains on disk: %v", err)
+	// 删除后正文进入回收站，原始 files 路径不再存在。
+	if _, err := os.Stat(recycle.DiskPath(dataDir, deletedFile)); os.IsNotExist(err) {
+		t.Fatalf("deleted content missing from recycle bin: %v", err)
+	}
+	if !strings.HasPrefix(deletedFile.StorageKey, "vaults/"+vaultID+"/recycle/") {
+		t.Fatalf("deleted file storage key should point to recycle bin: %q", deletedFile.StorageKey)
 	}
 	deletedRevision := revisionOf(t, deleted)
 	code, retryDelete := doJSON(t, router, http.MethodPost,
@@ -472,6 +644,8 @@ func TestSyncV2ConcurrentUploadsHaveUniqueRevisions(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "v2-concurrent", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
+	approveDevice(t, router, token, "device-a", vaultID)
+	approveDevice(t, router, token, "device-b", vaultID)
 
 	const uploads = 12
 	type result struct {
@@ -538,6 +712,8 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "devices", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
+	approveDevice(t, router, token, "device-a", vaultID)
+	approveDevice(t, router, token, "device-b", vaultID)
 
 	code, created := uploadV2(
 		t, router, token, vaultID, "Device.md", "content",
@@ -604,8 +780,15 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 		"Laptop A",
 		map[string]any{"name": "Laptop B"},
 	)
-	if code != http.StatusOK {
-		t.Fatalf("rename device: %d %v", code, body)
+	if code != http.StatusConflict {
+		t.Fatalf("approved device rename: %d %v, want 409", code, body)
+	}
+	var lockedDevice models.ClientDevice
+	if err := db.Where("client_id = ?", "device-b").First(&lockedDevice).Error; err != nil {
+		t.Fatal(err)
+	}
+	if lockedDevice.Name != "device-b" {
+		t.Fatalf("approved device name changed: %q", lockedDevice.Name)
 	}
 	code, body = doJSONAsDevice(
 		t,
@@ -713,6 +896,8 @@ func TestSyncV2CompactedHistoryRequiresRecoverySnapshot(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "compacted", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
+	approveDevice(t, router, token, "device-a", vaultID)
+	approveDevice(t, router, token, "device-b", vaultID)
 
 	code, created := uploadV2(
 		t, router, token, vaultID, "Deleted.md", "content",

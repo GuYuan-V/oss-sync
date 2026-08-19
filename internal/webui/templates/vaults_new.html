@@ -1,0 +1,30 @@
+{{define "vaults-new"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">New vault</span>
+    <h1>{{.Layout.T "common.new_vault"}}</h1>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+<article class="gate-panel">
+  <div class="gate-panel__copy">
+    <span class="eyebrow">Vault settings</span>
+      <h2>{{.Layout.T "vault.create_independent_vault"}}</h2>
+    <p>{{.Layout.T "vault.create_independent_vault_desc"}}</p>
+  </div>
+  <form method="post" action="/dashboard/vaults" class="gate-form stack-form">
+    <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+    <label>
+      <span>{{.Layout.T "common.name"}}</span>
+      <input name="name" value="{{.Data.Name}}" maxlength="128" required autofocus>
+    </label>
+    <label>
+      <span>{{.Layout.T "vault.description"}}</span>
+      <input name="description" value="{{.Data.Description}}" maxlength="512">
+    </label>
+    <button class="button button--primary" type="submit">{{.Layout.T "vault.create_vault"}}</button>
+  </form>
+</article>
+{{end}}

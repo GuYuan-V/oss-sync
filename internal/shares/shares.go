@@ -40,6 +40,10 @@ type createRequest struct {
 	RecursiveBacklinks bool   `json:"recursive_backlinks"`
 }
 
+type updateRequest struct {
+	AllowCopy *bool `json:"allow_copy" binding:"required"`
+}
+
 type shareOut struct {
 	ShareID    string `json:"share_id"`
 	VaultID    string `json:"vault_id"`
@@ -65,8 +69,22 @@ func (h *Handler) Register(r *gin.Engine) {
 		g.POST("", h.Create)
 		g.GET("", h.List)
 		g.GET("/:id", h.Get)
+		g.PATCH("/:id", h.Update)
 		g.DELETE("/:id", h.Delete)
 	}
+}
+
+// CreateWeb 是网页控制台使用的分享创建服务，校验文件存在并生成分享 ID。
+func (h *Handler) CreateWeb(userID uint, vaultID, targetPath string, isFolder, allowCopy bool) (string, error) {
+	targetPath = strings.TrimSpace(targetPath)
+	if targetPath == "" || !isSafeSharePath(targetPath) {
+		return "", fmt.Errorf("路径包含非法内容")
+	}
+	so, err := h.createOne(userID, vaultID, targetPath, isFolder, allowCopy)
+	if err != nil {
+		return "", err
+	}
+	return so.ShareID, nil
 }
 
 func (h *Handler) Create(c *gin.Context) {
@@ -245,6 +263,34 @@ func (h *Handler) Get(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toOut(s))
+}
+
+func (h *Handler) Update(c *gin.Context) {
+	u, ok := auth.RequireUser(c)
+	if !ok {
+		return
+	}
+	var req updateRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.AllowCopy == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "allow_copy is required", "code": "invalid_share_update"})
+		return
+	}
+	var share models.Share
+	if err := h.DB.Where("share_id = ?", c.Param("id")).First(&share).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "share not found", "code": "share_not_found"})
+		return
+	}
+	_, role, err := h.resolveVault(u.ID, share.VaultID)
+	if err != nil || !vaultaccess.CanManage(role) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "share not found", "code": "share_not_found"})
+		return
+	}
+	share.AllowCopy = *req.AllowCopy
+	if err := h.DB.Model(&share).Update("allow_copy", share.AllowCopy).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update share failed", "code": "share_update_failed"})
+		return
+	}
+	c.JSON(http.StatusOK, toOut(share))
 }
 
 func (h *Handler) Delete(c *gin.Context) {

@@ -1,4 +1,6 @@
 // 插件设置及默认值。
+import type { LanguagePreference } from "./i18n";
+
 export interface OSSSettings {
   /** 服务端 URL（不含尾斜杠），例如 http://localhost:8080 */
   serverUrl: string;
@@ -24,13 +26,21 @@ export interface OSSSettings {
   deviceName: string;
   /** 没有本地变更时轮询远端 revision 的间隔。 */
   remotePollIntervalSec: number;
+  /** 协作事件仅使用 SSE，连接失败时不回退长轮询。 */
+  forceSSE: boolean;
+  /** 是否将安全的传输事件写入开发者控制台。 */
+  diagnosticsEnabled: boolean;
+  /** 用户选择的同步模式偏好，仅在服务端策略为 user_choice 时生效。 */
+  vaultSyncMode: "short_poll" | "long_poll";
+  /** 插件界面语言；auto 跟随 Obsidian。 */
+  language: LanguagePreference;
 }
 
 export const DEFAULT_SETTINGS: OSSSettings = {
   serverUrl: "http://localhost:8080",
   username: "",
   password: "",
-  syncIntervalSec: 300,
+  syncIntervalSec: 3,
   maxConcurrency: 6,
   syncPoisonObsidianFiles: false,
   incrementalCheck: true,
@@ -40,4 +50,8 @@ export const DEFAULT_SETTINGS: OSSSettings = {
   clientId: "",
   deviceName: "",
   remotePollIntervalSec: 30,
+  forceSSE: false,
+  diagnosticsEnabled: false,
+  vaultSyncMode: "short_poll",
+  language: "auto",
 };

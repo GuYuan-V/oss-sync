@@ -1,0 +1,77 @@
+{{define "admin-vault-detail"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Admin · Vault detail</span>
+    <h1>{{.Data.VaultName}}</h1>
+  </div>
+  <a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}">{{.Layout.T "admin.enter_vault_files"}}</a>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Vault info</span>
+      <h2>{{.Layout.T "admin.vault_information"}}</h2>
+      </div>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <tbody>
+          <tr><th>{{.Layout.T "common.owner"}}</th><td><strong>{{.Data.Owner}}</strong></td></tr>
+          <tr><th>{{.Layout.T "admin.description"}}</th><td>{{.Data.Description}}</td></tr>
+          <tr><th>{{.Layout.T "admin.template"}}</th><td>{{.Data.ThemeName}}</td></tr>
+          <tr><th>{{.Layout.T "admin.storage_used"}}</th><td>{{formatBytes .Data.StorageUsed}}</td></tr>
+          <tr><th>{{.Layout.T "admin.file_count"}}</th><td>{{.Data.FileCount}}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Members</span>
+        <h2>{{.Layout.T "admin.members_heading"}}</h2>
+      </div>
+      <span class="ledger-count">{{len .Data.Members}} members</span>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{.Layout.T "common.username"}}</th><th>{{.Layout.T "common.role"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.Members}}
+          <tr><td><strong>{{.Username}}</strong></td><td><span class="role role--{{.Role}}">{{.Role}}</span></td></tr>
+          {{else}}
+          <tr><td colspan="2">{{$.Layout.T "admin.no_additional_members"}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Devices</span>
+        <h2>{{.Layout.T "admin.device_auth"}}</h2>
+      </div>
+      <span class="ledger-count">{{len .Data.Devices}} devices</span>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{.Layout.T "admin.user"}}</th><th>{{.Layout.T "admin.device"}}</th><th>{{.Layout.T "admin.cursor"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.Devices}}
+          <tr><td>{{.Username}}</td><td><strong>{{.Name}}</strong></td><td>{{.LastCursor}}</td></tr>
+          {{else}}
+          <tr><td colspan="3">{{$.Layout.T "admin.no_device_auth"}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</div>
+{{end}}

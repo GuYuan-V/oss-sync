@@ -1,7 +1,6 @@
 package markdown
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/yuin/goldmark"
@@ -19,8 +18,8 @@ type debugNode struct {
 
 var kindDebug = gast.NewNodeKind("Debug")
 
-func (n *debugNode) Kind() gast.NodeKind { return kindDebug }
-func (n *debugNode) Text(source []byte) []byte { return []byte(n.Raw) }
+func (n *debugNode) Kind() gast.NodeKind           { return kindDebug }
+func (n *debugNode) Text(source []byte) []byte     { return []byte(n.Raw) }
 func (n *debugNode) Dump(source []byte, level int) {}
 
 type debugParser struct{}
@@ -28,11 +27,10 @@ type debugParser struct{}
 func (p *debugParser) Trigger() []byte { return []byte{'['} }
 func (p *debugParser) Parse(parent gast.Node, block text.Reader, pc parser.Context) gast.Node {
 	line, _ := block.PeekLine()
-	fmt.Printf("DEBUG Parse called: line=%q\n", string(line))
 	if len(line) < 2 || line[0] != '[' || line[1] != '[' {
 		return nil
 	}
-	// find ]]
+	// 查找闭合标记。
 	end := -1
 	for i := 2; i < len(line); i++ {
 		if line[i] == ']' && i+1 < len(line) && line[i+1] == ']' {
@@ -45,7 +43,6 @@ func (p *debugParser) Parse(parent gast.Node, block text.Reader, pc parser.Conte
 	}
 	inner := string(line[2:end])
 	block.Advance(end + 2)
-	fmt.Printf("DEBUG consumed: inner=%q\n", inner)
 	return &debugNode{Raw: inner}
 }
 
@@ -57,7 +54,7 @@ func (r *debugRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 			return gast.WalkContinue, nil
 		}
 		n := node.(*debugNode)
-		fmt.Fprintf(w, "[[DEBUG:%s]]", n.Raw)
+		_, _ = w.WriteString("[[" + n.Raw + "]]")
 		return gast.WalkContinue, nil
 	})
 }
@@ -76,7 +73,9 @@ func TestDebugWikilink(t *testing.T) {
 	if err := md.Convert([]byte(src), w); err != nil {
 		t.Fatalf("convert: %v", err)
 	}
-	t.Logf("output: %s", string(out))
+	if got := string(out); got != "<p>hello [[world]] end</p>\n" {
+		t.Fatalf("rendered output = %q", got)
+	}
 }
 
 type debugExt struct{}

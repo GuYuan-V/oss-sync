@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/oss/oss-server/internal/devices"
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/models"
+	"github.com/oss/oss-server/internal/recycle"
 	"github.com/oss/oss-server/internal/synclock"
 )
 
@@ -96,6 +98,15 @@ func (c *Cleanup) compactTombstonesForVault(userID uint, vaultID string, now tim
 	}
 
 	maxCompacted := state.CompactedRevision
+	// 回收站保留期（天），仅对回收站正文类型墓碑生效。
+	retentionDays := 0
+	if vaultID != "" {
+		days, rerr := recycle.RetentionDays(c.DB, vaultID)
+		if rerr != nil {
+			return rerr
+		}
+		retentionDays = days
+	}
 	return c.DB.Transaction(func(tx *gorm.DB) error {
 		var files []models.File
 		if err := tx.Where(
@@ -107,6 +118,14 @@ func (c *Cleanup) compactTombstonesForVault(userID uint, vaultID string, now tim
 			return err
 		}
 		for _, f := range files {
+			// 回收站正文在保留期内必须保留，等待恢复。
+			if vaultID != "" && f.StorageKey != "" &&
+				strings.HasPrefix(filepath.ToSlash(f.StorageKey), "vaults/"+vaultID+"/recycle/") {
+				if !f.DeletedAt.Valid ||
+					now.Sub(f.DeletedAt.Time) < time.Duration(retentionDays)*24*time.Hour {
+					continue
+				}
+			}
 			abs := filestore.DiskPath(c.Cfg.Storage.DataDir, f)
 			if err := os.Remove(abs); err != nil && !os.IsNotExist(err) {
 				return err

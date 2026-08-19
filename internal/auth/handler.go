@@ -19,6 +19,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/oss/oss-server/internal/config"
+	"github.com/oss/oss-server/internal/deviceauth"
 	"github.com/oss/oss-server/internal/jwt"
 	"github.com/oss/oss-server/internal/models"
 )
@@ -44,6 +45,12 @@ func (h *Handler) Register(r *gin.Engine) {
 		g.GET("/status", h.Status)
 		g.POST("/register", OptionalMiddleware(h.DB, h.Cfg), h.RegisterUser)
 		g.POST("/login", h.Login)
+		g.GET("/device-status", Middleware(h.DB, h.Cfg), h.DeviceStatus)
+	}
+
+	accountGroup := r.Group("/api/account", Middleware(h.DB, h.Cfg))
+	{
+		accountGroup.POST("/password", h.ChangePassword)
 	}
 }
 
@@ -64,6 +71,10 @@ type AuthResponse struct {
 	UserID    uint   `json:"user_id"`
 	Username  string `json:"username"`
 	Role      string `json:"role"`
+	// DeviceStatus 仅在插件登录时返回：pending / approved / revoked。
+	DeviceStatus string `json:"device_status,omitempty"`
+	// DeviceName 服务端确认的设备名称。
+	DeviceName string `json:"device_name,omitempty"`
 }
 
 // RegisterUser 处理 POST /api/auth/register。
@@ -110,7 +121,12 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 			})
 			return
 		}
-		role = "user"
+		// 无管理员时第一个注册账户自动成为 admin。
+		role, err = ResolveRegistrationRole(h.DB)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取管理员状态失败"})
+			return
+		}
 	} else if cur.Role != "admin" {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": "仅 admin 可创建其他用户，当前用户 " + cur.Username + " 无权限",
@@ -184,12 +200,102 @@ func (h *Handler) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "sign failed: " + err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, AuthResponse{
+	resp := AuthResponse{
 		Token:     token,
 		ExpiresIn: expiresIn,
 		UserID:    u.ID,
 		Username:  u.Username,
 		Role:      u.Role,
+	}
+
+	// 插件登录携带设备头：登记设备并返回设备授权状态。
+	clientID := deviceauth.NormalizeClientID(c.GetHeader(deviceauth.ClientIDHeader))
+	if clientID != "" {
+		deviceName := deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader))
+		status, err := deviceauth.RegisterDevice(h.DB, u.ID, clientID, deviceName, time.Now())
+		if err != nil {
+			if errors.Is(err, deviceauth.ErrRevoked) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "this device has been revoked", "code": "device_revoked"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "登记设备失败: " + err.Error()})
+			return
+		}
+		resp.DeviceStatus = status
+		resp.DeviceName = deviceName
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// DeviceStatus 处理 GET /api/auth/device-status?client_id=xxx。
+// 插件在设备待授权期间每 5 秒轮询该接口。
+func (h *Handler) DeviceStatus(c *gin.Context) {
+	u, ok := RequireUser(c)
+	if !ok {
+		return
+	}
+	clientID := deviceauth.NormalizeClientID(c.Query("client_id"))
+	if clientID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
+		return
+	}
+	status, name, err := deviceauth.GetDevice(h.DB, u.ID, clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"status":      status,
+		"device_name": name,
+	})
+}
+
+// changePasswordRequest 修改自己的密码请求体。
+type changePasswordRequest struct {
+	OldPassword     string `json:"old_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required"`
+	ConfirmPassword string `json:"confirm_password" binding:"required"`
+}
+
+// ChangePassword 处理 POST /api/account/password。
+// 校验旧密码后更新密码并递增 token 版本；返回新 token 供调用方继续会话。
+func (h *Handler) ChangePassword(c *gin.Context) {
+	u, ok := RequireUser(c)
+	if !ok {
+		return
+	}
+	var req changePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.NewPassword != req.ConfirmPassword {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "两次输入的新密码不一致", "code": "password_mismatch"})
+		return
+	}
+	if err := ChangePassword(h.DB, u.ID, req.OldPassword, req.NewPassword); err != nil {
+		if errors.Is(err, errBadCred) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "旧密码不正确", "code": "wrong_old_password"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// 重新读取用户（token 版本已递增），签发新 token 保持当前会话。
+	var updated models.User
+	if err := h.DB.First(&updated, u.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取用户失败"})
+		return
+	}
+	token, expiresIn, err := IssueToken(h.Cfg, updated)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "签发新会话失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "密码已更新",
+		"token":      token,
+		"expires_in": expiresIn,
 	})
 }
 
@@ -226,6 +332,9 @@ func authenticateBearer(db *gorm.DB, cfg *config.Config, token string) (*models.
 	var u models.User
 	if err := db.First(&u, claims.UserID).Error; err != nil {
 		return nil, errUserNotFound
+	}
+	if claims.TokenVersion != u.TokenVersion {
+		return nil, errBadCred
 	}
 	return &u, nil
 }

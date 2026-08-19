@@ -15,6 +15,7 @@ import (
 	"github.com/oss/oss-server/internal/database"
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/models"
+	"github.com/oss/oss-server/internal/recycle"
 )
 
 func sqlNullTime(t time.Time) sql.NullTime {
@@ -28,6 +29,9 @@ func setupCleanup(t *testing.T, fixedNow time.Time) (*Cleanup, *gorm.DB, string)
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
 	}
 	if err := database.AutoMigrate(db); err != nil {
 		t.Fatal(err)
@@ -351,5 +355,71 @@ func setFileMtime(t *testing.T, path string, mtime time.Time) {
 	t.Helper()
 	if err := os.Chtimes(path, mtime, mtime); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCompactTombstones_RespectsRecycleRetention(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	c, db, dataDir := setupCleanup(t, now)
+
+	user := models.User{ID: 1, Username: "u"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	vault := models.Vault{ID: "vault-r", OwnerID: user.ID, Name: "R", IsDefault: true}
+	if err := db.Create(&vault).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.VaultSyncState{VaultID: vault.ID, HeadRevision: 5}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// 保留期内的回收站正文必须保留。
+	keep := models.File{
+		UserID: user.ID, VaultID: vault.ID, Path: "Keep.md", Type: "markdown",
+		Hash: "h", Size: 3, Revision: 1, IsDeleted: true, DeletedAt: sqlNullTime(now),
+		StorageKey: recycle.Key(vault.ID, 1),
+	}
+	if err := db.Create(&keep).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(recycle.DiskPath(dataDir, keep)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(recycle.DiskPath(dataDir, keep), []byte("kkk"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// 已过保留期的回收站正文应被清理。
+	expired := models.File{
+		UserID: user.ID, VaultID: vault.ID, Path: "Expired.md", Type: "markdown",
+		Hash: "h", Size: 3, Revision: 2, IsDeleted: true,
+		DeletedAt:  sqlNullTime(now.Add(-31 * 24 * time.Hour)),
+		StorageKey: recycle.Key(vault.ID, 2),
+	}
+	if err := db.Create(&expired).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(recycle.DiskPath(dataDir, expired), []byte("eee"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.CompactTombstones(); err != nil {
+		t.Fatalf("compact: %v", err)
+	}
+
+	var kept models.File
+	if err := db.Unscoped().Where("path = ?", "Keep.md").First(&kept).Error; err != nil {
+		t.Fatalf("recent recycle item was compacted: %v", err)
+	}
+	if _, err := os.Stat(recycle.DiskPath(dataDir, kept)); err != nil {
+		t.Fatalf("recent recycle body removed: %v", err)
+	}
+	var gone int64
+	if err := db.Unscoped().Model(&models.File{}).Where("path = ?", "Expired.md").Count(&gone).Error; err != nil {
+		t.Fatal(err)
+	}
+	if gone != 0 {
+		t.Fatalf("expired recycle item retained: %d", gone)
 	}
 }

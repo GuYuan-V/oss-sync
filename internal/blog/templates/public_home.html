@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN" data-theme-key="oss-console-theme">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="浏览此 OSS Sync 服务公开发布的博客。">
+  <title>公开博客 · OSS Sync</title>
+  <script src="/ui/assets/theme.js?v=2"></script>
+  <link rel="stylesheet" href="/ui/assets/console.css?v=7">
+</head>
+<body>
+  <div class="shell shell--auth public-home">
+    <header class="masthead">
+      <a class="wordmark" href="/">
+        <span class="wordmark__mark">OS</span>
+        <span><strong>OSS Sync</strong><small>Public blog directory</small></span>
+      </a>
+      <div class="masthead-actions">
+        <div id="theme-switcher" class="theme-switcher" role="group" aria-label="主题模式">
+          <button type="button" class="button theme-switcher__btn" data-theme-pref="auto" aria-pressed="false">跟随系统</button>
+          <button type="button" class="button theme-switcher__btn" data-theme-pref="light" aria-pressed="false">亮色</button>
+          <button type="button" class="button theme-switcher__btn" data-theme-pref="dark" aria-pressed="false">暗色</button>
+        </div>
+        <a class="quiet-link" href="/login">登录</a>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="public-home__intro" aria-labelledby="public-home-title">
+        <span class="eyebrow">Public blogs</span>
+        <h1 id="public-home-title">公开博客</h1>
+        <p class="lead">浏览此服务上由 Vault 所有者主动公开的博客。</p>
+      </section>
+
+      {{if .Blogs}}
+      <section class="public-blog-grid" aria-label="公开博客列表">
+        {{range .Blogs}}
+        <article class="public-blog-card">
+          <div class="public-blog-card__identity">
+            {{if .LogoURL}}<img class="public-blog-card__logo{{if eq .LogoShape "circle"}} is-circle{{end}}" src="{{.LogoURL}}" alt="{{.Name}} Logo" width="64" height="64">{{else}}<span class="public-blog-card__monogram" aria-hidden="true">OS</span>{{end}}
+            <div>
+              <h2>{{.Name}}</h2>
+              {{if .Description}}<p>{{.Description}}</p>{{else}}<p>这个博客暂时没有介绍。</p>{{end}}
+            </div>
+          </div>
+          <a class="button button--primary" href="{{.URL}}">进入博客</a>
+        </article>
+        {{end}}
+      </section>
+      {{else}}
+      <section class="public-home__empty" aria-labelledby="public-empty-title">
+        <span class="eyebrow">Empty directory</span>
+        <h2 id="public-empty-title">暂无公开博客</h2>
+        <p>Vault 所有者开启“公开首页博客”后，博客会显示在这里。</p>
+        <a class="button button--primary" href="/login">登录控制台</a>
+      </section>
+      {{end}}
+    </main>
+  </div>
+  <script src="/ui/assets/app.js?v=4"></script>
+</body>
+</html>

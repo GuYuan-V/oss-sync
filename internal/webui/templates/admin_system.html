@@ -1,0 +1,77 @@
+{{define "admin-system"}}
+<section class="dashboard-heading"><div><span class="eyebrow">Admin · System</span><h1>{{.Layout.T "common.system_settings"}}</h1></div></section>
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+{{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "admin.settings_saved"}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="gate-panel">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">Registration gate</span>
+      <h2>{{if .Data.RegistrationEnabled}}{{.Layout.T "common.open_registration"}}{{else}}{{.Layout.T "common.close_registration"}}{{end}}</h2>
+      <p>{{.Layout.T "admin.registration_help"}}</p>
+    </div>
+    <form method="post" action="/dashboard/admin/system" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+       <label class="switch-control">
+         <input type="checkbox" name="registration_enabled" {{if .Data.RegistrationEnabled}}checked{{end}}>
+         <span class="switch-control__track" aria-hidden="true"></span>
+         <span>{{.Layout.T "admin.allow_public_registration"}}</span>
+       </label>
+       <label class="switch-control">
+         <input type="checkbox" name="custom_fragments_enabled" {{if .Data.CustomFragmentsEnabled}}checked{{end}}>
+         <span class="switch-control__track" aria-hidden="true"></span>
+         <span>{{.Layout.T "admin.custom_fragments"}}</span>
+         <small>{{.Layout.T "admin.custom_fragments_help"}}</small>
+       </label>
+       <label>
+         <span>{{.Layout.T "admin.global_sync_mode"}}</span>
+         <select name="sync_mode" required>
+           <option value="user_choice" {{if eq .Data.SyncMode "user_choice"}}selected{{end}}>{{.Layout.T "admin.sync_mode_user_choice"}}</option>
+          <option value="short_poll" {{if eq .Data.SyncMode "short_poll"}}selected{{end}}>{{.Layout.T "admin.sync_mode_short_poll"}}</option>
+          <option value="long_poll" {{if eq .Data.SyncMode "long_poll"}}selected{{end}}>{{.Layout.T "admin.sync_mode_long_poll"}}</option>
+        </select>
+        <small>{{.Layout.T "admin.sync_mode_policy_note"}}</small>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.default_recycle_bin_days"}}</span>
+        <input type="number" name="default_recycle_bin_days" min="1" max="{{.Data.MaxRecycleBinDays}}" value="{{.Data.DefaultRecycleBinDays}}" required>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.max_long_poll_wait_sec"}}</span>
+        <input type="number" name="max_long_poll_wait_sec" min="1" max="30" value="{{.Data.MaxLongPollWaitSec}}" required>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.max_sync_debounce_sec"}}</span>
+        <input type="number" name="max_sync_debounce_sec" min="3" max="3600" value="{{.Data.MaxSyncDebounceSec}}" required>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.max_recycle_bin_days"}}</span>
+        <input type="number" name="max_recycle_bin_days" min="1" max="3650" value="{{.Data.MaxRecycleBinDays}}" required>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.max_vault_storage_mb"}}</span>
+        <input type="number" name="max_vault_storage_mb" min="0" value="{{.Data.MaxVaultStorageMB}}" required>
+        <small>{{.Layout.T "admin.zero_means_no_storage_limit"}}</small>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.max_upload_size_mb"}}</span>
+        <input type="number" name="max_upload_size_mb" min="1" max="{{.Data.ConfigMaxUploadSizeMB}}" value="{{.Data.MaxUploadSizeMB}}" required>
+        <small>{{.Layout.T "admin.config_hard_limit_mb" .Data.ConfigMaxUploadSizeMB}}</small>
+      </label>
+      <button class="button button--primary" type="submit">{{.Layout.T "admin.save_system_settings"}}</button>
+    </form>
+  </article>
+  <article class="ledger-panel">
+    <header><div><span class="eyebrow">Database</span><h2>{{.Layout.T "admin.database_configuration"}}</h2></div></header>
+    <p class="panel-note">{{.Layout.T "admin.database_configuration_help"}}</p>
+    <dl class="summary-strip"><div><dt>{{.Layout.T "admin.database_driver"}}</dt><dd>{{.Data.DatabaseDriver}}</dd></div><div><dt>{{.Layout.T "admin.database_dsn"}}</dt><dd>{{.Data.DatabaseDSN}}</dd></div></dl>
+    <form method="post" action="/dashboard/admin/system/database" class="stack-form database-config-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <label><span>{{.Layout.T "admin.database_next_driver"}}</span><select name="database_driver"><option value="sqlite" {{if eq .Data.DatabaseDriver "sqlite"}}selected{{end}}>SQLite</option><option value="postgres" {{if eq .Data.DatabaseDriver "postgres"}}selected{{end}}>PostgreSQL</option></select></label>
+      <label><span>{{.Layout.T "admin.database_next_dsn"}}</span><input name="database_dsn" required></label>
+      <button class="button button--primary" type="submit">{{.Layout.T "admin.save_database_configuration"}}</button>
+      <p class="panel-note database-config-form__notice">{{.Layout.T "admin.database_restart_required"}}</p>
+    </form>
+  </article>
+</div>
+{{end}}

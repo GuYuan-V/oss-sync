@@ -1,0 +1,48 @@
+{{define "vaults"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">My vaults</span>
+    <h1>{{.Layout.T "common.my_vaults"}}</h1>
+  </div>
+  <a class="button button--primary" href="/dashboard/vaults/new">{{.Layout.T "common.new_vault"}}</a>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Vault registry</span>
+        <h2>{{.Layout.T "vault.vault_list"}}</h2>
+      </div>
+      <span class="ledger-count">{{len .Data.Vaults}} vaults</span>
+    </header>
+    {{if .Data.Vaults}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{.Layout.T "common.name"}}</th><th>{{.Layout.T "vault.my_role"}}</th><th>{{.Layout.T "vault.member_count"}}</th><th>{{.Layout.T "vault.storage_used"}}</th><th></th></tr></thead>
+        <tbody>
+          {{range .Data.Vaults}}
+          <tr>
+            <td>
+              <strong>{{.Name}}</strong>
+              {{if .IsDefault}}<small class="file-name">{{$.Layout.T "vault.default_vault"}}</small>{{end}}
+            </td>
+            <td><span class="role role--{{.AccessRole}}">{{.AccessRole}}</span></td>
+            <td>{{.MemberCount}}</td>
+            <td>{{formatBytes .StorageUsed}} / {{if .StorageQuota}}{{formatBytes .StorageQuota}}{{else}}{{$.Layout.T "overview.unlimited"}}{{end}}</td>
+            <td><a class="quiet-link" href="/dashboard/vaults/{{.ID}}">{{$.Layout.T "common.enter"}}</a></td>
+          </tr>
+          {{else}}
+          <tr><td colspan="5">{{$.Layout.T "vault.no_vaults_created"}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="panel-empty">{{.Layout.T "vault.no_vaults_desc"}}</p>
+    {{end}}
+  </article>
+</div>
+{{end}}

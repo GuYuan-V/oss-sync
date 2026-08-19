@@ -1,0 +1,47 @@
+{{define "login"}}
+<main class="shell shell--auth">
+  <header class="masthead">
+    <a class="wordmark" href="/login" aria-label="{{.Layout.T "auth.login_aria_label"}}">
+      <span class="wordmark__mark">OS</span>
+      <span><strong>OSS Sync</strong><small>Self-hosted vault relay</small></span>
+    </a>
+    <div class="masthead-actions">
+      <div id="theme-switcher" class="theme-switcher" role="group" aria-label="{{.Layout.T "common.theme_mode"}}">
+        <button type="button" class="button theme-switcher__btn" data-theme-pref="auto" aria-pressed="false">{{.Layout.T "common.theme_modes.system"}}</button>
+        <button type="button" class="button theme-switcher__btn" data-theme-pref="light" aria-pressed="false">{{.Layout.T "common.theme_modes.light"}}</button>
+        <button type="button" class="button theme-switcher__btn" data-theme-pref="dark" aria-pressed="false">{{.Layout.T "common.theme_modes.dark"}}</button>
+      </div>
+      <a class="quiet-link" href="/register">{{.Layout.T "auth.register_link"}}</a>
+    </div>
+  </header>
+
+  <section class="login-frame">
+    <section class="form-sheet">
+      <span class="eyebrow">Vault access</span>
+      <h1>{{.Layout.T "auth.login_title"}}</h1>
+      <p class="lead">{{.Layout.T "auth.login_subtitle"}}</p>
+
+      {{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+      <form method="post" action="/login" class="stack-form">
+        <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+        <label>
+          <span>{{.Layout.T "common.username"}}</span>
+          <input name="username" minlength="3" maxlength="64" autocomplete="username" required autofocus>
+        </label>
+        <label>
+          <span>{{.Layout.T "common.password"}}</span>
+          <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <button class="button button--primary" type="submit">{{.Layout.T "auth.login_button"}}</button>
+      </form>
+    </section>
+
+    <aside class="login-aside">
+      <span class="eyebrow">One ledger</span>
+      <h1>{{.Layout.T "auth.login_aside_title"}}</h1>
+      <p>{{.Layout.T "auth.login_aside_text"}}</p>
+    </aside>
+  </section>
+</main>
+{{end}}

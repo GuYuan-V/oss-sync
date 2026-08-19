@@ -1,0 +1,89 @@
+{{define "vault-files"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Vault files</span>
+    <h1>{{.Data.VaultName}}</h1>
+    <p class="lead">{{.Layout.T "vault.browse_files_desc"}}</p>
+    <nav class="action-cell" aria-label="{{$.Layout.T "common.vault_settings"}}">
+      <a class="button" href="/dashboard/vaults/{{.Data.VaultID}}/shares">{{.Layout.T "common.shares"}}</a>
+      <a class="button" href="/dashboard/vaults/{{.Data.VaultID}}/recycle">{{.Layout.T "common.recycle"}}</a>
+      <a class="button" href="/dashboard/vaults/{{.Data.VaultID}}/history">{{.Layout.T "common.history"}}</a>
+      <a class="button" href="/dashboard/vaults/{{.Data.VaultID}}/settings">{{.Layout.T "vault.template_and_sync"}}</a>
+    </nav>
+  </div>
+  <dl class="summary-strip">
+    <div><dt>{{$.Layout.T "vault.file_count"}}</dt><dd>{{.Data.FileCount}}</dd></div>
+    <div><dt>{{$.Layout.T "vault.storage_used"}}</dt><dd>{{formatBytes .Data.StorageUsed}} / {{if .Data.StorageQuota}}{{formatBytes .Data.StorageQuota}}{{else}}{{$.Layout.T "overview.unlimited"}}{{end}}</dd></div>
+  </dl>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">File tree</span>
+        <h2>{{.Layout.T "common.files"}}</h2>
+        <nav class="file-breadcrumbs" aria-label="{{$.Layout.T "vault.file_path"}}">
+          <a href="/dashboard/vaults/{{.Data.VaultID}}">{{$.Layout.T "vault.root_directory"}}</a>
+          {{range .Data.Breadcrumbs}}
+          <span aria-hidden="true">/</span>
+          {{if .Current}}<span aria-current="page">{{.Name}}</span>{{else}}<a href="?dir={{.Path}}">{{.Name}}</a>{{end}}
+          {{end}}
+        </nav>
+      </div>
+      <a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}/history">{{$.Layout.T "common.history"}}</a>
+    </header>
+    {{if or .Data.Folders .Data.Files}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{$.Layout.T "common.path"}}</th><th>{{$.Layout.T "common.type"}}</th><th>{{$.Layout.T "common.size"}}</th><th>{{$.Layout.T "common.actions"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.Folders}}
+          <tr>
+            <td><a class="quiet-link" href="?dir={{.Path}}">{{.Name}}</a></td>
+            <td><span class="role">{{$.Layout.T "vault.directory"}}</span></td>
+            <td>-</td>
+            <td>-</td>
+          </tr>
+          {{end}}
+          {{range .Data.Files}}
+          <tr>
+            <td>
+              {{if eq .Type "markdown"}}
+              <a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/files/preview?path={{.Path}}">{{.Name}}</a>
+              {{else}}
+              <strong>{{.Name}}</strong>
+              {{end}}
+              {{if ne .Name .Path}}<small class="file-name">{{.Path}}</small>{{end}}
+            </td>
+            <td><span class="role role--{{.Type}}">{{.Type}}</span></td>
+            <td>{{formatBytes .Size}}</td>
+            <td>
+              <div class="action-cell">
+                {{if eq .Type "markdown"}}
+                <a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/history?path={{urlquery .Path}}">{{$.Layout.T "common.history"}}</a>
+                {{end}}
+                <a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/files/download?path={{.Path}}">{{$.Layout.T "common.download"}}</a>
+                <form method="post" action="/dashboard/vaults/{{$.Data.VaultID}}/files/delete"
+                      data-confirm="{{$.Layout.T "files.delete_confirm" .Path}}">
+                  <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                  <input type="hidden" name="path" value="{{.Path}}">
+                  <button class="text-button text-button--danger" type="submit">{{$.Layout.T "common.delete"}}</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="4">{{$.Layout.T "vault.no_files"}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="panel-empty">{{.Layout.T "vault.no_files_in_dir"}}</p>
+    {{end}}
+  </article>
+</div>
+{{end}}

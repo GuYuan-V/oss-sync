@@ -1,8 +1,6 @@
 package auth_test
 
 import (
-	"bytes"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,7 +26,7 @@ func TestEnsureBootstrapAdminFromEnvironment(t *testing.T) {
 		},
 	}
 
-	created, err := auth.EnsureBootstrapAdmin(db, cfg, nil, &bytes.Buffer{})
+	created, err := auth.EnsureBootstrapAdmin(db, cfg)
 	if err != nil {
 		t.Fatalf("bootstrap admin: %v", err)
 	}
@@ -52,7 +50,7 @@ func TestEnsureBootstrapAdminFromEnvironment(t *testing.T) {
 	}
 
 	t.Setenv("OSS_ADMIN_PASSWORD", "")
-	created, err = auth.EnsureBootstrapAdmin(db, cfg, nil, &bytes.Buffer{})
+	created, err = auth.EnsureBootstrapAdmin(db, cfg)
 	if err != nil {
 		t.Fatalf("second bootstrap: %v", err)
 	}
@@ -61,7 +59,7 @@ func TestEnsureBootstrapAdminFromEnvironment(t *testing.T) {
 	}
 }
 
-func TestEnsureBootstrapAdminRequiresSecretWithoutTerminal(t *testing.T) {
+func TestEnsureBootstrapAdminWithoutPasswordDefersToFirstRegistration(t *testing.T) {
 	db := newAuthTestDB(t)
 	t.Setenv("OSS_ADMIN_PASSWORD", "")
 	cfg := &config.Config{
@@ -71,15 +69,39 @@ func TestEnsureBootstrapAdminRequiresSecretWithoutTerminal(t *testing.T) {
 			BootstrapAdminUsername: "admin",
 		},
 	}
-	input, err := os.Open(os.DevNull)
+
+	created, err := auth.EnsureBootstrapAdmin(db, cfg)
+	if err != nil {
+		t.Fatalf("bootstrap without password: %v", err)
+	}
+	if created {
+		t.Fatal("bootstrap must not create an admin without OSS_ADMIN_PASSWORD")
+	}
+	var adminCount int64
+	if err := db.Model(&models.User{}).Where("role = ?", "admin").Count(&adminCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if adminCount != 0 {
+		t.Fatalf("admin count = %d, want 0", adminCount)
+	}
+
+	// 第一个注册用户自动成为管理员。
+	role, err := auth.ResolveRegistrationRole(db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer input.Close()
-
-	created, err := auth.EnsureBootstrapAdmin(db, cfg, input, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "OSS_ADMIN_PASSWORD") {
-		t.Fatalf("expected non-interactive password guidance, got created=%v err=%v", created, err)
+	if role != "admin" {
+		t.Fatalf("first registration role = %q, want admin", role)
+	}
+	if _, err := auth.CreateAccount(db, "first-user", "password123", role); err != nil {
+		t.Fatal(err)
+	}
+	role, err = auth.ResolveRegistrationRole(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if role != "user" {
+		t.Fatalf("second registration role = %q, want user", role)
 	}
 }
 
@@ -122,6 +144,36 @@ func TestValidateAccountInputRejectsBcryptOverflow(t *testing.T) {
 	}
 }
 
+func TestChangePasswordInvalidatesOldToken(t *testing.T) {
+	db := newAuthTestDB(t)
+	user, err := auth.CreateAccount(db, "change-me", "password123", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{Auth: config.AuthConfig{JWTSecret: "test-secret", JWTTTLHours: 1}}
+	oldToken, _, err := auth.IssueToken(cfg, *user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.AuthenticateToken(db, cfg, oldToken); err != nil {
+		t.Fatalf("old token should be valid before password change: %v", err)
+	}
+
+	if err := auth.ChangePassword(db, user.ID, "password123", "new-password-123"); err != nil {
+		t.Fatalf("change password: %v", err)
+	}
+	if _, err := auth.AuthenticateToken(db, cfg, oldToken); err == nil {
+		t.Fatal("old token remained valid after password change")
+	}
+	// 旧密码不能再登录。
+	if _, err := auth.AuthenticateCredentials(db, "change-me", "password123"); err == nil {
+		t.Fatal("old password still authenticates")
+	}
+	if _, err := auth.AuthenticateCredentials(db, "change-me", "new-password-123"); err != nil {
+		t.Fatalf("new password should authenticate: %v", err)
+	}
+}
+
 func newAuthTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "auth.db")), &gorm.Config{
@@ -129,6 +181,9 @@ func newAuthTestDB(t *testing.T) *gorm.DB {
 	})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
 	}
 	if err := database.AutoMigrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)

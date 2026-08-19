@@ -1,81 +1,80 @@
-<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>创建 OSS Sync 账户</title>
-  <link rel="stylesheet" href="/ui/assets/console.css">
-</head>
-<body>
-  <main class="shell shell--auth">
-    <header class="masthead">
-      <a class="wordmark" href="/register" aria-label="OSS Sync 注册页">
-        <span class="wordmark__mark">OS</span>
-        <span><strong>OSS Sync</strong><small>Self-hosted vault relay</small></span>
-      </a>
-      <a class="quiet-link" href="/admin">管理员入口</a>
-    </header>
+{{define "register"}}
+<main class="shell shell--auth">
+  <header class="masthead">
+    <a class="wordmark" href="/register" aria-label="{{.Layout.T "auth.register_aria_label"}}">
+      <span class="wordmark__mark">OS</span>
+      <span><strong>OSS Sync</strong><small>Self-hosted vault relay</small></span>
+    </a>
+    <div class="masthead-actions">
+      <div id="theme-switcher" class="theme-switcher" role="group" aria-label="{{.Layout.T "common.theme_mode"}}">
+        <button type="button" class="button theme-switcher__btn" data-theme-pref="auto" aria-pressed="false">{{.Layout.T "common.theme_modes.system"}}</button>
+        <button type="button" class="button theme-switcher__btn" data-theme-pref="light" aria-pressed="false">{{.Layout.T "common.theme_modes.light"}}</button>
+        <button type="button" class="button theme-switcher__btn" data-theme-pref="dark" aria-pressed="false">{{.Layout.T "common.theme_modes.dark"}}</button>
+      </div>
+      <a class="quiet-link" href="/login">{{.Layout.T "auth.register_login_link"}}</a>
+    </div>
+  </header>
 
-    <section class="auth-grid">
-      <aside class="ledger-rail" aria-label="注册状态">
-        <span class="eyebrow">Registration gate</span>
-        {{if .RegistrationEnabled}}
-          <strong class="gate-state gate-state--open">开放</strong>
-          <p>创建一次账户，随后在每台 Obsidian 设备中使用同一组凭据登录。</p>
-        {{else}}
-          <strong class="gate-state gate-state--closed">关闭</strong>
-          <p>管理员暂时停止了新账户创建。已有账户仍可正常登录和同步。</p>
-        {{end}}
-        <ol class="sequence">
-          <li><span>01</span>创建账户</li>
-          <li><span>02</span>打开插件设置</li>
-          <li><span>03</span>登录、创建并绑定 Vault</li>
-        </ol>
-      </aside>
+  <section class="auth-grid">
+    <aside class="ledger-rail" aria-label="{{.Layout.T "auth.register_status_label"}}">
+      <span class="eyebrow">Registration gate</span>
+      {{if .Data.RegistrationEnabled}}
+        <strong class="gate-state gate-state--open">{{.Layout.T "common.status.open"}}</strong>
+        <p>{{.Layout.T "auth.register_open_text"}}</p>
+      {{else}}
+        <strong class="gate-state gate-state--closed">{{.Layout.T "common.status.closed"}}</strong>
+        <p>{{.Layout.T "auth.register_closed_text"}}</p>
+      {{end}}
+      <ol class="sequence">
+        <li><span>01</span>{{.Layout.T "auth.register_step_create"}}</li>
+        <li><span>02</span>{{.Layout.T "auth.register_step_settings"}}</li>
+        <li><span>03</span>{{.Layout.T "auth.register_step_bind"}}</li>
+      </ol>
+    </aside>
 
-      <section class="form-sheet">
-        {{if .Success}}
-          <span class="eyebrow">Account ready</span>
-          <h1>账户已写入同步账本。</h1>
-          <div class="notice notice--success" role="status">
-            用户 <strong>{{.Username}}</strong> 已创建。
-          </div>
-          <p class="lead">回到 Obsidian 的 OSS Sync 设置完成登录，然后在 Vault 区域明确创建服务端仓库；创建后才会开始首次全量同步。</p>
-          <a class="button button--primary" href="/register">为另一位用户注册</a>
-        {{else if not .RegistrationEnabled}}
-          <span class="eyebrow">Gate closed</span>
-          <h1>新用户注册已暂停。</h1>
-          <p class="lead">这不会影响已有用户。需要新账户时，请联系服务管理员重新开放注册。</p>
-        {{else}}
-          <span class="eyebrow">New identity</span>
-          <h1>为你的笔记建立一个同步身份。</h1>
-          <p class="lead">凭据只用于这个自托管服务。注册后，使用它登录 Obsidian 插件。</p>
+    <section class="form-sheet">
+      {{if .Data.Success}}
+        <span class="eyebrow">Account ready</span>
+        <h1>{{.Layout.T "auth.register_success_title"}}</h1>
+        <div class="notice notice--success" role="status">
+          {{.Layout.T "auth.register_created_prefix"}}<strong>{{.Data.Username}}</strong>{{.Layout.T "auth.register_created_suffix"}}
+        </div>
+        <p class="lead">{{.Layout.T "auth.register_success_text"}}</p>
+        <a class="button button--primary" href="/login">{{.Layout.T "auth.register_success_link"}}</a>
+      {{else if not .Data.RegistrationEnabled}}
+        <span class="eyebrow">Gate closed</span>
+        <h1>{{.Layout.T "auth.register_suspended_title"}}</h1>
+        <p class="lead">{{.Layout.T "auth.register_suspended_text"}}</p>
+      {{else}}
+        <span class="eyebrow">New identity</span>
+        <h1>{{.Layout.T "auth.register_form_title"}}</h1>
+        <p class="lead">{{.Layout.T "auth.register_form_text"}}</p>
 
-          {{if .Error}}<div class="notice notice--error" role="alert">{{.Error}}</div>{{end}}
+        {{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
 
-          <form method="post" action="/register" class="stack-form">
-            <label>
-              <span>用户名</span>
-              <input name="username" value="{{.Username}}" minlength="3" maxlength="64"
-                     autocomplete="username" required autofocus>
-              <small>3–64 个字符</small>
-            </label>
-            <label>
-              <span>密码</span>
-              <input type="password" name="password" minlength="8" maxlength="128"
-                     autocomplete="new-password" required>
-              <small>至少 8 个字符、最多 72 字节；请使用独立密码</small>
-            </label>
-            <label>
-              <span>确认密码</span>
-              <input type="password" name="password_confirm" minlength="8" maxlength="128"
-                     autocomplete="new-password" required>
-            </label>
-            <button class="button button--primary" type="submit">创建账户</button>
-          </form>
-        {{end}}
-      </section>
+        <form method="post" action="/register" class="stack-form">
+          <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+          <label>
+            <span>{{.Layout.T "common.username"}}</span>
+            <input name="username" value="{{.Data.Username}}" minlength="3" maxlength="64"
+                   autocomplete="username" required autofocus>
+            <small>{{.Layout.T "auth.register_username_hint"}}</small>
+          </label>
+          <label>
+            <span>{{.Layout.T "common.password"}}</span>
+            <input type="password" name="password" minlength="8" maxlength="128"
+                   autocomplete="new-password" required>
+            <small>{{.Layout.T "auth.register_password_hint"}}</small>
+          </label>
+          <label>
+            <span>{{.Layout.T "common.confirm_password"}}</span>
+            <input type="password" name="password_confirm" minlength="8" maxlength="128"
+                   autocomplete="new-password" required>
+          </label>
+          <button class="button button--primary" type="submit">{{.Layout.T "auth.register_button"}}</button>
+        </form>
+      {{end}}
     </section>
-  </main>
-</body>
-</html>
+  </section>
+</main>
+{{end}}

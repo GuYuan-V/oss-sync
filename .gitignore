@@ -1,32 +1,59 @@
-# 二进制
-/oss-server
-/bin/
-*.exe
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
-# 运行期数据（含 SQLite、用户文件、附件）
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+configs/config.local.yaml
+configs/*.local.yaml
+
+# Runtime data: databases, uploaded files, themes, recovery snapshots, and logs
 /data/
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+*.sqlite
+*.sqlite3
+*.log
 
-# 本地配置覆盖
-configs/config.local.yaml
+# Go build and test artifacts
+/bin/
+/oss-server
+/server
+/server.exe
+/server.exe~
+*.exe
+*.test
+*.out
+coverage.txt
+coverage.out
 
-# IDE
-.idea/
-.vscode/
-*.swp
+# Plugin dependencies and build outputs
+/plugin/node_modules/
+/plugin/main.js
+/plugin/*.js.map
+/plugin/dist/
 
-# Claude Code 本地会话
-.claude/
-.omo/
+# Local automation, browser, and code-index artifacts
+/.codegraph/
+/.omo/
+/.playwright-mcp/
+/.claude/
 
-# Go 工作区
-vendor/
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
 
-# 插件构建产物
-plugin/node_modules/
-plugin/main.js
-plugin/*.js.map
-plugin/dist/
+# Private working notes
+/项目技术需求说明书.md

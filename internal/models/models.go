@@ -51,6 +51,8 @@ type User struct {
 	PasswordHash string `gorm:"size:128;not null"`
 	Role         string `gorm:"size:16;not null;default:'user'"` // admin / user
 	StorageQuota int64  `gorm:"not null;default:0"`              // 字节数，0 表示不限
+	// TokenVersion 在修改密码或重置密码时递增，用于使旧 JWT 失效。
+	TokenVersion uint `gorm:"not null;default:0"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    gorm.DeletedAt `gorm:"index"`
@@ -59,14 +61,25 @@ type User struct {
 // SystemSetting 保存由管理员在网页面板修改的服务端运行设置。
 // 单例记录固定使用 ID=1，避免部署配置覆盖管理员已经保存的选择。
 type SystemSetting struct {
-	ID                  uint `gorm:"primaryKey"`
-	RegistrationEnabled bool `gorm:"not null"`
+	ID                     uint `gorm:"primaryKey"`
+	RegistrationEnabled    bool `gorm:"not null"`
+	CustomFragmentsEnabled bool `gorm:"not null;default:false"`
 	// JWTSecret is generated on the first server start and is deliberately not
 	// sourced from a checked-in configuration file. It must remain stable so
 	// existing sessions stay valid after a restart.
 	JWTSecret string `gorm:"type:text"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// PublicHomeVaultID 是旧版单仓库首页字段，仅为无损兼容保留；根路径不再读取它。
+	PublicHomeVaultID string `gorm:"size:36"`
+	// DefaultRecycleBinDays 是仓库回收站保留天数的系统默认值。
+	DefaultRecycleBinDays int    `gorm:"not null;default:30"`
+	SyncMode              string `gorm:"size:32;not null;default:'user_choice'"`
+	MaxLongPollWaitSec    int    `gorm:"not null;default:30"`
+	MaxSyncDebounceSec    int    `gorm:"not null;default:300"`
+	MaxRecycleBinDays     int    `gorm:"not null;default:3650"`
+	MaxVaultStorageBytes  int64  `gorm:"not null;default:0"`
+	MaxUploadSizeBytes    int64  `gorm:"not null;default:0"`
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 // Vault 是一个独立的 Obsidian 笔记仓库。同步 revision、文件路径和配置均按 Vault 隔离。
@@ -115,8 +128,12 @@ type VaultSetting struct {
 	CustomHeader      string  `gorm:"type:text"`
 	CustomFooter      string  `gorm:"type:text"`
 	KeepDirectoryTree bool    `gorm:"not null;default:true"`
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	// RecycleBinDays 仓库回收站保留天数，0 表示继承系统默认值。
+	RecycleBinDays int `gorm:"not null;default:0"`
+	// IsPublicBlog controls /b/:vault_id access and root-directory discovery.
+	IsPublicBlog bool `gorm:"not null;default:false"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // VaultSyncState 保存某个 Vault 当前的服务端单调递增 revision。
@@ -129,14 +146,31 @@ type VaultSyncState struct {
 
 // ClientDevice 是用户的一台客户端设备。
 type ClientDevice struct {
-	ID         uint   `gorm:"primaryKey"`
-	UserID     uint   `gorm:"index;not null;uniqueIndex:idx_user_client"`
-	ClientID   string `gorm:"size:64;not null;uniqueIndex:idx_user_client"`
-	Name       string `gorm:"size:128"`
-	LastSeenAt time.Time
-	RevokedAt  sql.NullTime `gorm:"index"`
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID       uint   `gorm:"primaryKey"`
+	UserID   uint   `gorm:"index;not null;uniqueIndex:idx_user_client"`
+	ClientID string `gorm:"size:64;not null;uniqueIndex:idx_user_client"`
+	Name     string `gorm:"size:128"`
+	// Status 设备状态：pending / approved / revoked。
+	Status string `gorm:"size:16;not null;default:'pending'"`
+	// ApprovedAt 批准时间，ApprovedByUserID 为批准者。
+	ApprovedAt       time.Time
+	ApprovedByUserID *uint `gorm:"index"`
+	LastSeenAt       time.Time
+	RevokedAt        sql.NullTime `gorm:"index"`
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// DeviceVaultAccess 表示设备被授权同步某个仓库。它只表达授权，
+// 不等于设备已经同步过该仓库；同步进度继续保存在 DeviceVault。
+type DeviceVaultAccess struct {
+	ID              uint   `gorm:"primaryKey"`
+	UserID          uint   `gorm:"not null;uniqueIndex:idx_user_client_vault"`
+	ClientID        string `gorm:"size:64;not null;uniqueIndex:idx_user_client_vault"`
+	VaultID         string `gorm:"size:36;not null;uniqueIndex:idx_user_client_vault"`
+	GrantedByUserID uint   `gorm:"not null"`
+	GrantedAt       time.Time
+	CreatedAt       time.Time
 }
 
 // DeviceVault 记录设备对 Vault 的同步进度，便于诊断和后续墓碑回收。
@@ -168,15 +202,22 @@ type StorageIssue struct {
 
 // UserSetting 保存兼容旧版本的用户级配置。
 type UserSetting struct {
-	UserID            uint    `gorm:"uniqueIndex;not null"`
-	SyncInterval      int     `gorm:"not null;default:300"` // 秒，默认 5 分钟
-	ThemeName         string  `gorm:"size:64;not null;default:'default'"`
-	ThemeConfig       JSONMap `gorm:"type:json"`
-	CustomHeader      string  `gorm:"type:text"`
-	CustomFooter      string  `gorm:"type:text"`
-	KeepDirectoryTree bool    `gorm:"not null;default:true"`
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	UserID                uint    `gorm:"uniqueIndex;not null"`
+	SyncInterval          int     `gorm:"not null;default:300"` // 秒，默认 5 分钟
+	LongPollWaitSec       int     `gorm:"not null;default:30"`
+	SyncDebounceSec       int     `gorm:"not null;default:3"`
+	DefaultRecycleBinDays int     `gorm:"not null;default:0"`
+	VaultStorageBytes     int64   `gorm:"not null;default:0"`
+	UploadSizeBytes       int64   `gorm:"not null;default:0"`
+	ThemeName             string  `gorm:"size:64;not null;default:'default'"`
+	ConsoleThemeName      string  `gorm:"size:64;not null;default:'default'"`
+	WebLanguage           string  `gorm:"size:2;not null;default:'zh'"`
+	ThemeConfig           JSONMap `gorm:"type:json"`
+	CustomHeader          string  `gorm:"type:text"`
+	CustomFooter          string  `gorm:"type:text"`
+	KeepDirectoryTree     bool    `gorm:"not null;default:true"`
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 // File 保存文件元数据和同步墓碑。
@@ -222,4 +263,26 @@ type Collaboration struct {
 	Status         string `gorm:"size:16;not null;default:'pending'"` // pending / accepted
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+}
+
+// FileHistory 保存文件的修改记录。ContentKey 指向 gzip 快照，create 无快照。
+type FileHistory struct {
+	ID       uint   `gorm:"primaryKey"`
+	VaultID  string `gorm:"size:36;not null;index:idx_history_vault_path"`
+	FilePath string `gorm:"size:512;not null;index:idx_history_vault_path"`
+	// PreviousPath 重命名时的旧路径。
+	PreviousPath string `gorm:"size:512"`
+	// Action 操作类型：create / modify / delete / restore / rename。
+	Action   string `gorm:"size:32;not null"`
+	Revision int64  `gorm:"not null"`
+	// Version 每个文件路径下的版本序号。
+	Version int `gorm:"not null;default:1"`
+	// ContentKey 快照存储键，create 记录为空。
+	ContentKey string    `gorm:"size:1024"`
+	Hash       string    `gorm:"size:64"`
+	Size       int64     `gorm:"not null;default:0"`
+	Username   string    `gorm:"size:64"`
+	DeviceName string    `gorm:"size:128"`
+	ClientID   string    `gorm:"size:64"`
+	CreatedAt  time.Time `gorm:"index"`
 }

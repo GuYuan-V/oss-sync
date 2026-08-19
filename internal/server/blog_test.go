@@ -1,21 +1,24 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/oss/oss-server/internal/models"
+	"gorm.io/gorm"
 )
 
 func TestShareAndBlogFlow(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	router := srv.Router()
 	token := registerAndLogin(t, router, "bob", "password123")
-	uploadFile(t, router, token, "Notes/Go.md", "# Go\nLink: [[Rust]]", 1700000000000)
+	uploadFile(t, router, token, "Notes/Go.md", "# Go\n\n## Introduction\n\nLink: [[Rust]]", 1700000000000)
 
 	code, body := doJSON(t, router, "POST", "/api/shares", token, map[string]any{
 		"target_path": "Notes/Go.md", "is_folder": false, "allow_copy": true, "recursive_backlinks": false,
@@ -35,8 +38,19 @@ func TestShareAndBlogFlow(t *testing.T) {
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `unshared-link`) {
 		t.Errorf("blog render: status=%d body=%s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), `<script>window.__THEME_CONFIG__`) {
-		t.Error("expected ThemeConfig injection")
+	if !strings.Contains(w.Body.String(), `data-theme-key="oss-blog-theme"`) ||
+		!strings.Contains(w.Body.String(), "theme-switcher") {
+		t.Error("expected blog theme switching markup")
+	}
+	for _, marker := range []string{`data-reading-toc`, `data-copy-article`, `data-back-to-top`} {
+		if !strings.Contains(w.Body.String(), marker) {
+			t.Errorf("default share missing reading utility %s", marker)
+		}
+	}
+	for _, marker := range []string{`data-toc-open`, `data-toc-close`, `data-toc-backdrop`, `reading-toc__disclosure`} {
+		if !strings.Contains(w.Body.String(), marker) {
+			t.Errorf("default share missing mobile TOC marker %s", marker)
+		}
 	}
 
 	req = httptest.NewRequest("GET", "/p/ZZZZZZ", nil)
@@ -204,6 +218,133 @@ func TestDefaultThemeCSSAvailable(t *testing.T) {
 	}
 }
 
+func TestPublicRoutesDoNotRenderCustomFragmentsWhenPolicyDisabled(t *testing.T) {
+	t.Chdir(t.TempDir())
+	srv, db, _ := newTestServer(t)
+	router := srv.Router()
+	setCustomFragmentsEnabledForTest(t, db, true)
+
+	ownerToken := registerAndLogin(t, router, "disabled-policy-owner", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, ownerToken)
+	uploadViaV1(t, router, ownerToken, "Posts/Hello.md", "# Hello\n")
+	uploadViaV1(t, router, ownerToken, "Folder/Nested.md", "# Nested\n")
+
+	code, body := doJSON(t, router, http.MethodPost, "/api/shares", ownerToken, map[string]any{
+		"vault_id": vaultID, "target_path": "Posts/Hello.md", "allow_copy": true,
+	})
+	if code != http.StatusOK {
+		t.Fatalf("create article share: %d %v", code, body)
+	}
+	shareID := body["share_id"].(string)
+
+	code, body = doJSON(t, router, http.MethodPost, "/api/shares", ownerToken, map[string]any{
+		"vault_id": vaultID, "target_path": "Folder", "is_folder": true,
+	})
+	if code != http.StatusOK {
+		t.Fatalf("create folder share: %d %v", code, body)
+	}
+	folderShareID := body["share_id"].(string)
+
+	header := "POLICY_DISABLED_HEADER_MARKER"
+	footer := "POLICY_DISABLED_FOOTER_MARKER"
+	var setting models.VaultSetting
+	if err := db.Where("vault_id = ?", vaultID).First(&setting).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			t.Fatalf("load vault setting: %v", err)
+		}
+		if err := db.Create(&models.VaultSetting{
+			VaultID:           vaultID,
+			ThemeName:         "default",
+			RecycleBinDays:    0,
+			IsPublicBlog:      true,
+			CustomHeader:      header,
+			CustomFooter:      footer,
+			KeepDirectoryTree: true,
+		}).Error; err != nil {
+			t.Fatalf("seed vault custom fragments: %v", err)
+		}
+	} else if err := db.Model(&models.VaultSetting{}).Where("vault_id = ?", vaultID).Updates(map[string]any{
+		"theme_name":       "default",
+		"recycle_bin_days": 0,
+		"is_public_blog":   true,
+		"custom_header":    header,
+		"custom_footer":    footer,
+	}).Error; err != nil {
+		t.Fatalf("seed vault custom fragments: %v", err)
+	}
+
+	setCustomFragmentsEnabledForTest(t, db, false)
+
+	article := doForm(t, router, http.MethodGet, "/p/"+shareID, nil, nil)
+	if article.Code != http.StatusOK {
+		t.Fatalf("public article: %d body=%s", article.Code, article.Body)
+	}
+	if strings.Contains(article.Body.String(), header) || strings.Contains(article.Body.String(), footer) {
+		t.Fatal("custom fragments leaked in article page when policy is disabled")
+	}
+
+	folderRoot := doForm(t, router, http.MethodGet, "/p/"+folderShareID+"/", nil, nil)
+	if folderRoot.Code != http.StatusOK {
+		t.Fatalf("folder share index: %d body=%s", folderRoot.Code, folderRoot.Body)
+	}
+	if strings.Contains(folderRoot.Body.String(), header) || strings.Contains(folderRoot.Body.String(), footer) {
+		t.Fatal("custom fragments leaked in folder share index when policy is disabled")
+	}
+
+	folderDoc := doForm(t, router, http.MethodGet, "/p/"+folderShareID+"/Nested.md", nil, nil)
+	if folderDoc.Code != http.StatusOK {
+		t.Fatalf("folder share document: %d body=%s", folderDoc.Code, folderDoc.Body)
+	}
+	if strings.Contains(folderDoc.Body.String(), header) || strings.Contains(folderDoc.Body.String(), footer) {
+		t.Fatal("custom fragments leaked in folder share document when policy is disabled")
+	}
+
+	b := doForm(t, router, http.MethodGet, "/b/"+vaultID, nil, nil)
+	if b.Code != http.StatusOK {
+		t.Fatalf("public blog home: %d body=%s", b.Code, b.Body)
+	}
+	if strings.Contains(b.Body.String(), header) || strings.Contains(b.Body.String(), footer) {
+		t.Fatal("custom fragments leaked in public vault home when policy is disabled")
+	}
+
+	home := doForm(t, router, http.MethodGet, "/", nil, nil)
+	if home.Code != http.StatusOK {
+		t.Fatalf("public index: %d body=%s", home.Code, home.Body)
+	}
+	if strings.Contains(home.Body.String(), header) || strings.Contains(home.Body.String(), footer) {
+		t.Fatal("custom fragments leaked in public index when policy is disabled")
+	}
+}
+
+func TestPublicHomeEmptyStateLinksItsLayoutStyles(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	router := srv.Router()
+
+	// 尚无公开 Vault 时，/ 渲染安全的空目录页。
+	home := httptest.NewRecorder()
+	router.ServeHTTP(home, httptest.NewRequest(http.MethodGet, "/", nil))
+	if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), "暂无公开博客") {
+		t.Fatalf("empty public directory: status=%d body=%s", home.Code, home.Body.String())
+	}
+
+	// 页面引用的样式表必须包含占位页实际使用的布局类，
+	// 否则首页会以浏览器默认样式呈现（无布局的裸 HTML）。
+	match := regexp.MustCompile(`href="([^"]+\.css(?:\?[^"]*)?)"`).FindStringSubmatch(home.Body.String())
+	if len(match) != 2 {
+		t.Fatalf("no stylesheet link found in home page: %s", home.Body.String())
+	}
+	css := httptest.NewRecorder()
+	router.ServeHTTP(css, httptest.NewRequest(http.MethodGet, match[1], nil))
+	if css.Code != http.StatusOK {
+		t.Fatalf("linked stylesheet %s: status=%d", match[1], css.Code)
+	}
+	for _, sel := range []string{".shell--auth", ".masthead", ".public-home__empty", ".button--primary"} {
+		if !strings.Contains(css.Body.String(), sel) {
+			t.Errorf("linked stylesheet %s does not define %s used by home page", match[1], sel)
+		}
+	}
+}
+
 func TestCustomThemeRendersVaultBlogAndServesAssets(t *testing.T) {
 	srv, db, dataDir := newTestServer(t)
 	router := srv.Router()
@@ -244,7 +385,7 @@ func TestFolderShareEscapesLikeWildcardsAndLinkAttributes(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "folder-safe", "password123")
 	uploadFile(t, router, token, `A_/safe.md`, "# safe", 1700000000000)
-	uploadFile(t, router, token, `A_/quote".md`, "# quote", 1700000000001)
+	uploadFile(t, router, token, `A_/quote#.md`, "# quote", 1700000000001)
 	uploadFile(t, router, token, `AB/secret.md`, "# secret", 1700000000002)
 	code, body := doJSON(t, router, http.MethodPost, "/api/shares", token, map[string]any{"target_path": "A_", "is_folder": true})
 	if code != http.StatusOK {
@@ -258,7 +399,7 @@ func TestFolderShareEscapesLikeWildcardsAndLinkAttributes(t *testing.T) {
 	if w.Code != http.StatusOK || strings.Contains(page, "secret") {
 		t.Fatalf("folder share leaked wildcard sibling: %d %s", w.Code, page)
 	}
-	if !strings.Contains(page, "%22") || strings.Contains(page, `href="/p/`+shareID+`/quote"`) {
+	if !strings.Contains(page, "%23") || strings.Contains(page, `href="/p/`+shareID+`/quote#`) {
 		t.Fatalf("folder link was not safely escaped: %s", page)
 	}
 }

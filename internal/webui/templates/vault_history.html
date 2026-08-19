@@ -1,0 +1,97 @@
+{{define "vault-history"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">History</span>
+    <h1>{{.Layout.T "common.history"}}</h1>
+    <p class="lead">{{if .Data.FilePath}}{{.Layout.T "history.file_history" .Data.FilePath}}{{else}}{{.Layout.T "history.vault_history"}}{{end}}</p>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+<form class="history-filter-form" method="get" action="/dashboard/vaults/{{.Data.VaultID}}/history" aria-label="{{.Layout.T "history.filter"}} {{.Layout.T "common.history"}}">
+  {{if .Data.FilePath}}<input type="hidden" name="path" value="{{.Data.FilePath}}">{{end}}
+  <label>
+    <span>{{.Layout.T "history.action"}}</span>
+    <select name="action">
+      <option value="">{{.Layout.T "history.all_actions"}}</option>
+      <option value="create" {{if eq .Data.Filters.Action "create"}}selected{{end}}>{{.Layout.T "history.create"}}</option>
+      <option value="modify" {{if eq .Data.Filters.Action "modify"}}selected{{end}}>{{.Layout.T "history.modify"}}</option>
+      <option value="delete" {{if eq .Data.Filters.Action "delete"}}selected{{end}}>{{.Layout.T "history.delete"}}</option>
+      <option value="restore" {{if eq .Data.Filters.Action "restore"}}selected{{end}}>{{.Layout.T "history.restore"}}</option>
+      <option value="rename" {{if eq .Data.Filters.Action "rename"}}selected{{end}}>{{.Layout.T "history.rename_action"}}</option>
+    </select>
+  </label>
+  <label>
+    <span>{{.Layout.T "history.user"}}</span>
+    <input type="text" name="username" value="{{.Data.Filters.Username}}" maxlength="64" placeholder="{{.Layout.T "history.exact_username"}}">
+  </label>
+  <label>
+    <span>{{.Layout.T "history.device"}}</span>
+    <input type="text" name="device" value="{{.Data.Filters.Device}}" maxlength="128" placeholder="{{.Layout.T "history.device_name_or_id"}}">
+  </label>
+  <label>
+    <span>{{.Layout.T "history.start_time"}}</span>
+    <input type="datetime-local" name="from" value="{{.Data.Filters.From}}">
+  </label>
+  <label>
+    <span>{{.Layout.T "history.end_time"}}</span>
+    <input type="datetime-local" name="to" value="{{.Data.Filters.To}}">
+  </label>
+  <div class="history-filter-form__actions">
+    <button class="button button--primary" type="submit">{{.Layout.T "history.filter"}}</button>
+    <a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}/history{{if .Data.FilePath}}?path={{urlquery .Data.FilePath}}{{end}}">{{.Layout.T "history.clear"}}</a>
+  </div>
+</form>
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Version ledger</span>
+        <h2>{{.Layout.T "history.history_records"}}</h2>
+      </div>
+      <div class="action-cell">
+        {{if .Data.FilePath}}<a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}/history">{{.Layout.T "history.view_all"}}</a>{{end}}
+        <span class="ledger-count">{{.Layout.T "history.record_count" (len .Data.History)}}</span>
+      </div>
+    </header>
+    {{if .Data.History}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{$.Layout.T "history.file"}}</th><th>{{$.Layout.T "history.action"}}</th><th>{{$.Layout.T "history.version"}}</th><th>{{$.Layout.T "history.user"}}</th><th>{{$.Layout.T "history.device"}}</th><th>{{$.Layout.T "common.time"}}</th><th>{{$.Layout.T "common.actions"}}</th></tr></thead>
+        <tbody>
+          {{range .Data.History}}
+          <tr>
+            <td>
+              <a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/history/{{.ID}}"><strong>{{.FilePath}}</strong></a>
+              {{if .PreviousPath}}<small class="file-name">{{$.Layout.T "history.previous_path" .PreviousPath}}</small>{{end}}
+            </td>
+            <td><span class="role role--{{.Action}}">{{.ActionLabel}}</span></td>
+            <td>{{.Version}}</td>
+            <td>{{.Username}}</td>
+            <td>{{.DeviceName}}</td>
+            <td><time>{{timeFmt .CreatedAt}}</time></td>
+            <td>
+              <div class="action-cell">
+              <a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/history/{{.ID}}">{{$.Layout.T "common.view"}}</a>
+              {{if .HasSnapshot}}
+              <form method="post" action="/dashboard/vaults/{{$.Data.VaultID}}/history/{{.ID}}/restore"
+                    data-confirm="{{$.Layout.T "history.restore_confirm" .FilePath}}">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <button class="text-button" type="submit">{{$.Layout.T "history.restore"}}</button>
+              </form>
+              {{end}}
+              </div>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="panel-empty">{{.Layout.T "history.no_history"}}</p>
+    {{end}}
+  </article>
+</div>
+{{end}}

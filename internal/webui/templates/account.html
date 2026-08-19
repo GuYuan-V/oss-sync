@@ -1,0 +1,124 @@
+{{define "account"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Account</span>
+    <h1>{{.Layout.T "account.heading"}}</h1>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+{{if .Data.PasswordSaved}}<div class="notice notice--success" role="status">{{.Layout.T "account.password_updated"}}</div>{{end}}
+{{if .Data.PreferenceSettingsSaved}}<div class="notice notice--success" role="status">{{.Layout.T "account.preferences_saved"}}</div>{{end}}
+{{if .Data.ConsoleThemeSaved}}<div class="notice notice--success" role="status">{{.Layout.T "account.console_theme_saved"}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Profile</span>
+       <h2>{{.Layout.T "common.account_info"}}</h2>
+      </div>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <tbody>
+          <tr><th>{{.Layout.T "common.username"}}</th><td><strong>{{.Data.Username}}</strong></td></tr>
+          <tr><th>{{.Layout.T "common.role"}}</th><td><span class="role role--{{.Data.Role}}">{{.Data.Role}}</span></td></tr>
+          <tr><th>{{.Layout.T "common.created"}}</th><td><time>{{timeFmt .Data.CreatedAt}}</time></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="gate-panel" id="sync-settings">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">Sync & storage</span>
+       <h2>{{.Layout.T "common.sync_storage_preferences"}}</h2>
+       <p>{{.Layout.T "account.sync_storage_description"}}</p>
+    </div>
+    <form method="post" action="/dashboard/account/settings" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <label>
+         <span>{{.Layout.T "account.long_poll_wait"}}</span>
+        <input type="number" name="long_poll_wait_sec" min="1" max="{{.Data.MaxLongPollWaitSec}}" value="{{.Data.LongPollWaitSec}}" required>
+      </label>
+      <label>
+         <span>{{.Layout.T "account.sync_debounce"}}</span>
+        <input type="number" name="sync_debounce_sec" min="3" max="{{.Data.MaxSyncDebounceSec}}" value="{{.Data.SyncDebounceSec}}" required>
+      </label>
+      <label>
+         <span>{{.Layout.T "account.default_recycle_retention"}}</span>
+        <input type="number" name="default_recycle_bin_days" min="1" max="{{.Data.MaxRecycleBinDays}}" value="{{.Data.DefaultRecycleBinDays}}" required>
+      </label>
+      <label>
+         <span>{{.Layout.T "account.new_vault_capacity"}}</span>
+        <input type="number" name="vault_storage_mb" min="0" {{if gt .Data.MaxVaultStorageMB 0}}max="{{.Data.MaxVaultStorageMB}}"{{end}} value="{{.Data.VaultStorageMB}}" required>
+         <small>{{.Layout.T "account.capacity_zero_note"}}</small>
+      </label>
+      <label>
+         <span>{{.Layout.T "account.upload_limit"}}</span>
+        <input type="number" name="upload_size_mb" min="1" max="{{.Data.MaxUploadSizeMB}}" value="{{.Data.UploadSizeMB}}" required>
+      </label>
+       <button class="button button--primary" type="submit">{{.Layout.T "account.save_preferences"}}</button>
+    </form>
+  </article>
+
+  <article class="gate-panel" id="language">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">Language</span>
+       <h2>{{.Layout.T "account.web_language"}}</h2>
+       <p>{{.Layout.T "account.web_language_description"}}</p>
+    </div>
+    <form method="post" action="/dashboard/account/language" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+       <label><span>{{.Layout.T "account.language_label"}}</span><select name="web_language"><option value="zh" {{if eq .Data.WebLanguage "zh"}}selected{{end}}>中文</option><option value="en" {{if eq .Data.WebLanguage "en"}}selected{{end}}>English</option></select></label>
+       <button class="button button--primary" type="submit">{{.Layout.T "account.save_language"}}</button>
+    </form>
+  </article>
+
+  <article class="gate-panel" id="console-theme">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">Console theme</span>
+      <h2>{{.Layout.T "account.console_theme_heading"}}</h2>
+      <p>{{.Layout.T "account.console_theme_description"}}</p>
+    </div>
+    <form method="post" action="/dashboard/account/theme" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <label>
+        <span>{{.Layout.T "account.theme_label"}}</span>
+        <select name="console_theme_name">
+          {{range .Data.ConsoleThemes}}
+          <option value="{{.Name}}" {{if eq .Name $.Data.ConsoleThemeName}}selected{{end}}>{{.Name}}{{if eq .Source "builtin"}}{{$.Layout.T "account.builtin_suffix"}}{{end}}</option>
+          {{end}}
+        </select>
+      </label>
+      <button class="button button--primary" type="submit">{{.Layout.T "account.switch_theme"}}</button>
+    </form>
+  </article>
+
+  <article class="gate-panel" id="password">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">Change password</span>
+      <h2>{{.Layout.T "common.change_password"}}</h2>
+      <p>{{.Layout.T "account.password_description"}}</p>
+    </div>
+    <form method="post" action="/dashboard/account/password" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <label>
+        <span>{{.Layout.T "common.old_password"}}</span>
+        <input type="password" name="old_password" autocomplete="current-password" required>
+      </label>
+      <label>
+        <span>{{.Layout.T "common.new_password"}}</span>
+        <input type="password" name="new_password" minlength="8" maxlength="128" autocomplete="new-password" required>
+        <small>{{.Layout.T "account.password_hint"}}</small>
+      </label>
+      <label>
+        <span>{{.Layout.T "account.confirm_new_password"}}</span>
+        <input type="password" name="new_password_confirm" minlength="8" maxlength="128" autocomplete="new-password" required>
+      </label>
+      <button class="button button--primary" type="submit">{{.Layout.T "account.update_password"}}</button>
+    </form>
+  </article>
+</div>
+{{end}}

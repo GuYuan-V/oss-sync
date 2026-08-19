@@ -1,0 +1,51 @@
+{{define "vault-preview"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Markdown preview</span>
+    <h1>{{.Data.Name}}</h1>
+    <p class="lead">{{.Layout.T "vault.preview_desc"}}</p>
+  </div>
+</section>
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Preview</span>
+        <h2>{{.Layout.T "vault.document_preview"}}</h2>
+        <nav class="file-breadcrumbs" aria-label="{{$.Layout.T "vault.file_path"}}">
+          <a href="/dashboard/vaults/{{.Data.VaultID}}">{{$.Layout.T "vault.root_directory"}}</a>
+          {{range .Data.Breadcrumbs}}
+          <span aria-hidden="true">/</span>
+          <a href="/dashboard/vaults/{{$.Data.VaultID}}?dir={{.Path}}">{{.Name}}</a>
+          {{end}}
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">{{$.Data.Name}}</span>
+        </nav>
+        <div class="preview-mode-switch" role="tablist" aria-label="{{$.Layout.T "vault.preview_mode"}}">
+          <a class="quiet-link {{if eq .Data.Mode "rendered"}}is-active{{end}}"
+             href="/dashboard/vaults/{{$.Data.VaultID}}/files/preview?path={{$.Data.Path}}&mode=rendered"
+             role="tab" aria-selected="{{if eq .Data.Mode "rendered"}}true{{else}}false{{end}}">
+            {{$.Layout.T "vault.preview_mode_rendered"}}
+          </a>
+          <a class="quiet-link {{if eq .Data.Mode "source"}}is-active{{end}}"
+             href="/dashboard/vaults/{{$.Data.VaultID}}/files/preview?path={{$.Data.Path}}&mode=source"
+             role="tab" aria-selected="{{if eq .Data.Mode "source"}}true{{else}}false{{end}}">
+            {{$.Layout.T "vault.preview_mode_source"}}
+          </a>
+        </div>
+      </div>
+      <div class="action-cell">
+        <a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}?dir={{.Data.Directory}}">{{.Layout.T "vault.back_to_files"}}</a>
+        <a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}/history?path={{.Data.Path}}">{{.Layout.T "common.history"}}</a>
+        <a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}/files/download?path={{.Data.Path}}">{{.Layout.T "vault.download_original"}}</a>
+      </div>
+    </header>
+    {{if eq .Data.Mode "source"}}
+    <article class="markdown-preview"><pre><code>{{.Data.ContentText}}</code></pre></article>
+    {{else}}
+    <article class="markdown-preview">{{.Data.ContentHTML}}</article>
+    {{end}}
+  </article>
+</div>
+{{end}}

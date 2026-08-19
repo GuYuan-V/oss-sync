@@ -1,35 +1,71 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+<!doctype html>
+<html lang="zh-CN" data-theme-key="oss-blog-theme">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}}</title>
   <meta name="generator" content="OSS Blog">
   <meta name="powered-by" content="oss-sync">
-
-  <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css">
-  <script defer src="{{.ThemeBaseURL}}/theme.js"></script>
-
-  <script>window.__THEME_CONFIG__ = {{.ThemeConfigJS}};</script>
-
-  {{if .CustomHeader}}{{.CustomHeader}}{{end}}
+  <title>{{.Title}}</title>
+   <script src="/ui/assets/theme.js?v=2"></script>
+   <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css?v=3">
+   <script defer src="{{.ThemeBaseURL}}/theme.js?v=3"></script>
 </head>
-<body>
-  <article class="oss-content">
-    {{- if .IsFolder -}}
-      <h1 class="oss-folder-title">{{.FolderTitle}}</h1>
-      <nav class="oss-tree">
-        {{.ContentHTML}}
+<body id="top">
+  <a class="skip-link" href="#article-content">跳到文章正文</a>
+  <div class="oss-frame">
+    <header class="oss-topbar">
+      <strong class="oss-brand">分享阅读</strong>
+      <nav class="oss-actions" aria-label="阅读工具">
+        <div id="theme-switcher" class="theme-switcher" role="group" aria-label="主题模式">
+          <button type="button" class="theme-switcher__btn" data-theme-pref="auto" aria-pressed="false">自动</button>
+          <button type="button" class="theme-switcher__btn" data-theme-pref="light" aria-pressed="false">亮色</button>
+          <button type="button" class="theme-switcher__btn" data-theme-pref="dark" aria-pressed="false">暗色</button>
+        </div>
+        {{if .AllowCopy}}<button type="button" class="reading-action" data-copy-article><span data-copy-label>一键复制</span></button>{{end}}
+        <button type="button" class="reading-action" data-back-to-top>返回顶部</button>
       </nav>
-    {{- else -}}
-      {{.ContentHTML}}
-    {{- end -}}
-  </article>
+    </header>
 
-  {{if .CustomFooter}}{{.CustomFooter}}{{end}}
+      {{if .CustomHeader}}
+      <section class="oss-custom-fragment oss-custom-fragment--header" aria-label="自定义页眉">
+        <div class="oss-custom-fragment__content">{{.CustomHeader}}</div>
+      </section>
+      {{end}}
 
-  {{if .FooterNotice}}
-  <div class="oss-notice">{{.FooterNotice}}</div>
+      <main class="oss-reading-shell">
+        {{if not .IsFolder}}
+        <nav class="reading-toc" aria-label="文章目录" data-reading-toc hidden>
+          <button class="reading-toc__open" type="button" data-toc-open aria-label="展开目录">目录</button>
+          <div class="reading-toc__backdrop" data-toc-backdrop hidden></div>
+          <div class="reading-toc__panel" data-toc-panel>
+            <div class="reading-toc__panel-header">
+              <strong class="reading-toc__panel-title">文章目录</strong>
+              <button class="reading-toc__close" type="button" data-toc-close aria-label="关闭目录">关闭</button>
+            </div>
+            <details class="reading-toc__disclosure" open>
+              <summary>目录</summary>
+              <ol data-toc-list></ol>
+            </details>
+          </div>
+        </nav>
+        {{end}}
+        <article id="article-content" class="oss-content" data-reading-content {{if .AllowCopy}}data-allow-copy{{end}} tabindex="-1">
+        {{if .IsFolder}}
+          <h1 class="oss-folder-title">{{.FolderTitle}}</h1>
+          <nav class="oss-tree" aria-label="文件目录">{{.ContentHTML}}</nav>
+        {{else}}
+          {{.ContentHTML}}
+        {{end}}
+      </article>
+    </main>
+  </div>
+
+  {{if .CustomFooter}}
+  <section class="oss-custom-fragment oss-custom-fragment--footer" aria-label="自定义页脚">
+    <div class="oss-custom-fragment__content">{{.CustomFooter}}</div>
+  </section>
   {{end}}
+  {{if .FooterNotice}}<aside class="oss-notice">{{.FooterNotice}}</aside>{{end}}
+  <p class="reading-status" data-copy-status role="status" aria-live="polite"></p>
 </body>
 </html>

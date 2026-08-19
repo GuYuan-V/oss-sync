@@ -29,6 +29,9 @@ func setupReconciler(t *testing.T) (*Reconciler, *gorm.DB, string, models.Vault)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
+	}
 	if err := database.AutoMigrate(db); err != nil {
 		t.Fatal(err)
 	}

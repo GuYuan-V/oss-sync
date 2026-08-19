@@ -12,7 +12,9 @@ import (
 
 	"github.com/oss/oss-server/internal/auth"
 	"github.com/oss/oss-server/internal/config"
+	"github.com/oss/oss-server/internal/deviceauth"
 	"github.com/oss/oss-server/internal/models"
+	"github.com/oss/oss-server/internal/settingspolicy"
 	"github.com/oss/oss-server/internal/vaultaccess"
 	"github.com/oss/oss-server/internal/vaultbackup"
 )
@@ -92,13 +94,44 @@ func (h *Handler) List(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// 插件请求携带 client_id 时，只返回该设备被授权的仓库。
+	clientID := deviceauth.NormalizeClientID(c.GetHeader(deviceauth.ClientIDHeader))
+	var authorized map[string]struct{}
+	if clientID != "" {
+		if err := deviceauth.CheckApproved(h.DB, u.ID, clientID); err != nil {
+			h.writeDeviceError(c, err)
+			return
+		}
+		var accesses []models.DeviceVaultAccess
+		if err := h.DB.Where("user_id = ? AND client_id = ?", u.ID, clientID).
+			Find(&accesses).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		authorized = make(map[string]struct{}, len(accesses))
+		for _, access := range accesses {
+			authorized[access.VaultID] = struct{}{}
+		}
+	}
+
 	out := make([]vaultOut, 0, len(owned)+len(memberships))
 	for _, vault := range owned {
+		if authorized != nil {
+			if _, ok := authorized[vault.ID]; !ok {
+				continue
+			}
+		}
 		out = append(out, h.toOut(vault, vaultaccess.RoleOwner))
 	}
 	for _, member := range memberships {
 		var vault models.Vault
 		if err := h.DB.Where("id = ?", member.VaultID).First(&vault).Error; err == nil {
+			if authorized != nil {
+				if _, ok := authorized[vault.ID]; !ok {
+					continue
+				}
+			}
 			out = append(out, h.toOut(vault, member.Role))
 		}
 	}
@@ -120,7 +153,19 @@ func (h *Handler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
 		return
 	}
-	vault := models.Vault{ID: uuid.NewString(), OwnerID: u.ID, Name: req.Name, Description: strings.TrimSpace(req.Description)}
+	effective, err := settingspolicy.EffectiveForUser(
+		h.DB,
+		u.ID,
+		int64(h.Cfg.Server.MaxFileSizeMB)<<20,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	vault := models.Vault{
+		ID: uuid.NewString(), OwnerID: u.ID, Name: req.Name,
+		Description: strings.TrimSpace(req.Description), StorageQuota: effective.VaultStorageBytes,
+	}
 	if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		var activeVaultCount int64
 		if err := tx.Model(&models.Vault{}).Where("owner_id = ?", u.ID).Count(&activeVaultCount).Error; err != nil {
@@ -137,6 +182,19 @@ func (h *Handler) Create(c *gin.Context) {
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// 插件创建仓库时，为发起请求的已批准设备自动授权新仓库。
+	clientID := deviceauth.NormalizeClientID(c.GetHeader(deviceauth.ClientIDHeader))
+	if clientID != "" {
+		if err := deviceauth.CheckApproved(h.DB, u.ID, clientID); err != nil {
+			h.writeDeviceError(c, err)
+			return
+		}
+		if err := deviceauth.GrantAccess(h.DB, u.ID, clientID, vault.ID, u.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 	c.JSON(http.StatusCreated, h.toOut(vault, vaultaccess.RoleOwner))
 }
@@ -372,6 +430,10 @@ func (h *Handler) RemoveMember(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if err := h.DB.Where("user_id = ? AND vault_id = ?", member.UserID, vault.ID).Delete(&models.DeviceVaultAccess{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	if err := h.DB.Delete(&member).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -415,6 +477,19 @@ func (h *Handler) memberRows(vault models.Vault) ([]memberOut, error) {
 
 func (h *Handler) writeForbidden(c *gin.Context) {
 	c.JSON(http.StatusForbidden, gin.H{"error": "insufficient vault permission"})
+}
+
+func (h *Handler) writeDeviceError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, deviceauth.ErrRevoked):
+		c.JSON(http.StatusForbidden, gin.H{"error": "this device has been revoked", "code": "device_revoked"})
+	case errors.Is(err, deviceauth.ErrDevicePending):
+		c.JSON(http.StatusForbidden, gin.H{"error": "this device is pending authorization", "code": "device_pending"})
+	case errors.Is(err, deviceauth.ErrDeviceUnknown):
+		c.JSON(http.StatusForbidden, gin.H{"error": "device is not registered", "code": "device_unknown"})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
 }
 
 func (h *Handler) toOut(vault models.Vault, accessRole string) vaultOut {

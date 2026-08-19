@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 
 	"github.com/oss/oss-server/internal/config"
@@ -75,18 +77,26 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.VaultSyncState{},
 		&models.ClientDevice{},
 		&models.DeviceVault{},
+		&models.DeviceVaultAccess{},
 		&models.StorageIssue{},
 		&models.UserSetting{},
 		&models.File{},
 		&models.Share{},
 		&models.Collaboration{},
+		&models.FileHistory{},
 	); err != nil {
 		return fmt.Errorf("AutoMigrate 失败: %w", err)
 	}
 	if err := backfillLegacyVaults(db); err != nil {
 		return err
 	}
-	return backfillVaultRevisions(db)
+	if err := backfillVaultRevisions(db); err != nil {
+		return err
+	}
+	if err := backfillDeviceStates(db); err != nil {
+		return err
+	}
+	return backfillVaultSettings(db)
 }
 
 // backfillLegacyVaults 只为升级前没有 VaultID 的历史内容创建承载 Vault。
@@ -239,6 +249,53 @@ func backfillVaultRevisions(db *gorm.DB) error {
 		}); err != nil {
 			return fmt.Errorf("回填 Vault %s revision 失败: %w", vault.ID, err)
 		}
+	}
+	return nil
+}
+
+// backfillDeviceStates 为旧版设备补齐状态，并为已有同步绑定补齐仓库授权。
+// 未吊销的旧设备回填为 approved，避免升级后把现有设备锁在外面。
+func backfillDeviceStates(db *gorm.DB) error {
+	if err := db.Model(&models.ClientDevice{}).
+		Where("status = '' AND revoked_at IS NULL").
+		Update("status", "approved").Error; err != nil {
+		return fmt.Errorf("回填已批准设备失败: %w", err)
+	}
+	if err := db.Model(&models.ClientDevice{}).
+		Where("status = '' AND revoked_at IS NOT NULL").
+		Update("status", "revoked").Error; err != nil {
+		return fmt.Errorf("回填已吊销设备失败: %w", err)
+	}
+
+	var bindings []models.DeviceVault
+	if err := db.Find(&bindings).Error; err != nil {
+		return fmt.Errorf("查询旧设备同步绑定失败: %w", err)
+	}
+	for _, binding := range bindings {
+		grantedAt := binding.CreatedAt
+		if grantedAt.IsZero() {
+			grantedAt = time.Now()
+		}
+		if err := db.Clauses(clause.OnConflict{DoNothing: true}).
+			Create(&models.DeviceVaultAccess{
+				UserID:          binding.UserID,
+				ClientID:        binding.ClientID,
+				VaultID:         binding.VaultID,
+				GrantedByUserID: binding.UserID,
+				GrantedAt:       grantedAt,
+			}).Error; err != nil {
+			return fmt.Errorf("回填设备仓库授权失败: %w", err)
+		}
+	}
+	return nil
+}
+
+// backfillVaultSettings 为已有仓库补齐新默认值。
+func backfillVaultSettings(db *gorm.DB) error {
+	if err := db.Model(&models.VaultSetting{}).
+		Where("recycle_bin_days = 0 OR recycle_bin_days IS NULL").
+		Update("recycle_bin_days", 30).Error; err != nil {
+		return fmt.Errorf("回填仓库回收站保留期失败: %w", err)
 	}
 	return nil
 }

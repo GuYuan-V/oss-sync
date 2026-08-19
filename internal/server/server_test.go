@@ -38,6 +38,9 @@ func newTestServer(t *testing.T) (*Server, *gorm.DB, string) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
+	}
 	if err := database.AutoMigrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -139,6 +142,27 @@ func uploadRawFile(t *testing.T, router *gin.Engine, token, path, content string
 
 func intToStr(n int64) string {
 	return strconv.FormatInt(n, 10)
+}
+
+func TestLegacyUpload_whenUserUploadPreferenceTightensAdminCeiling_rejectsOversizedContent(t *testing.T) {
+	// Given
+	srv, db, _ := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "legacy-upload-limit", "password123")
+	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("max_upload_size_bytes", 10).Error; err != nil {
+		t.Fatalf("set upload ceiling: %v", err)
+	}
+	if err := db.Model(&models.UserSetting{}).Where("user_id = 1").Update("upload_size_bytes", 5).Error; err != nil {
+		t.Fatalf("set upload preference: %v", err)
+	}
+
+	// When
+	code, body := uploadRawFile(t, router, token, "Notes/Large.md", "123456", 1700000000000)
+
+	// Then
+	if code != http.StatusRequestEntityTooLarge {
+		t.Errorf("oversized legacy upload: status=%d body=%v, want 413", code, body)
+	}
 }
 
 func TestFullSyncFlow(t *testing.T) {

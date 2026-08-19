@@ -15,10 +15,14 @@ import (
 	"github.com/oss/oss-server/internal/models"
 )
 
-//go:embed assets/default/* assets/development-template/*
+//go:embed assets/default/* assets/development-template/* assets/papertrail/* assets/scaffold/*
 var themeAssetsFS embed.FS
 
 type blogAssetResolver struct{ shareID string }
+
+func NewAssetResolver(shareID string) markdown.AssetResolver {
+	return blogAssetResolver{shareID: shareID}
+}
 
 func (r blogAssetResolver) ResolveAsset(reference string) string {
 	if isRemoteReference(reference) {
@@ -46,6 +50,7 @@ func (h *Handler) handleSharedAsset(c *gin.Context) {
 		return
 	}
 	abs := filestore.DiskPath(h.Cfg.Storage.DataDir, file)
+	c.Header("X-Content-Type-Options", "nosniff")
 	c.File(abs)
 }
 
@@ -107,7 +112,7 @@ func (h *Handler) resolveAssetFile(userID uint, vaultID, reference string) (mode
 }
 
 func (h *Handler) serveDefaultTheme(c *gin.Context, filename string) bool {
-	if filename != "style.css" && filename != "theme.js" {
+	if filename != "style.css" && filename != "theme.js" && filename != "template.html" {
 		return false
 	}
 	content, err := themeAssetsFS.ReadFile("assets/default/" + filename)
@@ -118,8 +123,37 @@ func (h *Handler) serveDefaultTheme(c *gin.Context, filename string) bool {
 	if filename == "style.css" {
 		contentType = "text/css; charset=utf-8"
 	}
+	if filename == "template.html" {
+		contentType = "text/html; charset=utf-8"
+	}
 	c.Data(http.StatusOK, contentType, content)
 	return true
+}
+
+// serveBuiltinTheme 提供内置主题（default / papertrail）的静态资源。
+func (h *Handler) serveBuiltinTheme(c *gin.Context, theme, filename string) bool {
+	switch theme {
+	case "default":
+		return h.serveDefaultTheme(c, filename)
+	case "papertrail":
+		if filename != "style.css" && filename != "theme.js" && filename != "template.html" {
+			return false
+		}
+		content, err := themeAssetsFS.ReadFile("assets/papertrail/" + filename)
+		if err != nil {
+			return false
+		}
+		contentType := "application/javascript; charset=utf-8"
+		if filename == "style.css" {
+			contentType = "text/css; charset=utf-8"
+		}
+		if filename == "template.html" {
+			contentType = "text/html; charset=utf-8"
+		}
+		c.Data(http.StatusOK, contentType, content)
+		return true
+	}
+	return false
 }
 
 func isRemoteReference(reference string) bool {

@@ -4,6 +4,7 @@
 // 失效或登录失败时抛错，由调用方决定 UI 提示。
 
 import { requestUrl } from "obsidian";
+import type { Diagnostics } from "./diagnostics";
 import type { OSSSettings } from "./settings";
 
 export interface AuthResponse {
@@ -12,6 +13,8 @@ export interface AuthResponse {
   user_id: number;
   username: string;
   role: string;
+  device_status?: "pending" | "approved" | "revoked";
+  device_name?: string;
 }
 
 export interface AuthStatus {
@@ -120,6 +123,58 @@ export interface SyncManifestResponse {
   files: SyncFileMeta[];
 }
 
+export type SyncMode = "short_poll" | "long_poll";
+
+export interface SyncStrategyResponse {
+  policy: string;
+  effective_mode: SyncMode;
+  min_debounce_sec: number;
+  long_poll_wait_sec: number;
+}
+
+export interface HistoryEntry {
+  id: number;
+  file_path: string;
+  previous_path?: string;
+  action: string;
+  version: number;
+  revision: number;
+  username: string;
+  device_name: string;
+  has_snapshot: boolean;
+  created_at: string;
+}
+
+export interface HistoryDetail extends HistoryEntry {
+  content?: string;
+  diff: string[];
+  is_text: boolean;
+}
+
+export interface RecycleBinFile {
+  id: number;
+  path: string;
+  type: "markdown" | "attachment" | "config";
+  size: number;
+  deleted_at: string;
+  expires_at: string;
+  remaining_seconds: number;
+  can_restore: boolean;
+}
+
+export interface CollabEntry {
+  id: number;
+  file_id: number;
+  vault_id: string;
+  file_path: string;
+  owner_id: number;
+  owner_username: string;
+  collaborator_id: number;
+  collaborator_username: string;
+  status: string;
+  created_at: string;
+}
+
 export class OSSApiError extends Error {
   constructor(
     message: string,
@@ -139,7 +194,10 @@ export class OSSApiClient {
   private timeOffset = 0;
   private token: string | null = null;
 
-  constructor(private settings: OSSSettings) {}
+  constructor(
+    private settings: OSSSettings,
+    private readonly diagnostics?: Diagnostics
+  ) {}
 
   setToken(token: string | null): void {
     this.token = token;
@@ -250,6 +308,8 @@ export class OSSApiClient {
       content: ArrayBuffer;
     }
   ): Promise<SyncFileMeta> {
+    const startedAt = Date.now();
+    let status: number | undefined;
     const query = new URLSearchParams({
       path: input.path,
       base_revision: String(input.baseRevision),
@@ -258,17 +318,29 @@ export class OSSApiClient {
       client_id: this.settings.clientId,
       operation_id: input.operationID,
     });
-    const res = await requestUrl({
-      url: this.url(`/api/vaults/${encodeURIComponent(vaultID)}/sync/upload?${query.toString()}`),
-      method: "POST",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        ...this.authHeaders(),
-      },
-      body: input.content,
-      throw: false,
-    });
-    return this.parseResponse<SyncFileMeta>(res.status, res.json, res.text);
+    try {
+      const res = await requestUrl({
+        url: this.url(`/api/vaults/${encodeURIComponent(vaultID)}/sync/upload?${query.toString()}`),
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          ...this.authHeaders(),
+        },
+        body: input.content,
+        throw: false,
+      });
+      status = res.status;
+      return this.parseResponse<SyncFileMeta>(res.status, res.json, res.text);
+    } finally {
+      this.recordDirectAPI("POST", status, startedAt);
+      this.diagnostics?.record({
+        kind: "transfer",
+        at: Date.now(),
+        scope: "upload",
+        durationMs: Date.now() - startedAt,
+        bytes: input.content.byteLength,
+      });
+    }
   }
 
   async downloadV2(
@@ -276,28 +348,44 @@ export class OSSApiClient {
     path: string,
     revision: number
   ): Promise<{ content: ArrayBuffer; meta: SyncFileMeta }> {
+    const startedAt = Date.now();
+    let status: number | undefined;
+    let bytes: number | undefined;
     const query = new URLSearchParams({ path, revision: String(revision) });
-    const res = await requestUrl({
-      url: this.url(`/api/vaults/${encodeURIComponent(vaultID)}/sync/download?${query.toString()}`),
-      method: "GET",
-      headers: this.authHeaders(),
-      throw: false,
-    });
-    if (res.status >= 400) {
-      this.parseResponse<never>(res.status, res.json, res.text);
+    try {
+      const res = await requestUrl({
+        url: this.url(`/api/vaults/${encodeURIComponent(vaultID)}/sync/download?${query.toString()}`),
+        method: "GET",
+        headers: this.authHeaders(),
+        throw: false,
+      });
+      status = res.status;
+      if (res.status >= 400) {
+        this.parseResponse<never>(res.status, res.json, res.text);
+      }
+      bytes = res.arrayBuffer.byteLength;
+      return {
+        content: res.arrayBuffer,
+        meta: {
+          path,
+          type: classifyPath(path),
+          hash: header(res.headers, "x-oss-hash"),
+          size: res.arrayBuffer.byteLength,
+          mtime: parseInt(header(res.headers, "x-oss-mtime") || "0", 10),
+          revision: parseInt(header(res.headers, "x-oss-revision") || "0", 10),
+          deleted: false,
+        },
+      };
+    } finally {
+      this.recordDirectAPI("GET", status, startedAt);
+      this.diagnostics?.record({
+        kind: "transfer",
+        at: Date.now(),
+        scope: "download",
+        durationMs: Date.now() - startedAt,
+        ...(bytes === undefined ? {} : { bytes }),
+      });
     }
-    return {
-      content: res.arrayBuffer,
-      meta: {
-        path,
-        type: classifyPath(path),
-        hash: header(res.headers, "x-oss-hash"),
-        size: res.arrayBuffer.byteLength,
-        mtime: parseInt(header(res.headers, "x-oss-mtime") || "0", 10),
-        revision: parseInt(header(res.headers, "x-oss-revision") || "0", 10),
-        deleted: false,
-      },
-    };
   }
 
   async deleteV2(
@@ -346,6 +434,250 @@ export class OSSApiClient {
         client_mtime: input.mtime,
       }
     );
+  }
+
+  /** 获取仓库同步策略，effective_mode 由服务端根据仓库策略与客户端偏好计算。 */
+  async syncStrategy(vaultID: string, mode: SyncMode): Promise<SyncStrategyResponse> {
+    return this.doRequest<SyncStrategyResponse>(
+      "GET",
+      `/api/vaults/${encodeURIComponent(vaultID)}/sync/strategy` +
+        `?client_id=${encodeURIComponent(this.settings.clientId)}` +
+        `&mode=${encodeURIComponent(mode)}`
+    );
+  }
+
+  /** 查询指定路径的修改历史。 */
+  async history(vaultID: string, path: string): Promise<{ history: HistoryEntry[] }> {
+    return this.doRequest<{ history: HistoryEntry[] }>(
+      "GET",
+      `/api/vaults/${encodeURIComponent(vaultID)}/sync/history` +
+        `?path=${encodeURIComponent(path)}` +
+        `&client_id=${encodeURIComponent(this.settings.clientId)}`
+    );
+  }
+
+  async historyDetail(
+    vaultID: string,
+    historyID: number,
+    mode: "last" | "current"
+  ): Promise<HistoryDetail> {
+    return this.doRequest<HistoryDetail>(
+      "GET",
+      `/api/vaults/${encodeURIComponent(vaultID)}/sync/history/${encodeURIComponent(String(historyID))}` +
+        `?mode=${mode}&client_id=${encodeURIComponent(this.settings.clientId)}`
+    );
+  }
+
+  async historyRestore(vaultID: string, historyID: number): Promise<{ path: string }> {
+    return this.doRequest<{ path: string }>(
+      "POST",
+      `/api/vaults/${encodeURIComponent(vaultID)}/sync/history/${encodeURIComponent(String(historyID))}/restore` +
+        `?client_id=${encodeURIComponent(this.settings.clientId)}`
+    );
+  }
+
+  async recycleList(vaultID: string): Promise<{ files: RecycleBinFile[] }> {
+    return this.doRequest<{ files: RecycleBinFile[] }>(
+      "GET",
+      `/api/vaults/${encodeURIComponent(vaultID)}/recycle-bin` +
+        `?client_id=${encodeURIComponent(this.settings.clientId)}`
+    );
+  }
+
+  async recycleRestore(vaultID: string, fileID: number): Promise<void> {
+    await this.doRequest<void>(
+      "POST",
+      `/api/vaults/${encodeURIComponent(vaultID)}/recycle-bin/${encodeURIComponent(String(fileID))}/restore` +
+        `?client_id=${encodeURIComponent(this.settings.clientId)}`
+    );
+  }
+
+  async recycleDelete(vaultID: string, fileID: number): Promise<void> {
+    await this.doRequest<void>(
+      "POST",
+      `/api/vaults/${encodeURIComponent(vaultID)}/recycle-bin/${encodeURIComponent(String(fileID))}/delete` +
+        `?client_id=${encodeURIComponent(this.settings.clientId)}`
+    );
+  }
+
+  /** 列出当前用户在仓库中的协作关系。 */
+  async collabList(vaultID: string): Promise<{ collaborations: CollabEntry[] }> {
+    return this.doRequest<{ collaborations: CollabEntry[] }>(
+      "GET",
+      `/api/vaults/${encodeURIComponent(vaultID)}/collaborations`
+    );
+  }
+
+  /** 列出当前用户跨仓库收到的协作关系。 */
+  async collabInbox(): Promise<{ collaborations: CollabEntry[] }> {
+    return this.doRequest<{ collaborations: CollabEntry[] }>("GET", "/api/collaborations");
+  }
+
+  /** 邀请用户协作指定 Markdown 文件。 */
+  async collabInvite(
+    vaultID: string,
+    filePath: string,
+    username: string
+  ): Promise<CollabEntry> {
+    return this.doRequest<CollabEntry>("POST", `/api/vaults/${encodeURIComponent(vaultID)}/collaborations`, {
+      file_path: filePath,
+      username,
+    });
+  }
+
+  /** 接受或拒绝协作邀请。 */
+  async collabRespond(vaultID: string, collabID: number, accept: boolean): Promise<{ status: string }> {
+    return this.doRequest<{ status: string }>(
+      "POST",
+      `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/${encodeURIComponent(String(collabID))}/respond`,
+      { accept }
+    );
+  }
+
+  /** 撤回邀请或解除协作（owner/manager）。 */
+  async collabRevoke(vaultID: string, collabID: number): Promise<{ status: string }> {
+    return this.doRequest<{ status: string }>(
+      "POST",
+      `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/${encodeURIComponent(String(collabID))}/revoke`
+    );
+  }
+
+  async collabLeave(vaultID: string, collabID: number): Promise<{ status: string }> {
+    return this.doRequest<{ status: string }>(
+      "POST",
+      `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/${encodeURIComponent(String(collabID))}/leave`
+    );
+  }
+
+  /** 以协作者身份上传协作文件正文。 */
+  async collabUpload(vaultID: string, fileID: number, content: string): Promise<{ status: string }> {
+    const startedAt = Date.now();
+    try {
+      return await this.doRequest<{ status: string }>(
+        "POST",
+        `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/files/${encodeURIComponent(String(fileID))}/upload`,
+        { content }
+      );
+    } finally {
+      this.diagnostics?.record({
+        kind: "transfer",
+        at: Date.now(),
+        scope: "collab_upload",
+        durationMs: Date.now() - startedAt,
+        bytes: new TextEncoder().encode(content).byteLength,
+      });
+    }
+  }
+
+  /** 长轮询协作事件：changed 为 true 表示有新事件，version 用于下次 after 参数。 */
+  async collabPoll(
+    vaultID: string,
+    after: number,
+    waitSeconds: number
+  ): Promise<{ changed: boolean; version: number; vault_id: string }> {
+    return this.doRequest<{ changed: boolean; version: number; vault_id: string }>(
+      "GET",
+      `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/poll` +
+        `?after=${encodeURIComponent(String(after))}` +
+        `&wait=${encodeURIComponent(String(waitSeconds))}`
+    );
+  }
+
+  /** 长轮询当前账户在所有仓库中的协作事件。 */
+  async collabAccountPoll(
+    after: number,
+    waitSeconds: number
+  ): Promise<{ changed: boolean; version: number }> {
+    return this.doRequest<{ changed: boolean; version: number }>(
+      "GET",
+      `/api/collaborations/poll?after=${encodeURIComponent(String(after))}` +
+        `&wait=${encodeURIComponent(String(waitSeconds))}`
+    );
+  }
+
+  /** EventSource 查询凭据只允许 HTTPS 或本机回环 HTTP。 */
+  collabEventStreamURL(vaultID: string): string | null {
+    return this.buildCollabEventStreamURL(
+      `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/stream`
+    );
+  }
+
+  /** 构造当前账户的跨仓库协作事件流地址。 */
+  collabAccountEventStreamURL(): string | null {
+    return this.buildCollabEventStreamURL("/api/collaborations/stream");
+  }
+
+  private buildCollabEventStreamURL(path: string): string | null {
+    if (!this.token) {
+      return null;
+    }
+    let serverURL: URL;
+    try {
+      serverURL = new URL(this.settings.serverUrl);
+    } catch {
+      return null;
+    }
+    const secure = serverURL.protocol === "https:";
+    const loopbackHTTP = serverURL.protocol === "http:" && isLoopbackHostname(serverURL.hostname);
+    if (!secure && !loopbackHTTP) return null;
+    return this.url(
+      `${path}?token=${encodeURIComponent(this.token)}` +
+        `&client_id=${encodeURIComponent(this.settings.clientId)}`
+    );
+  }
+
+  /** 下载协作文件正文；协作者不需要仓库成员或设备仓库授权。 */
+  async downloadCollabContent(
+    vaultID: string,
+    fileID: number
+  ): Promise<{ content: ArrayBuffer; meta: SyncFileMeta } | null> {
+    const startedAt = Date.now();
+    let status: number | undefined;
+    let bytes: number | undefined;
+    try {
+      const res = await requestUrl({
+        url: this.url(
+          `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/files/${encodeURIComponent(String(fileID))}/content`
+        ),
+        method: "GET",
+        headers: this.authHeaders(),
+        throw: false,
+      });
+      status = res.status;
+      if (res.status >= 400) {
+        this.parseResponse<never>(res.status, res.json, res.text);
+      }
+      bytes = res.arrayBuffer.byteLength;
+      return {
+        content: res.arrayBuffer,
+        meta: {
+          path: "",
+          type: "markdown",
+          hash: header(res.headers, "x-oss-hash"),
+          size: res.arrayBuffer.byteLength,
+          mtime: parseInt(header(res.headers, "x-oss-mtime") || "0", 10),
+          revision: parseInt(header(res.headers, "x-oss-revision") || "0", 10),
+          deleted: false,
+        },
+      };
+    } catch (error) {
+      if (
+        error instanceof OSSApiError &&
+        (error.status === 403 || error.status === 404 || error.status === 410)
+      ) {
+        return null;
+      }
+      throw error;
+    } finally {
+      this.recordDirectAPI("GET", status, startedAt);
+      this.diagnostics?.record({
+        kind: "transfer",
+        at: Date.now(),
+        scope: "collab_download",
+        durationMs: Date.now() - startedAt,
+        ...(bytes === undefined ? {} : { bytes }),
+      });
+    }
   }
 
   /** 调用旧版同步检查接口，并更新本地时钟偏移。 */
@@ -417,6 +749,12 @@ export class OSSApiClient {
     return this.doRequest<{ shares: ShareOut[] }>("GET", `/api/shares${query}`);
   }
 
+  async updateShareAllowCopy(shareID: string, allowCopy: boolean): Promise<ShareOut> {
+    return this.doRequest<ShareOut>("PATCH", `/api/shares/${encodeURIComponent(shareID)}`, {
+      allow_copy: allowCopy,
+    });
+  }
+
   async deleteShare(shareID: string): Promise<void> {
     await this.doRequest<void>("DELETE", `/api/shares/${encodeURIComponent(shareID)}`);
   }
@@ -434,18 +772,40 @@ export class OSSApiClient {
     return headers;
   }
 
-  private async doRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await requestUrl({
-      url: this.url(path),
-      method: method as any,
-      headers: {
-        "Content-Type": "application/json",
-        ...this.authHeaders(),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      throw: false,
-    });
-    return this.parseResponse<T>(res.status, res.json, res.text);
+  private async doRequest<T>(
+    method: "GET" | "POST" | "PATCH" | "DELETE",
+    path: string,
+    body?: unknown
+  ): Promise<T> {
+    const startedAt = Date.now();
+    let status: number | undefined;
+    try {
+      const res = await requestUrl({
+        url: this.url(path),
+        method: method as any,
+        headers: {
+          "Content-Type": "application/json",
+          ...this.authHeaders(),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        throw: false,
+      });
+      status = res.status;
+      return this.parseResponse<T>(res.status, res.json, res.text);
+    } catch (error) {
+      if (error instanceof OSSApiError) status = error.status;
+      throw error;
+    } finally {
+      this.diagnostics?.record({ kind: "api", at: Date.now(), method, status, durationMs: Date.now() - startedAt });
+    }
+  }
+
+  private recordDirectAPI(
+    method: "GET" | "POST",
+    status: number | undefined,
+    startedAt: number
+  ): void {
+    this.diagnostics?.record({ kind: "api", at: Date.now(), method, status, durationMs: Date.now() - startedAt });
   }
 
   private parseResponse<T>(status: number, json: any, text: string): T {
@@ -482,6 +842,14 @@ function header(headers: Record<string, string>, name: string): string {
     if (key.toLowerCase() === target) return value;
   }
   return "";
+}
+
+export function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (normalized === "localhost" || normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") {
+    return true;
+  }
+  return /^127(?:\.\d{1,3}){3}$/.test(normalized);
 }
 
 function classifyPath(path: string): "markdown" | "attachment" | "config" {

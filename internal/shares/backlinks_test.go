@@ -22,6 +22,9 @@ func setupHandler(t *testing.T) (*Handler, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
+	}
 	if err := database.AutoMigrate(db); err != nil {
 		t.Fatal(err)
 	}

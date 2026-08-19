@@ -39,12 +39,11 @@ func (s *Scheduler) Register() {
 	})
 	reconcileSpec := fmt.Sprintf("@every %dh", s.cl.Cfg.Sync.EffectiveReconcileIntervalHours())
 	_, _ = s.cron.AddFunc(reconcileSpec, func() {
-		report, err := s.rc.Run(false)
+		_, err := s.rc.Run(false)
 		if err != nil {
 			log.Printf("[OSS cron] storage reconciliation error: %v", err)
 			return
 		}
-		log.Printf("[OSS cron] storage reconciliation: %s", report.String())
 	})
 	_, _ = s.cron.AddFunc(spec, func() {
 		if err := s.cl.PurgeOrphanAttachments(); err != nil {

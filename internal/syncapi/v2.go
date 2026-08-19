@@ -21,9 +21,13 @@ import (
 	"gorm.io/gorm/clause"
 
 	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/devices"
+	"github.com/oss/oss-server/internal/collaboration"
+	"github.com/oss/oss-server/internal/deviceauth"
 	"github.com/oss/oss-server/internal/filestore"
+	"github.com/oss/oss-server/internal/history"
 	"github.com/oss/oss-server/internal/models"
+	"github.com/oss/oss-server/internal/recycle"
+	"github.com/oss/oss-server/internal/settingspolicy"
 	"github.com/oss/oss-server/internal/synclock"
 	"github.com/oss/oss-server/internal/vaultaccess"
 )
@@ -33,7 +37,10 @@ const (
 	maxManifestLimit     = 2000
 )
 
-var errRevisionConflict = errors.New("sync revision conflict")
+var (
+	errRevisionConflict          = errors.New("sync revision conflict")
+	errVaultStorageQuotaExceeded = errors.New("vault storage quota exceeded")
+)
 
 type V2FileMeta struct {
 	Path       string `json:"path"`
@@ -103,7 +110,7 @@ func (h *Handler) v2ListChanges(c *gin.Context, manifest bool) {
 		return
 	}
 	clientID := h.requestClientID(c, c.Query("client_id"))
-	if !h.requireActiveDevice(c, u.ID, clientID) {
+	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, clientID) {
 		return
 	}
 	after, err := parseInt64Default(c.Query("after"), 0)
@@ -213,6 +220,9 @@ func (h *Handler) V2Ack(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sync acknowledgement"})
 		return
 	}
+	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, req.ClientID) {
+		return
+	}
 
 	vaultLock := h.vaultLock(vault.ID)
 	vaultLock.Lock()
@@ -226,12 +236,12 @@ func (h *Handler) V2Ack(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "cursor is ahead of the vault revision"})
 		return
 	}
-	if err := devices.Touch(
+	if err := deviceauth.Touch(
 		h.DB,
 		u.ID,
 		vault.ID,
 		req.ClientID,
-		devices.DecodeDeviceName(c.GetHeader(devices.DeviceNameHeader)),
+		deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader)),
 		&req.Cursor,
 		time.Now(),
 	); err != nil {
@@ -275,7 +285,12 @@ func (h *Handler) V2Upload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id and operation_id are required"})
 		return
 	}
-	if !h.requireActiveDevice(c, u.ID, clientID) {
+	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, clientID) {
+		return
+	}
+	effective, err := settingspolicy.EffectiveForVault(h.DB, vault.ID, h.maxUploadBytes())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	declaredHash := strings.ToLower(strings.TrimSpace(c.Query("hash")))
@@ -284,7 +299,7 @@ func (h *Handler) V2Upload(c *gin.Context) {
 		return
 	}
 
-	maxBytes := h.maxUploadBytes()
+	maxBytes := effective.UploadSizeBytes
 	if c.Request.ContentLength > maxBytes {
 		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file exceeds configured size limit"})
 		return
@@ -369,7 +384,10 @@ func (h *Handler) V2Upload(c *gin.Context) {
 			return nil
 		}
 
-		if err := ensureVaultQuota(tx, vault.ID, written, current, exists); err != nil {
+		if err := ensureVaultQuota(tx, vaultQuotaChange{
+			VaultID: vault.ID, NewSize: written, Current: current, Exists: exists,
+			PolicyLimit: effective.VaultStorageBytes,
+		}); err != nil {
 			return err
 		}
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
@@ -416,6 +434,15 @@ func (h *Handler) V2Upload(c *gin.Context) {
 			return err
 		}
 		result = current
+
+		// 记录修改历史：覆盖已有正文时快照旧内容。
+		action := history.ActionCreate
+		if exists && !current.IsDeleted {
+			action = history.ActionModify
+		}
+		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActor(c, u), action, path, "", backupPath, revision); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -436,6 +463,12 @@ func (h *Handler) V2Upload(c *gin.Context) {
 		_ = os.Remove(backupPath)
 	}
 	h.notifyRevision(vault.ID)
+	if userIDs := h.collaborationEventUsers(vault.ID, result.ID); len(userIDs) > 0 {
+		h.publishCollaborationEvent(collaboration.Event{
+			VaultID: vault.ID, FileID: result.ID, FilePath: result.Path,
+			Kind: "changed", At: time.Now().UnixMilli(),
+		}, userIDs)
+	}
 	meta := v2Meta(result)
 	meta.ServerTime = time.Now().UnixMilli()
 	c.JSON(http.StatusOK, meta)
@@ -452,7 +485,7 @@ func (h *Handler) V2Download(c *gin.Context) {
 		return
 	}
 	clientID := h.requestClientID(c, c.Query("client_id"))
-	if !h.requireActiveDevice(c, u.ID, clientID) {
+	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, clientID) {
 		return
 	}
 	expectedRevision, err := parseInt64Default(c.Query("revision"), 0)
@@ -514,7 +547,7 @@ func (h *Handler) V2Delete(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid delete request"})
 		return
 	}
-	if !h.requireActiveDevice(c, u.ID, req.ClientID) {
+	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, req.ClientID) {
 		return
 	}
 
@@ -531,7 +564,8 @@ func (h *Handler) V2Delete(c *gin.Context) {
 	var conflict models.File
 	changed := false
 	targetPath := ""
-	stagedPath := ""
+	recycleKey := ""
+	recycleAbs := ""
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
 		current, exists, err := lockedFile(tx, vault.OwnerID, vault.ID, req.Path)
 		if err != nil {
@@ -569,10 +603,12 @@ func (h *Handler) V2Delete(c *gin.Context) {
 			return nil
 		}
 		targetPath = h.fileDiskPath(current)
-		stagedPath, err = stageDeletedContent(targetPath)
+		key, err := recycle.MoveIn(h.Cfg.Storage.DataDir, vault.ID, current.ID, targetPath)
 		if err != nil {
 			return err
 		}
+		recycleKey = key
+		recycleAbs = recycle.DiskPath(h.Cfg.Storage.DataDir, models.File{StorageKey: key})
 		revision, err := nextVaultRevision(tx, vault.ID)
 		if err != nil {
 			return err
@@ -581,6 +617,7 @@ func (h *Handler) V2Delete(c *gin.Context) {
 		current.Revision = revision
 		current.IsDeleted = true
 		current.DeletedAt = sql.NullTime{Time: now, Valid: true}
+		current.StorageKey = recycleKey
 		current.MTime = req.ClientMTime
 		current.LastWriterClientID = req.ClientID
 		current.LastOperationID = req.OperationID
@@ -591,12 +628,18 @@ func (h *Handler) V2Delete(c *gin.Context) {
 			UpdateColumn("storage_used", gorm.Expr("CASE WHEN storage_used >= ? THEN storage_used - ? ELSE 0 END", current.Size, current.Size)).Error; err != nil {
 			return err
 		}
+		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActor(c, u), history.ActionDelete, req.Path, "", recycleAbs, revision); err != nil {
+			return err
+		}
 		result = current
 		changed = true
 		return nil
 	})
 	if err != nil {
-		restoreStagedContent(targetPath, stagedPath)
+		// 事务失败时把正文从回收站移回原位。
+		if recycleKey != "" && targetPath != "" {
+			_ = os.Rename(recycleAbs, targetPath)
+		}
 	}
 	if errors.Is(err, errRevisionConflict) {
 		c.JSON(http.StatusConflict, gin.H{"error": "revision conflict", "current": v2Meta(conflict)})
@@ -610,12 +653,14 @@ func (h *Handler) V2Delete(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if targetPath == "" && result.StorageKey != "" {
-		targetPath = h.fileDiskPath(result)
-	}
-	discardDeletedContent(targetPath, stagedPath)
 	if changed {
 		h.notifyRevision(vault.ID)
+		userIDs := h.collaborationEventUsers(vault.ID, result.ID)
+		_ = h.collab.RevokeForPath(vault.ID, req.Path, result.ID)
+		h.publishCollaborationEvent(collaboration.Event{
+			VaultID: vault.ID, FileID: result.ID, FilePath: req.Path,
+			Kind: "revoked", At: time.Now().UnixMilli(),
+		}, userIDs)
 	}
 	meta := v2Meta(result)
 	meta.ServerTime = time.Now().UnixMilli()
@@ -643,7 +688,7 @@ func (h *Handler) V2Rename(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid rename request"})
 		return
 	}
-	if !h.requireActiveDevice(c, u.ID, req.ClientID) {
+	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, req.ClientID) {
 		return
 	}
 
@@ -759,6 +804,10 @@ func (h *Handler) V2Rename(c *gin.Context) {
 		}
 		oldResult = oldFile
 		newResult = target
+		// 记录重命名历史，快照旧路径正文。
+		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActor(c, u), history.ActionRename, req.NewPath, req.OldPath, newDisk, newRevision); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -777,6 +826,12 @@ func (h *Handler) V2Rename(c *gin.Context) {
 		return
 	}
 	h.notifyRevision(vault.ID)
+	userIDs := h.collaborationEventUsers(vault.ID, oldResult.ID)
+	_ = h.collab.RevokeForPath(vault.ID, req.OldPath, oldResult.ID)
+	h.publishCollaborationEvent(collaboration.Event{
+		VaultID: vault.ID, FileID: oldResult.ID, FilePath: req.OldPath,
+		Kind: "revoked", At: time.Now().UnixMilli(),
+	}, userIDs)
 	c.JSON(http.StatusOK, v2RenameResponse{Old: v2Meta(oldResult), New: v2Meta(newResult)})
 }
 
@@ -844,23 +899,35 @@ func defaultVaultID(db *gorm.DB, userID uint) (string, error) {
 	return vault.ID, nil
 }
 
-func ensureVaultQuota(tx *gorm.DB, vaultID string, newSize int64, current models.File, exists bool) error {
+type vaultQuotaChange struct {
+	VaultID     string
+	NewSize     int64
+	Current     models.File
+	Exists      bool
+	PolicyLimit int64
+}
+
+func ensureVaultQuota(tx *gorm.DB, change vaultQuotaChange) error {
 	var vault models.Vault
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", vaultID).First(&vault).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", change.VaultID).First(&vault).Error; err != nil {
 		return err
 	}
 	oldLiveSize := int64(0)
-	if exists && !current.IsDeleted {
-		oldLiveSize = current.Size
+	if change.Exists && !change.Current.IsDeleted {
+		oldLiveSize = change.Current.Size
 	}
-	nextUsed := vault.StorageUsed - oldLiveSize + newSize
+	nextUsed := vault.StorageUsed - oldLiveSize + change.NewSize
 	if nextUsed < 0 {
 		nextUsed = 0
 	}
-	if vault.StorageQuota > 0 && nextUsed > vault.StorageQuota {
-		return fmt.Errorf("vault storage quota exceeded")
+	limit := change.PolicyLimit
+	if vault.StorageQuota > 0 && (limit <= 0 || vault.StorageQuota < limit) {
+		limit = vault.StorageQuota
 	}
-	return tx.Model(&models.Vault{}).Where("id = ?", vaultID).UpdateColumn("storage_used", nextUsed).Error
+	if limit > 0 && nextUsed > limit {
+		return errVaultStorageQuotaExceeded
+	}
+	return tx.Model(&models.Vault{}).Where("id = ?", change.VaultID).UpdateColumn("storage_used", nextUsed).Error
 }
 
 func (h *Handler) maxUploadBytes() int64 {
@@ -914,16 +981,31 @@ func (h *Handler) lockTwoPaths(a, b string) func() {
 	}
 }
 
-func (h *Handler) requireActiveDevice(c *gin.Context, userID uint, clientID string) bool {
+func (h *Handler) requireDeviceVaultAccess(c *gin.Context, userID uint, vaultID, clientID string) bool {
 	if clientID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
 		return false
 	}
-	if err := devices.CheckActive(h.DB, userID, clientID); err != nil {
-		h.writeDeviceError(c, err)
+	if err := deviceauth.CheckVaultAccess(h.DB, userID, clientID, vaultID); err != nil {
+		h.writeDeviceAuthError(c, err)
 		return false
 	}
 	return true
+}
+
+func (h *Handler) writeDeviceAuthError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, deviceauth.ErrRevoked):
+		c.JSON(http.StatusForbidden, gin.H{"error": "this device has been revoked", "code": "device_revoked"})
+	case errors.Is(err, deviceauth.ErrDevicePending):
+		c.JSON(http.StatusForbidden, gin.H{"error": "this device is pending authorization", "code": "device_pending"})
+	case errors.Is(err, deviceauth.ErrVaultNotAuthorized):
+		c.JSON(http.StatusForbidden, gin.H{"error": "this device is not authorized for this vault", "code": "device_not_authorized"})
+	case errors.Is(err, deviceauth.ErrDeviceUnknown):
+		c.JSON(http.StatusForbidden, gin.H{"error": "device is not registered", "code": "device_unknown"})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
 }
 
 func (h *Handler) recordDeviceActivity(
@@ -931,12 +1013,12 @@ func (h *Handler) recordDeviceActivity(
 	userID uint,
 	vaultID, clientID string,
 ) bool {
-	err := devices.Touch(
+	err := deviceauth.Touch(
 		h.DB,
 		userID,
 		vaultID,
 		clientID,
-		devices.DecodeDeviceName(c.GetHeader(devices.DeviceNameHeader)),
+		deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader)),
 		nil,
 		time.Now(),
 	)
@@ -948,7 +1030,7 @@ func (h *Handler) recordDeviceActivity(
 }
 
 func (h *Handler) writeDeviceError(c *gin.Context, err error) {
-	if errors.Is(err, devices.ErrRevoked) {
+	if errors.Is(err, deviceauth.ErrRevoked) {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": "this device has been revoked",
 			"code":  "device_revoked",
@@ -959,10 +1041,10 @@ func (h *Handler) writeDeviceError(c *gin.Context, err error) {
 }
 
 func (h *Handler) requestClientID(c *gin.Context, fallback string) string {
-	if header := c.GetHeader(devices.ClientIDHeader); header != "" {
-		return devices.NormalizeClientID(header)
+	if header := c.GetHeader(deviceauth.ClientIDHeader); header != "" {
+		return deviceauth.NormalizeClientID(header)
 	}
-	return devices.NormalizeClientID(fallback)
+	return deviceauth.NormalizeClientID(fallback)
 }
 
 func v2Meta(file models.File) V2FileMeta {
@@ -992,7 +1074,7 @@ func parseIntDefault(raw string, fallback int) (int, error) {
 }
 
 func cleanIdentifier(value string) string {
-	return devices.NormalizeClientID(value)
+	return deviceauth.NormalizeClientID(value)
 }
 
 func isHex(value string) bool {

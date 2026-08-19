@@ -1,0 +1,116 @@
+{{define "admin-devices"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Admin · Devices</span>
+    <h1>{{.Layout.T "common.all_devices"}}</h1>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+{{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "admin.settings_saved"}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Device ledger</span>
+        <h2>{{.Layout.T "admin.cross_user_devices"}}</h2>
+      </div>
+      <span class="ledger-count">{{len .Data.Devices}} devices</span>
+    </header>
+    {{if .Data.Devices}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>{{.Layout.T "admin.user"}}</th><th>{{.Layout.T "admin.device"}}</th><th>{{.Layout.T "admin.status"}}</th><th>{{.Layout.T "admin.authorized_vaults"}}</th><th>{{.Layout.T "common.last_connected"}}</th><th>{{.Layout.T "admin.cursor"}}</th><th>{{.Layout.T "common.actions"}}</th></tr></thead>
+        <tbody>
+          {{range $dev := .Data.Devices}}
+          <tr>
+            <td>{{.Username}}</td>
+            <td class="device-cell">
+              {{if eq .Status "pending"}}
+              <input class="device-name-input" type="text" id="device-name-{{.UserID}}-{{.ClientID}}" name="name" value="{{.Name}}"
+                     aria-label="{{$.Layout.T "admin.device_name"}}" minlength="1" maxlength="128" required form="device-auth-{{.UserID}}-{{.ClientID}}">
+              {{else}}
+              <strong>{{.Name}}</strong>
+              {{end}}
+              <small class="file-name">{{.ClientID}}</small>
+            </td>
+            <td><span class="role role--{{.Status}}">{{.Status}}</span></td>
+            <td class="device-auth-cell">
+              {{if eq .Status "revoked"}}
+                <p class="panel-note vault-empty">{{$.Layout.T "admin.device_revoked_no_edit"}}</p>
+              {{else}}
+              <span class="device-auth-summary__text">
+                {{if .Vaults}}
+                  {{if .AuthorizedCount}}
+                    {{range $i, $n := .AuthorizedNames}}{{if $i}}、{{end}}{{$n}}{{end}}
+                  {{else}}
+                  {{$.Layout.T "admin.unauthorized_vaults"}}
+                  {{end}}
+                {{else}}
+                {{$.Layout.T "admin.no_authorizable_vaults"}}
+                {{end}}
+              </span>
+              <form id="device-revoke-{{.UserID}}-{{.ClientID}}" method="post"
+                    action="/dashboard/admin/devices/{{.ClientID}}/revoke"
+                    data-confirm="{{$.Layout.T "admin.revoke_device_confirm" .Name}}">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <input type="hidden" name="user_id" value="{{.UserID}}">
+              </form>
+              {{end}}
+            </td>
+            <td><time>{{timeFmt .LastSeenAt}}</time></td>
+            <td>{{.LastCursor}}</td>
+            <td class="device-actions">
+              {{if ne .Status "revoked"}}
+                <div class="device-auth-summary">
+                <div class="device-auth-summary__actions">
+                {{if .Vaults}}
+                <button class="text-button" type="button" data-modal-open="device-modal-{{.UserID}}-{{.ClientID}}">{{if eq .Status "pending"}}{{$.Layout.T "admin.approve_and_configure"}}{{else}}{{$.Layout.T "admin.edit_auth"}}{{end}}</button>
+                {{end}}
+                <button class="text-button text-button--danger" type="submit" form="device-revoke-{{.UserID}}-{{.ClientID}}">{{$.Layout.T "common.revoke"}}</button>
+                </div>
+                </div>
+              {{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="panel-empty">{{.Layout.T "admin.no_devices_yet"}}</p>
+    {{end}}
+  </article>
+</div>
+
+{{range $dev := .Data.Devices}}
+{{if ne .Status "revoked"}}{{if .Vaults}}
+<div class="modal device-auth-modal" id="device-modal-{{.UserID}}-{{.ClientID}}" role="dialog" aria-modal="true" aria-labelledby="device-modal-title-{{.UserID}}-{{.ClientID}}">
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel">
+    <h2 id="device-modal-title-{{.UserID}}-{{.ClientID}}">{{$.Layout.T "admin.device_auth_modal_title" .Name}}</h2>
+    <form id="device-auth-{{.UserID}}-{{.ClientID}}" method="post"
+          action="/dashboard/admin/devices/{{.ClientID}}/authorize" class="stack-form device-auth-form">
+      <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+      <input type="hidden" name="user_id" value="{{.UserID}}">
+      {{if eq .Status "pending"}}<input type="hidden" name="status" value="approved">{{end}}
+      <fieldset class="vault-check-list">
+        <legend>{{$.Layout.T "admin.authorized_vaults"}}</legend>
+        {{range .Vaults}}
+        <label class="vault-check">
+          <input type="checkbox" name="vault_ids" value="{{.ID}}" {{if index .AuthorizedForClient $dev.ClientID}}checked{{end}}>
+          <span>{{.Name}}</span>
+        </label>
+        {{end}}
+      </fieldset>
+      <div class="action-row">
+        <button class="button button--primary" type="submit">{{if eq $dev.Status "pending"}}{{$.Layout.T "admin.approve_and_save"}}{{else}}{{$.Layout.T "admin.save_auth"}}{{end}}</button>
+        <button class="text-button" type="button" data-modal-close>{{$.Layout.T "common.cancel"}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}{{end}}
+{{end}}
+{{end}}

@@ -27,6 +27,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/oss/oss-server/internal/auth"
+	"github.com/oss/oss-server/internal/collaboration"
 	"github.com/oss/oss-server/internal/config"
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/models"
@@ -36,10 +37,16 @@ type Handler struct {
 	DB      *gorm.DB
 	Cfg     *config.Config
 	signals sync.Map
+	broker  *collaboration.Broker
+	collab  *collaboration.Service
 }
 
 func New(db *gorm.DB, cfg *config.Config) *Handler {
-	return &Handler{DB: db, Cfg: cfg}
+	return &Handler{
+		DB: db, Cfg: cfg,
+		broker: collaboration.NewBroker(),
+		collab: collaboration.New(db),
+	}
 }
 
 // Register 挂载需要身份认证的同步路由。
@@ -61,6 +68,43 @@ func (h *Handler) Register(r *gin.Engine) {
 		v2.GET("/download", h.V2Download)
 		v2.POST("/delete", h.V2Delete)
 		v2.POST("/rename", h.V2Rename)
+		v2.GET("/strategy", h.V2Strategy)
+		v2.GET("/history", h.V2HistoryList)
+		v2.GET("/history/:history_id", h.V2HistoryDetail)
+		v2.POST("/history/:history_id/restore", h.V2HistoryRestore)
+	}
+
+	recycle := r.Group("/api/vaults/:vault_id/recycle-bin", auth.Middleware(h.DB, h.Cfg))
+	{
+		recycle.GET("", h.RecycleList)
+		recycle.POST("/:file_id/restore", h.RecycleRestore)
+		recycle.POST("/:file_id/delete", h.RecycleDelete)
+	}
+
+	collab := r.Group("/api/vaults/:vault_id/collaborations", auth.Middleware(h.DB, h.Cfg))
+	{
+		collab.GET("", h.CollabList)
+		collab.POST("", h.CollabInvite)
+		collab.POST("/:collab_id/respond", h.CollabRespond)
+		collab.POST("/:collab_id/revoke", h.CollabRevoke)
+		collab.POST("/:collab_id/leave", h.CollabLeave)
+		collab.GET("/files/:file_id/content", h.CollabContent)
+		collab.POST("/files/:file_id/upload", h.CollabUpload)
+	}
+	collabInbox := r.Group("/api/collaborations", auth.Middleware(h.DB, h.Cfg))
+	{
+		collabInbox.GET("", h.CollabInbox)
+		collabInbox.GET("/poll", h.CollabAccountPoll)
+	}
+	collabAccountEvents := r.Group("/api/collaborations", allowObsidianDesktopOrigin())
+	{
+		collabAccountEvents.GET("/stream", h.CollabAccountSSE)
+	}
+	// SSE 与长轮询自行鉴权（支持 EventSource 的短期 token 查询参数），不套用 Bearer 中间件。
+	collabEvents := r.Group("/api/vaults/:vault_id/collaborations", allowObsidianDesktopOrigin())
+	{
+		collabEvents.GET("/stream", h.CollabSSE)
+		collabEvents.GET("/poll", h.CollabPoll)
 	}
 }
 

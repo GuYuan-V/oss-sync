@@ -45,6 +45,20 @@ func RequireUser(c *gin.Context) (*models.User, bool) {
 	return u, true
 }
 
+// RequireAdmin 守卫：要求当前用户是管理员。
+func RequireAdmin(c *gin.Context) (*models.User, bool) {
+	u := CurrentUser(c)
+	if u == nil {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return nil, false
+	}
+	if u.Role != "admin" {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient permission", "code": "not_admin"})
+		return nil, false
+	}
+	return u, true
+}
+
 // Middleware 解析 Authorization 头并拒绝未认证请求。
 func Middleware(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {

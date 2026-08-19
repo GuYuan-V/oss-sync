@@ -211,3 +211,48 @@ func Env() string {
 	}
 	return e
 }
+
+// SaveDatabaseConfig stores database startup settings in the active YAML file.
+// It never changes the database connection of the current process.
+func SaveDatabaseConfig(driver, dsn string) error {
+	driver = strings.ToLower(strings.TrimSpace(driver))
+	dsn = strings.TrimSpace(dsn)
+	if driver != "sqlite" && driver != "postgres" {
+		return fmt.Errorf("database.driver 仅支持 sqlite / postgres，收到 %q", driver)
+	}
+	if dsn == "" {
+		return fmt.Errorf("database.dsn 不能为空")
+	}
+	path, err := configPath()
+	if err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("读取配置文件 %s 失败: %w", path, err)
+	}
+	var stored Config
+	if err := yaml.Unmarshal(raw, &stored); err != nil {
+		return fmt.Errorf("解析配置文件 %s 失败: %w", path, err)
+	}
+	stored.Database = DatabaseConfig{Driver: driver, DSN: dsn}
+	if err := stored.validate(); err != nil {
+		return err
+	}
+	updated, err := yaml.Marshal(&stored)
+	if err != nil {
+		return fmt.Errorf("序列化配置文件 %s 失败: %w", path, err)
+	}
+	if err := os.WriteFile(path, updated, 0o600); err != nil {
+		return fmt.Errorf("写入配置文件 %s 失败: %w", path, err)
+	}
+	return nil
+}
+
+func configPath() (string, error) {
+	env := Env()
+	if env != "dev" && env != "prod" {
+		return "", fmt.Errorf("OSS_ENV 仅支持 dev / prod，收到 %q", env)
+	}
+	return filepath.Join("configs", fmt.Sprintf("config.%s.yaml", env)), nil
+}
