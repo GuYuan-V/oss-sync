@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag
+        id: version
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must match v<major>.<minor>.<patch>" >&2
+            exit 1
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build server assets
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_DIR: ${{ runner.temp }}/oss-build
+          DIST_DIR: ${{ runner.temp }}/oss-release
+        run: |
+          set -euo pipefail
+          mkdir -p "$BUILD_DIR" "$DIST_DIR"
+          built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          commit="${GITHUB_SHA::12}"
+          ldflags="-s -w -X github.com/oss/oss-server/internal/version.Version=$VERSION -X github.com/oss/oss-server/internal/version.Commit=$commit -X github.com/oss/oss-server/internal/version.BuiltAt=$built_at"
+
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            target_dir="$BUILD_DIR/$goos-$goarch"
+            mkdir -p "$target_dir"
+            binary="oss-server"
+            if [[ "$goos" == "windows" ]]; then binary="oss-server.exe"; fi
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+              go build -trimpath -ldflags "$ldflags" -o "$target_dir/$binary" ./cmd/server
+
+            asset="oss-server_${VERSION}_${goos}_${goarch}"
+            if [[ "$goos" == "windows" ]]; then
+              python3 -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[2], "w", zipfile.ZIP_DEFLATED); z.write(sys.argv[1], "oss-server.exe"); z.close()' \
+                "$target_dir/$binary" "$DIST_DIR/$asset.zip"
+            else
+              tar -C "$target_dir" -czf "$DIST_DIR/$asset.tar.gz" "$binary"
+            fi
+          done
+
+          test "$("$BUILD_DIR/linux-amd64/oss-server" --version)" = "$VERSION"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+
+      - name: Build plugin assets
+        working-directory: plugin
+        run: |
+          npm ci
+          npm run build
+
+      - name: Collect plugin assets
+        env:
+          DIST_DIR: ${{ runner.temp }}/oss-release
+        run: |
+          cp plugin/main.js plugin/manifest.json plugin/styles.css "$DIST_DIR/"
+          test -s "$DIST_DIR/main.js"
+          test -s "$DIST_DIR/manifest.json"
+          test -s "$DIST_DIR/styles.css"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIST_DIR: ${{ runner.temp }}/oss-release
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$DIST_DIR"/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
