@@ -6,72 +6,284 @@
 <div class="control-grid">
   <article class="gate-panel">
     <div class="gate-panel__copy">
-      <span class="eyebrow">Registration gate</span>
-      <h2>{{if .Data.RegistrationEnabled}}{{.Layout.T "common.open_registration"}}{{else}}{{.Layout.T "common.close_registration"}}{{end}}</h2>
-      <p>{{.Layout.T "admin.registration_help"}}</p>
+      <span class="eyebrow">{{.Layout.T "admin.system_settings_eyebrow"}}</span>
+      <h2>{{.Layout.T "admin.system_settings_panel_title"}}</h2>
+      <p>{{.Layout.T "admin.system_settings_panel_desc"}}</p>
     </div>
     <form method="post" action="/dashboard/admin/system" class="gate-form stack-form">
       <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
-       <label class="switch-control">
-         <input type="checkbox" name="registration_enabled" {{if .Data.RegistrationEnabled}}checked{{end}}>
-         <span class="switch-control__track" aria-hidden="true"></span>
-         <span>{{.Layout.T "admin.allow_public_registration"}}</span>
-       </label>
-       <label class="switch-control">
-         <input type="checkbox" name="custom_fragments_enabled" {{if .Data.CustomFragmentsEnabled}}checked{{end}}>
-         <span class="switch-control__track" aria-hidden="true"></span>
-         <span>{{.Layout.T "admin.custom_fragments"}}</span>
-         <small>{{.Layout.T "admin.custom_fragments_help"}}</small>
-       </label>
-       <label>
-         <span>{{.Layout.T "admin.global_sync_mode"}}</span>
-         <select name="sync_mode" required>
-           <option value="user_choice" {{if eq .Data.SyncMode "user_choice"}}selected{{end}}>{{.Layout.T "admin.sync_mode_user_choice"}}</option>
-          <option value="short_poll" {{if eq .Data.SyncMode "short_poll"}}selected{{end}}>{{.Layout.T "admin.sync_mode_short_poll"}}</option>
-          <option value="long_poll" {{if eq .Data.SyncMode "long_poll"}}selected{{end}}>{{.Layout.T "admin.sync_mode_long_poll"}}</option>
-        </select>
-        <small>{{.Layout.T "admin.sync_mode_policy_note"}}</small>
-      </label>
-      <label>
-        <span>{{.Layout.T "admin.default_recycle_bin_days"}}</span>
-        <input type="number" name="default_recycle_bin_days" min="1" max="{{.Data.MaxRecycleBinDays}}" value="{{.Data.DefaultRecycleBinDays}}" required>
-      </label>
-      <label>
-        <span>{{.Layout.T "admin.max_long_poll_wait_sec"}}</span>
-        <input type="number" name="max_long_poll_wait_sec" min="1" max="30" value="{{.Data.MaxLongPollWaitSec}}" required>
-      </label>
-      <label>
-        <span>{{.Layout.T "admin.max_sync_debounce_sec"}}</span>
-        <input type="number" name="max_sync_debounce_sec" min="3" max="3600" value="{{.Data.MaxSyncDebounceSec}}" required>
-      </label>
-      <label>
-        <span>{{.Layout.T "admin.max_recycle_bin_days"}}</span>
-        <input type="number" name="max_recycle_bin_days" min="1" max="3650" value="{{.Data.MaxRecycleBinDays}}" required>
-      </label>
-      <label>
-        <span>{{.Layout.T "admin.max_vault_storage_mb"}}</span>
-        <input type="number" name="max_vault_storage_mb" min="0" value="{{.Data.MaxVaultStorageMB}}" required>
-        <small>{{.Layout.T "admin.zero_means_no_storage_limit"}}</small>
-      </label>
-      <label>
-        <span>{{.Layout.T "admin.max_upload_size_mb"}}</span>
-        <input type="number" name="max_upload_size_mb" min="1" max="{{.Data.ConfigMaxUploadSizeMB}}" value="{{.Data.MaxUploadSizeMB}}" required>
-        <small>{{.Layout.T "admin.config_hard_limit_mb" .Data.ConfigMaxUploadSizeMB}}</small>
-      </label>
-      <button class="button button--primary" type="submit">{{.Layout.T "admin.save_system_settings"}}</button>
+      <div class="system-settings-groups">
+        <section class="system-settings-group" aria-labelledby="system-group-registration">
+          <div class="system-settings-group__title" id="system-group-registration" role="heading" aria-level="3">{{.Layout.T "admin.registration_and_appearance"}}</div>
+          <p class="system-settings-group__summary">{{.Layout.T "admin.registration_and_appearance_help"}}</p>
+          <div class="system-settings-group__fields">
+            <label class="switch-control">
+              <input type="checkbox" name="registration_enabled" {{if .Data.RegistrationEnabled}}checked{{end}}>
+              <span class="switch-control__track" aria-hidden="true"></span>
+              <span>{{.Layout.T "admin.allow_public_registration"}}</span>
+            </label>
+            <label class="switch-control">
+              <input type="checkbox" name="custom_fragments_enabled" {{if .Data.CustomFragmentsEnabled}}checked{{end}}>
+              <span class="switch-control__track" aria-hidden="true"></span>
+              <span>{{.Layout.T "admin.custom_fragments"}}</span>
+              <small>{{.Layout.T "admin.custom_fragments_help"}}</small>
+            </label>
+          </div>
+        </section>
+
+        <section class="system-settings-group" aria-labelledby="system-group-sync">
+          <div class="system-settings-group__title" id="system-group-sync" role="heading" aria-level="3">{{.Layout.T "admin.sync_policy_group"}}</div>
+          <p class="system-settings-group__summary">{{.Layout.T "admin.sync_policy_group_help"}}</p>
+          <div class="system-settings-group__fields">
+            <label>
+              <span>{{.Layout.T "admin.global_sync_mode"}}</span>
+              <select name="sync_mode" required>
+                <option value="user_choice" {{if eq .Data.SyncMode "user_choice"}}selected{{end}}>{{.Layout.T "admin.sync_mode_user_choice"}}</option>
+                <option value="short_poll" {{if eq .Data.SyncMode "short_poll"}}selected{{end}}>{{.Layout.T "admin.sync_mode_short_poll"}}</option>
+                <option value="long_poll" {{if eq .Data.SyncMode "long_poll"}}selected{{end}}>{{.Layout.T "admin.sync_mode_long_poll"}}</option>
+              </select>
+              <small>{{.Layout.T "admin.sync_mode_policy_note"}}</small>
+            </label>
+            <label>
+              <span>{{.Layout.T "admin.max_long_poll_wait_sec"}}</span>
+              <input type="number" name="max_long_poll_wait_sec" min="1" max="30" value="{{.Data.MaxLongPollWaitSec}}" required>
+            </label>
+            <label>
+              <span>{{.Layout.T "admin.max_sync_debounce_sec"}}</span>
+              <input type="number" name="max_sync_debounce_sec" min="3" max="3600" value="{{.Data.MaxSyncDebounceSec}}" required>
+            </label>
+          </div>
+        </section>
+
+        <section class="system-settings-group" aria-labelledby="system-group-retention">
+          <div class="system-settings-group__title" id="system-group-retention" role="heading" aria-level="3">{{.Layout.T "admin.retention_storage_group"}}</div>
+          <p class="system-settings-group__summary">{{.Layout.T "admin.retention_storage_group_help"}}</p>
+          <div class="system-settings-group__fields">
+            <label>
+              <span>{{.Layout.T "admin.default_recycle_bin_days"}}</span>
+              <input type="number" name="default_recycle_bin_days" min="1" max="{{.Data.MaxRecycleBinDays}}" value="{{.Data.DefaultRecycleBinDays}}" required>
+            </label>
+            <label>
+              <span>{{.Layout.T "admin.max_recycle_bin_days"}}</span>
+              <input type="number" name="max_recycle_bin_days" min="1" max="3650" value="{{.Data.MaxRecycleBinDays}}" required>
+            </label>
+            <label>
+              <span>{{.Layout.T "admin.history_retention_days"}}</span>
+              <input type="number" name="history_retention_days" min="0" max="3650" value="{{.Data.HistoryRetentionDays}}" required>
+              <small>{{.Layout.T "admin.zero_means_no_history_cleanup"}}</small>
+            </label>
+          </div>
+        </section>
+
+        <section class="system-settings-group" aria-labelledby="system-group-upload">
+          <div class="system-settings-group__title" id="system-group-upload" role="heading" aria-level="3">{{.Layout.T "admin.storage_upload_group"}}</div>
+          <p class="system-settings-group__summary">{{.Layout.T "admin.storage_upload_group_help"}}</p>
+          <div class="system-settings-group__fields">
+            <label>
+              <span>{{.Layout.T "admin.max_vault_storage_mb"}}</span>
+              <input type="number" name="max_vault_storage_mb" min="0" value="{{.Data.MaxVaultStorageMB}}" required>
+              <small>{{.Layout.T "admin.zero_means_no_storage_limit"}}</small>
+            </label>
+            <label>
+              <span>{{.Layout.T "admin.max_upload_size_mb"}}</span>
+              <input type="number" name="max_upload_size_mb" min="1" max="{{.Data.ConfigMaxUploadSizeMB}}" value="{{.Data.MaxUploadSizeMB}}" required>
+              <small>{{.Layout.T "admin.config_hard_limit_mb" .Data.ConfigMaxUploadSizeMB}}</small>
+            </label>
+          </div>
+        </section>
+      </div>
+
+      <div class="system-settings-group__actions">
+        <button class="button button--primary" type="submit">{{.Layout.T "admin.save_system_settings"}}</button>
+      </div>
     </form>
   </article>
   <article class="ledger-panel">
     <header><div><span class="eyebrow">Database</span><h2>{{.Layout.T "admin.database_configuration"}}</h2></div></header>
     <p class="panel-note">{{.Layout.T "admin.database_configuration_help"}}</p>
     <dl class="summary-strip"><div><dt>{{.Layout.T "admin.database_driver"}}</dt><dd>{{.Data.DatabaseDriver}}</dd></div><div><dt>{{.Layout.T "admin.database_dsn"}}</dt><dd>{{.Data.DatabaseDSN}}</dd></div></dl>
-    <form method="post" action="/dashboard/admin/system/database" class="stack-form database-config-form">
-      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
-      <label><span>{{.Layout.T "admin.database_next_driver"}}</span><select name="database_driver"><option value="sqlite" {{if eq .Data.DatabaseDriver "sqlite"}}selected{{end}}>SQLite</option><option value="postgres" {{if eq .Data.DatabaseDriver "postgres"}}selected{{end}}>PostgreSQL</option></select></label>
-      <label><span>{{.Layout.T "admin.database_next_dsn"}}</span><input name="database_dsn" required></label>
-      <button class="button button--primary" type="submit">{{.Layout.T "admin.save_database_configuration"}}</button>
-      <p class="panel-note database-config-form__notice">{{.Layout.T "admin.database_restart_required"}}</p>
-    </form>
+      <form method="post" action="/dashboard/admin/system/database" class="stack-form database-config-form">
+        <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+        <label class="database-config-form__field"><span>{{.Layout.T "admin.database_next_driver"}}</span><select name="database_driver"><option value="sqlite" {{if eq .Data.DatabaseDriver "sqlite"}}selected{{end}}>SQLite</option><option value="postgres" {{if eq .Data.DatabaseDriver "postgres"}}selected{{end}}>PostgreSQL</option></select></label>
+        <label class="database-config-form__field"><span>{{.Layout.T "admin.database_next_dsn"}}</span><input name="database_dsn" required></label>
+        <div class="database-config-form__actions">
+          <button class="button button--primary database-config-form__submit" type="submit">{{.Layout.T "admin.save_database_configuration"}}</button>
+        </div>
+        <p class="panel-note database-config-form__notice">{{.Layout.T "admin.database_restart_required"}}</p>
+      </form>
+  </article>
+  <article class="ledger-panel server-update-panel" aria-labelledby="server-update-heading" data-update-panel data-csrf="{{.Layout.CSRF}}">
+    <header><div><span class="eyebrow">Update</span><h2 id="server-update-heading">{{.Layout.T "admin.server_update"}}</h2></div><span class="ledger-count" data-update-live-label>{{.Layout.T "admin.update_live_status"}}</span></header>
+    <p class="panel-note">{{.Layout.T "admin.server_update_help"}}</p>
+    <dl class="summary-strip server-update-summary">
+      <div class="server-update-summary__current"><dt>{{.Layout.T "admin.current_version"}}</dt><dd data-update-current>{{.Data.Update.CurrentVersion}}</dd><small>{{.Data.Update.GOOS}}/{{.Data.Update.GOARCH}} · {{.Layout.T "admin.update_env"}} {{.Data.Update.Env}}</small></div>
+      <div class="server-update-summary__latest"><dt>{{.Layout.T "admin.latest_version"}}</dt><dd data-update-latest>—</dd><small data-update-note>—</small></div>
+      <div class="server-update-summary__readiness"><dt>{{.Layout.T "admin.update_capability"}}</dt><dd data-update-capability>{{if .Data.Update.CapabilityOK}}{{.Layout.T "admin.capability_ok"}}{{else}}{{.Layout.T "admin.capability_not_ready"}}{{end}}</dd><small data-update-capability-detail>{{if .Data.Update.CapabilityErr}}{{.Data.Update.CapabilityErr}}{{else}}{{if .Data.Update.CapabilityOK}}—{{else}}{{.Layout.T "admin.capability_not_ready"}}{{end}}{{end}}</small></div>
+    </dl>
+    <div class="server-update-body">
+      <div class="server-update-actions">
+        <form method="post" action="/dashboard/admin/system/update/check" data-update-check-form>
+          <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+          <button class="button button--primary" type="submit" data-update-check-btn {{if .Data.Update.IsUpdating}}disabled aria-disabled="true"{{end}}>{{.Layout.T "admin.check_update"}}</button>
+        </form>
+        <form method="post" action="/dashboard/admin/system/update" class="server-update-trigger" data-update-trigger-form>
+          <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+          <input type="hidden" name="check_id" data-update-check-input>
+          <input type="hidden" name="expected_version" data-update-version-input>
+          <input type="hidden" name="confirm" value="on">
+          <button class="button button--danger" type="submit" data-update-trigger-btn data-one-click-update style="display:none">{{.Layout.T "admin.trigger_update"}}</button>
+        </form>
+        <span class="server-update-operation" aria-live="polite"><span class="server-update-operation__label">{{.Layout.T "admin.update_operation"}}</span><strong data-update-state>{{if .Data.Update.Active}}{{.Data.Update.Active.State}}{{else}}{{.Layout.T "admin.update_idle"}}{{end}}</strong></span>
+      </div>
+      <div class="server-update-check-result" data-update-check-result aria-live="polite" aria-atomic="true">
+        <p class="server-update-note" data-update-note-line></p>
+        <div class="server-update-meta" data-update-meta>
+          <span class="server-update-meta__item"><span class="server-update-meta__label">{{.Layout.T "admin.update_release_url"}}</span><span class="server-update-meta__value" data-update-release>—</span></span>
+          <span class="server-update-meta__sep" aria-hidden="true">·</span>
+          <span class="server-update-meta__item"><span class="server-update-meta__label">{{.Layout.T "admin.update_expires"}}</span><span class="server-update-meta__value" data-update-expires>—</span></span>
+          <span class="server-update-meta__sep server-update-meta__sep--id" aria-hidden="true">·</span>
+          <span class="server-update-meta__item server-update-meta__item--id"><span class="server-update-meta__label">{{.Layout.T "admin.update_check_id"}}</span><code class="server-update-meta__code" data-update-check-id title="">—</code></span>
+        </div>
+        <span class="server-update-meta__id-full" data-update-active-id style="display:none">{{if .Data.Update.Active}}{{.Data.Update.Active.ID}}{{else}}—{{end}}</span>
+      </div>
+    </div>
+    <details class="server-update-status" data-update-status aria-live="polite" aria-atomic="true">
+      <summary class="server-update-status__summary"><span class="ledger-count">{{.Layout.T "admin.update_polling"}} · <time data-update-polled>—</time></span><span class="server-update-status__toggle">{{.Layout.T "admin.update_live_status"}}</span></summary>
+      <pre class="history-diff server-update-status__json" data-update-status-json aria-label="{{.Layout.T "admin.update_live_status"}}">—</pre>
+    </details>
   </article>
 </div>
+<script>
+(function(){
+  var panel = document.querySelector("[data-update-panel]");
+  if(!panel) return;
+  var csrf = panel.getAttribute("data-csrf") || "";
+  var checkForm = panel.querySelector("[data-update-check-form]");
+  var triggerForm = panel.querySelector("[data-update-trigger-form]");
+  var checkBtn = panel.querySelector("[data-update-check-btn]");
+  var triggerBtn = panel.querySelector("[data-update-trigger-btn]");
+  var checkIdInput = panel.querySelector("[data-update-check-input]");
+  var versionInput = panel.querySelector("[data-update-version-input]");
+  var confirmInput = panel.querySelector("[data-update-confirm]");
+  var latestEl = panel.querySelector("[data-update-latest]");
+  var checkIdEl = panel.querySelector("[data-update-check-id]");
+  var releaseEl = panel.querySelector("[data-update-release]");
+  var expiresEl = panel.querySelector("[data-update-expires]");
+  var metaEl = panel.querySelector("[data-update-meta]");
+  var noteEl = panel.querySelector("[data-update-note]");
+  var noteLineEl = panel.querySelector("[data-update-note-line]");
+  var stateEl = panel.querySelector("[data-update-state]");
+  var capEl = panel.querySelector("[data-update-capability]");
+  var capDetailEl = panel.querySelector("[data-update-capability-detail]");
+  var activeIdEl = panel.querySelector("[data-update-active-id]");
+  var statusJsonEl = panel.querySelector("[data-update-status-json]");
+  var polledEl = panel.querySelector("[data-update-polled]");
+  function setNote(text){
+    if(noteEl) noteEl.textContent = text;
+    if(noteLineEl) noteLineEl.textContent = text;
+  }
+  function setMetaVisible(visible){
+    if(!metaEl) return;
+    if(visible) metaEl.classList.add("is-visible");
+    else metaEl.classList.remove("is-visible");
+  }
+  function setDisabled(disabled){
+    if(checkBtn) checkBtn.disabled = disabled;
+    if(triggerBtn) triggerBtn.disabled = disabled;
+    if(disabled){
+      if(checkBtn) checkBtn.setAttribute("aria-disabled","true");
+      if(triggerBtn) triggerBtn.setAttribute("aria-disabled","true");
+    } else {
+      if(checkBtn) checkBtn.removeAttribute("aria-disabled");
+      if(triggerBtn) triggerBtn.removeAttribute("aria-disabled");
+    }
+  }
+  function syncTriggerDisabled(){
+    var needFields = !checkIdInput.value.trim() || !versionInput.value.trim();
+    if(triggerBtn) {
+      var isOneClick = triggerBtn.hasAttribute("data-one-click-update");
+      if(isOneClick){
+        triggerBtn.style.display = needFields ? "none" : "";
+        if(!needFields) triggerBtn.textContent = "更新版本到 " + versionInput.value.trim();
+      }
+      triggerBtn.disabled = needFields || triggerBtn.hasAttribute("data-busy");
+    }
+  }
+  function fetchStatus(){
+    fetch("/dashboard/admin/system/update/status", {headers:{"X-CSRF-Token":csrf}, credentials:"same-origin"})
+      .then(function(r){ return r.json(); })
+      .then(function(s){
+        if(stateEl) stateEl.textContent = (s.active && s.active.state) ? s.active.state : "{{.Layout.T "admin.update_idle"}}";
+        if(activeIdEl) activeIdEl.textContent = (s.active && s.active.id) ? s.active.id : "—";
+        if(capEl) capEl.textContent = s.capability_ok ? "{{.Layout.T "admin.capability_ok"}}" : "{{.Layout.T "admin.capability_not_ready"}}";
+        if(capDetailEl) capDetailEl.textContent = s.capability_error || "—";
+        if(statusJsonEl) statusJsonEl.textContent = JSON.stringify(s, null, 2);
+        if(polledEl) polledEl.textContent = new Date().toLocaleString();
+        var busy = !!s.is_updating;
+        setDisabled(busy);
+        if(busy) syncTriggerDisabled();
+      }).catch(function(){});
+  }
+  fetchStatus();
+  var pollTimer = setInterval(fetchStatus, 5000);
+  if(checkForm){
+    checkForm.addEventListener("submit", function(e){
+      e.preventDefault();
+      if(checkBtn) { checkBtn.disabled = true; checkBtn.setAttribute("aria-busy","true"); }
+      fetch(checkForm.action, {method:"POST", headers:{"X-CSRF-Token":csrf}, credentials:"same-origin"})
+        .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, status:r.status, body:j}; }); })
+        .then(function(res){
+          var j=res.body;
+          if(j.check_id){
+            if(checkIdInput) checkIdInput.value = j.check_id;
+            if(versionInput) versionInput.value = j.latest_version ? String(j.latest_version).replace(/^v/,"") : (j.candidate && j.candidate.version) || "";
+            if(latestEl) latestEl.textContent = j.latest_version || "—";
+            if(checkIdEl) { checkIdEl.textContent = j.check_id || "—"; checkIdEl.setAttribute("title", j.check_id || ""); }
+            if(releaseEl) {
+              if(j.release_url){ releaseEl.innerHTML = '<a href="'+j.release_url+'" target="_blank" rel="noopener">查看发布页</a>'; releaseEl.setAttribute("title", j.release_url); } else { releaseEl.textContent = "—"; releaseEl.removeAttribute("title"); }
+            }
+            if(expiresEl) expiresEl.textContent = j.expires_at ? new Date(j.expires_at/1e6).toLocaleString() : "—";
+            setMetaVisible(!!j.check_id);
+            setNote(j.update_available ? "{{.Layout.T "admin.update_available"}}" : "{{.Layout.T "admin.update_up_to_date"}}");
+          } else {
+            if(latestEl) latestEl.textContent = j.latest_version || "—";
+            setMetaVisible(false);
+            setNote(j.note || j.error || "");
+          }
+          syncTriggerDisabled();
+          fetchStatus();
+        }).catch(function(err){
+          setMetaVisible(false);
+          setNote(String(err));
+        }).finally(function(){
+          if(checkBtn) { checkBtn.disabled=false; checkBtn.removeAttribute("aria-busy"); }
+          syncTriggerDisabled();
+        });
+    });
+  }
+  if(triggerForm){
+    triggerForm.addEventListener("submit", function(e){
+      e.preventDefault();
+      if(!window.confirm("确认更新到 " + versionInput.value.trim() + "？")) return;
+      if(triggerBtn) { triggerBtn.disabled=true; triggerBtn.setAttribute("data-busy","1"); triggerBtn.setAttribute("aria-busy","true"); }
+      var fd = new FormData(triggerForm);
+      fetch(triggerForm.action, {method:"POST", body: fd, headers:{"X-CSRF-Token":csrf}, credentials:"same-origin"})
+        .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, status:r.status, body:j}; }); })
+        .then(function(res){
+          setNote(res.body.error || res.body.code || "");
+          if(res.status===202 || res.body.ok){
+            setNote("accepted: "+ (res.body.version||""));
+          }
+          fetchStatus();
+        }).catch(function(err){
+          setNote(String(err));
+        }).finally(function(){
+          if(triggerBtn) { triggerBtn.removeAttribute("data-busy"); triggerBtn.removeAttribute("aria-busy"); }
+          syncTriggerDisabled();
+          fetchStatus();
+        });
+    });
+  }
+})();
+</script>
 {{end}}

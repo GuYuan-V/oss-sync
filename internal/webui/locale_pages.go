@@ -1,3 +1,4 @@
+﻿// 页面文案
 package webui
 
 func init() {
@@ -28,3 +29,4 @@ func init() {
 		"page.vault_preview":          {"%s · %s", "%s · %s"},
 	})
 }
+

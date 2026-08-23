@@ -20,15 +20,19 @@ var (
 	ErrExpired      = errors.New("jwt token expired")
 )
 
+// DeviceID 是设备标识的强类型别名。
+type DeviceID string
+
 // Claims 是 JWT 的负载。
 type Claims struct {
 	UserID   uint   `json:"uid"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
 	// TokenVersion 用于密码修改后使旧 token 失效。
-	TokenVersion uint   `json:"tv"`
-	IssuedAt     int64  `json:"iat"`
-	ExpAt        int64  `json:"exp"`
+	TokenVersion uint     `json:"tv"`
+	DeviceID     DeviceID `json:"did,omitempty"`
+	IssuedAt     int64    `json:"iat"`
+	ExpAt        int64    `json:"exp"`
 }
 
 type header struct {
@@ -65,6 +69,18 @@ func Parse(secret, token string) (*Claims, error) {
 	}
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
+		return nil, ErrInvalidToken
+	}
+	// 纵深防御：解析 header 并拒绝 alg != "HS256" 的 token。
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+	var h header
+	if err := json.Unmarshal(headerBytes, &h); err != nil {
+		return nil, ErrInvalidToken
+	}
+	if h.Alg != "HS256" {
 		return nil, ErrInvalidToken
 	}
 	signingInput := parts[0] + "." + parts[1]

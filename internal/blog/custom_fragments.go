@@ -1,3 +1,4 @@
+﻿// 自定义片段
 package blog
 
 import (
@@ -191,3 +192,4 @@ func sanitizeCustomURL(raw string) string {
 	}
 	return parsed.String()
 }
+

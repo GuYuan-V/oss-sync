@@ -1,3 +1,4 @@
+﻿// 密钥管理
 package auth
 
 import (
@@ -47,3 +48,4 @@ func randomJWTSecret() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
+

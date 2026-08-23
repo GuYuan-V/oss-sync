@@ -6,6 +6,7 @@ import {
   Notice,
   Plugin,
   PluginManifest,
+  requestUrl,
   TAbstractFile,
   TFile,
   TFolder,
@@ -13,8 +14,28 @@ import {
 } from "obsidian";
 import type { Command } from "obsidian";
 import { OSSApiClient, VaultOut } from "./api";
-import type { ShareOut } from "./api";
+import type {
+  ShareOut,
+  ServerVersionInfo,
+  ServerUpdateCheckResponse,
+  ServerUpdateStatusResponse,
+  ServerUpdateTriggerResponse,
+} from "./api";
 import type { AuthResponse } from "./api";
+import {
+  checkForUpdates,
+  downloadUpdateAssets,
+  GitHubReleaseSource,
+  isUpdateAvailable,
+  type UpdateFile,
+  type UpdateCheckResult,
+} from "./plugin-update";
+import {
+  applyPluginUpdate,
+  type PluginFileAdapter,
+  type ReloadController,
+} from "./plugin-update-apply";
+import { ServerUpdatePoller, type ServerUpdatePollerOptions } from "./server-update";
 import { BaselineStore } from "./baseline";
 import { ConflictModal, ConflictResolution } from "./conflict-modal";
 import { OSSSettingTab } from "./settings-tab";
@@ -29,6 +50,9 @@ import { SidebarView, SIDEBAR_VIEW_TYPE } from "./sidebar-view";
 import { ShareManagerModal } from "./share-manager-modal";
 import { CollabManagerModal } from "./collab-manager-modal";
 import { RecycleManagerModal } from "./recycle-manager-modal";
+import { CollaborationFileVault } from "./collaboration-file-vault.js";
+import { resolvePersistedCollaborationConflict } from "./collaboration-cas-resolver.js";
+import { createOperationID } from "./operation-id.js";
 import {
   createClientID,
   loginWithRevokedDeviceRecovery,
@@ -56,12 +80,23 @@ export default class OSSPlugin extends Plugin {
   collabManager!: CollabManager;
   sidebarView?: SidebarView;
 
-  private readonly diagnostics = new Diagnostics(() => undefined);
+  private readonly diagnostics = new Diagnostics((event) => {
+    if (this.settings.diagnosticsEnabled) {
+      console.log("[oss-sync]", event);
+      // 同时用 warn 级别确保在过滤 debug 的控制台也能看到关键协作失败
+      if (event.kind === "api_error" || event.kind === "collab_upload_attempt") {
+        console.warn("[oss-sync]", event);
+      }
+    }
+  });
   private token?: string;
   private statusBarEl?: HTMLElement;
   private ribbonEl?: HTMLElement;
   private readonly localizedCommands: Array<{ command: Command; key: TranslationKey }> = [];
   availableVaults: VaultOut[] = [];
+  private serverUpdatePoller: ServerUpdatePoller | null = null;
+  private loaded = false;
+  private readonly conflictWarningLast = new Map<string, number>();
 
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
@@ -69,7 +104,11 @@ export default class OSSPlugin extends Plugin {
   }
 
   async onload(): Promise<void> {
+    console.log("[oss-sync] plugin loading version", this.manifest.version);
+    this.loaded = true;
     await this.loadSettings();
+    console.log("[oss-sync] diagnosticsEnabled=", this.settings.diagnosticsEnabled);
+    this.emitRuntimeInfo();
 
     this.api = new OSSApiClient(this.settings, this.diagnostics);
     if (this.token) this.api.setToken(this.token);
@@ -120,10 +159,12 @@ export default class OSSPlugin extends Plugin {
     this.registerEvent(
       this.app.vault.on("modify", (f: TAbstractFile) => {
         if (f instanceof TFile && isCollabPath(f.path)) {
+          this.maybeWarnConflictEdit(f.path);
           this.collabManager.handleLocalEdit(f.path);
           return;
         }
         if (f instanceof TFile && !this.syncEngine.isSuppressed(f.path)) {
+          this.maybeWarnConflictEdit(f.path);
           this.syncEngine.enqueueUpsert(normalizeRel(f.path));
         }
       })
@@ -195,22 +236,52 @@ export default class OSSPlugin extends Plugin {
     this.addSettingTab(new OSSSettingTab(this.app, this));
 
     this.app.workspace.onLayoutReady(() => {
-      if (this.token) {
-        void this.ensureVaultBinding().then(() => {
-          if (this.settings.vaultId) {
-            this.collabManager.start();
-            void this.syncEngine.runOnce({ forceFull: true });
+      if (!this.token) return;
+      void (async () => {
+        await Promise.resolve();
+        if (!this.loaded) return;
+        if (this.settings.vaultId) {
+          this.collabManager.start();
+        }
+        try {
+          await this.ensureVaultBinding();
+        } catch (error: unknown) {
+          if (this.isDeviceIdentityError(error)) {
+            await this.handleDeviceIdentityRequired();
+            return;
           }
-        }).catch((error: unknown) => {
-          new Notice(this.t("notice.loadVaultsFailed", { error: this.localizedError(error) }));
-        });
-      }
+          throw error;
+        }
+        if (!this.loaded) return;
+        if (this.settings.vaultId) {
+          void this.syncEngine.runOnce({ forceFull: true }).catch((error: unknown) => {
+            if (this.isDeviceIdentityError(error)) {
+              void this.handleDeviceIdentityRequired();
+              return;
+            }
+            new Notice(this.t("sync.error", { error: this.localizedError(error) }));
+          });
+        }
+        // 管理员自动检查更新，有新版本时用 Notice 提示
+        if (this.isAdmin()) {
+          void this.autoCheckUpdates();
+        }
+      })().catch((error: unknown) => {
+        if (this.isDeviceIdentityError(error)) {
+          void this.handleDeviceIdentityRequired();
+          return;
+        }
+        new Notice(this.t("notice.loadVaultsFailed", { error: this.localizedError(error) }));
+      });
     });
   }
 
   onunload(): void {
+    this.loaded = false;
     this.syncEngine?.stop();
     this.collabManager?.stop();
+    this.serverUpdatePoller?.dispose();
+    this.serverUpdatePoller = null;
     this.app.workspace.detachLeavesOfType(SIDEBAR_VIEW_TYPE);
   }
 
@@ -323,6 +394,51 @@ export default class OSSPlugin extends Plugin {
     return this.diagnostics.snapshot();
   }
 
+  emitRuntimeInfo(): void {
+    this.diagnostics.record({
+      kind: "runtime_info",
+      at: Date.now(),
+      pluginVersion: this.manifest.version,
+      diagnosticsEnabled: this.settings.diagnosticsEnabled,
+    });
+  }
+
+  emitDiagnosticsEnabled(enabled: boolean): void {
+    this.diagnostics.record({
+      kind: "diagnostics_enabled",
+      at: Date.now(),
+      enabled,
+    });
+    // 立即输出 runtime_info 以便控制台可关联版本
+    this.emitRuntimeInfo();
+    // 输出一条测试事件，确保控制台可见
+    this.diagnostics.record({
+      kind: "collab_upload_attempt",
+      at: Date.now(),
+      hasBaseRevision: true,
+      baseRevisionValid: true,
+      hasOperationID: true,
+      operationIDValid: true,
+      operationIDLength: 36,
+    });
+  }
+
+  private maybeWarnConflictEdit(path: string): void {
+    if (!this.settings.conflictEditWarning) return;
+    if (!this.baseline) return;
+    const key = normalizeRel(path);
+    const now = Date.now();
+    const last = this.conflictWarningLast.get(key) ?? 0;
+    if (now - last < 3000) return;
+    const hasOrdinary = !!this.baseline.getConflict(key);
+    const hasCollab = this.baseline.collaborationEntries().some((e) => normalizeRel(e.localPath) === key && !!e.conflict);
+    if (!hasOrdinary && !hasCollab) return;
+    this.conflictWarningLast.set(key, now);
+    new Notice(this.t("notice.conflictEditWarning", { path: key }), 6000);
+    // 自动揭示侧边栏，帮助用户第一时间发现
+    void this.activateSidebar().catch(() => {});
+  }
+
   refreshLocalizedUI(): void {
     const ribbonLabel = this.t("ribbon.openSidebar");
     this.ribbonEl?.setAttribute("aria-label", ribbonLabel);
@@ -347,6 +463,7 @@ export default class OSSPlugin extends Plugin {
     const res = result.response;
     this.token = res.token;
     this.settings.password = "";
+    this.settings.role = res.role ?? "";
     await this.saveSettings();
     if (!shouldInitializeAuthorizedSession(res.device_status)) {
       this.settings.vaultId = "";
@@ -365,6 +482,137 @@ export default class OSSPlugin extends Plugin {
 
   isLoggedIn(): boolean {
     return this.api.hasToken();
+  }
+
+  /** 当前登录用户是否服务端管理员；在线更新仅对管理员开放。 */
+  isAdmin(): boolean {
+    return this.settings.role === "admin";
+  }
+
+  /** 查询 GitHub Release 并返回当前/远端版本对比结果。 */
+  async checkPluginUpdate(): Promise<UpdateCheckResult> {
+    return checkForUpdates(this.settings.updateRepo, this.manifest.version, this.githubReleaseSource());
+  }
+
+  /** 下载最新 Release 三件套、原子替换并重载插件；失败时回滚。 */
+  async updatePluginFromRelease(): Promise<void> {
+    const source = this.githubReleaseSource();
+    const check = await checkForUpdates(this.settings.updateRepo, this.manifest.version, source);
+    if (!isUpdateAvailable(check)) {
+      new Notice(this.t("notice.updateNoUpdate"));
+      return;
+    }
+    const files = await downloadUpdateAssets(source, check.release);
+    await this.applyPluginUpdateFiles(files);
+  }
+
+  // 服务端更新
+
+  async getServerVersion(): Promise<ServerVersionInfo> {
+    return this.api.getServerVersion();
+  }
+
+  async checkServerUpdate(): Promise<ServerUpdateCheckResponse> {
+    return this.api.checkServerUpdate();
+  }
+
+  async getServerUpdateStatus(): Promise<ServerUpdateStatusResponse> {
+    return this.api.getServerUpdateStatus();
+  }
+
+  async triggerServerUpdate(opts: { readonly checkId: string; readonly expectedVersion: string }): Promise<ServerUpdateTriggerResponse> {
+    return this.api.triggerServerUpdate(opts);
+  }
+
+  createServerUpdatePoller(opts: ServerUpdatePollerOptions): ServerUpdatePoller {
+    // Ensure previous poller is cleaned up — bounded, no leaked timers.
+    this.serverUpdatePoller?.dispose();
+    const poller = new ServerUpdatePoller(
+      {
+        getStatus: () => this.getServerUpdateStatus(),
+        getVersion: () => this.getServerVersion(),
+      },
+      opts,
+    );
+    this.serverUpdatePoller = poller;
+    return poller;
+  }
+
+  stopServerUpdatePolling(): void {
+    this.serverUpdatePoller?.dispose();
+    this.serverUpdatePoller = null;
+  }
+
+  private async applyPluginUpdateFiles(files: UpdateFile[]): Promise<void> {
+    // 重载前停止同步与协作引擎，避免旧实例在替换文件后继续轮询。
+    this.syncEngine.stop();
+    this.collabManager.stop();
+    const dir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
+    await applyPluginUpdate({
+      adapter: this.app.vault.adapter as PluginFileAdapter,
+      reload: getPluginReloadController(this.app),
+      dir,
+      pluginID: this.manifest.id,
+      files,
+    });
+  }
+
+  private githubReleaseSource(): GitHubReleaseSource {
+    return new GitHubReleaseSource(async (options) => {
+      const response = await requestUrl({
+        url: options.url,
+        method: options.method,
+        headers: options.headers,
+        throw: false,
+      });
+      return {
+        status: response.status,
+        json: response.json,
+        text: response.text,
+        arrayBuffer: response.arrayBuffer,
+        headers: response.headers,
+      };
+    });
+  }
+
+  private isDeviceIdentityError(error: unknown): boolean {
+    const code =
+      typeof error === "object" && error !== null && "code" in error && typeof (error as { code?: unknown }).code === "string"
+        ? (error as { code: string }).code
+        : "";
+    return code === "device_identity_required" || code === "device_identity_mismatch";
+  }
+
+  private async handleDeviceIdentityRequired(): Promise<void> {
+    this.token = undefined;
+    this.api.setToken(null);
+    this.availableVaults = [];
+    this.settings.vaultId = "";
+    this.settings.vaultName = "";
+    this.syncEngine.stop();
+    this.collabManager.stop();
+    await this.saveSettings();
+    this.setSyncState("idle");
+    new Notice(this.t("notice.reloginRequired"));
+  }
+
+  private async autoCheckUpdates(): Promise<void> {
+    await new Promise((r) => setTimeout(r, 5000));
+    if (!this.loaded || !this.isLoggedIn()) return;
+    try {
+      const result = await this.checkPluginUpdate();
+      if (isUpdateAvailable(result)) {
+        new Notice(`插件有新版本 ${result.remoteVersion}（当前 ${result.currentVersion}），请到设置 → 插件更新中一键更新`, 10000);
+      }
+    } catch {}
+    if (!this.isAdmin()) return;
+    try {
+      const check = await this.checkServerUpdate();
+      if (check.update_available) {
+        const latest = check.latest_version ?? check.candidate?.version ?? "";
+        new Notice(`服务器有新版本 ${latest}（当前 ${check.current_version}），请到设置 → 服务端更新中一键更新`, 10000);
+      }
+    } catch {}
   }
 
   async logout(): Promise<void> {
@@ -503,6 +751,7 @@ export default class OSSPlugin extends Plugin {
     }
     void (async () => {
       let remote: string;
+      let baseText: string | null = null;
       try {
         const conflict = this.syncEngine.getConflict(path);
         if (!conflict || conflict.remoteDeleted) {
@@ -515,24 +764,75 @@ export default class OSSPlugin extends Plugin {
           conflict.remoteRevision
         );
         remote = new TextDecoder().decode(new Uint8Array(res.content));
+        baseText = this.syncEngine.getBaseline(path)?.baseText ?? null;
       } catch (e) {
         new Notice(this.t("notice.fetchRemoteFailed", { error: this.localizedError(e) }));
         return;
       }
       new ConflictModal(this.app, this, this.api, file, remote, async (r) => {
         await this.applyConflictResolution(path, r);
-      }).open();
+      }, { baseText }).open();
     })();
+  }
+
+  openCollaborationConflictModal(vaultId: string, fileId: number): void {
+    const entry = this.baseline.getCollaboration(vaultId, fileId);
+    if (!entry?.conflict) {
+      new Notice(this.t("notice.conflictTextUnavailable"));
+      return;
+    }
+    const file = this.app.vault.getAbstractFileByPath(entry.localPath);
+    if (!(file instanceof TFile)) {
+      new Notice(this.t("notice.conflictFileMissing", { path: entry.localPath }));
+      return;
+    }
+    const remote = entry.conflict.remoteText;
+    const baseText = entry.baseText ?? "";
+    new ConflictModal(this.app, this, this.api, file, remote, async (r) => {
+      await this.applyCollaborationConflictResolution(vaultId, fileId, r);
+    }, { baseText }).open();
+  }
+
+  async applyCollaborationConflictResolution(vaultId: string, fileId: number, r: ConflictResolution): Promise<void> {
+    const entry = this.baseline.getCollaboration(vaultId, fileId);
+    if (!entry?.conflict) throw new Error(this.t("sync.conflictNotFound"));
+    const vaultAccess = new CollaborationFileVault({ app: this.app });
+    await resolvePersistedCollaborationConflict(
+      {
+        baseline: this.baseline,
+        vault: vaultAccess,
+        api: this.api,
+        plugin: this,
+        now: () => Date.now(),
+        createOperationID: () => createOperationID(),
+        onChange: () => this.sidebarView?.refresh(),
+      },
+      vaultId,
+      fileId,
+      r,
+    );
+    this.sidebarView?.refresh();
+    const labelKey = (typeof r === "object" ? "conflict.orderedMergeButton" : { accept_remote: "conflict.acceptRemoteButton", force_local: "conflict.forceLocalButton", keep_both: "conflict.keepBothButton" }[r as string]) as TranslationKey;
+    new Notice(this.t("notice.conflictResolved", { resolution: this.t(labelKey) }), 4000);
+  }
+
+  private async hashBytes(bytes: Uint8Array): Promise<string> {
+    const digest = await crypto.subtle.digest("SHA-256", bytes as unknown as ArrayBuffer);
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
   }
 
   async applyConflictResolution(path: string, r: ConflictResolution): Promise<void> {
     await this.syncEngine.resolveConflict(path, r);
-    const resolutionKeys: Record<ConflictResolution, TranslationKey> = {
+    const isOrdered = typeof r === "object" && (r as { kind: string }).kind === "ordered_merge";
+    const key: TranslationKey = isOrdered ? "conflict.orderedMergeButton" : (r as "accept_remote" | "force_local" | "keep_both") as unknown as TranslationKey;
+    const resolutionKeys: Record<string, TranslationKey> = {
       accept_remote: "conflict.acceptRemoteButton",
       force_local: "conflict.forceLocalButton",
       keep_both: "conflict.keepBothButton",
+      ordered_merge: "conflict.orderedMergeButton",
     };
-    new Notice(this.t("notice.conflictResolved", { resolution: this.t(resolutionKeys[r]) }), 4000);
+    const labelKey = isOrdered ? resolutionKeys.ordered_merge : resolutionKeys[r as string];
+    new Notice(this.t("notice.conflictResolved", { resolution: this.t(labelKey) }), 4000);
   }
 }
 
@@ -556,4 +856,32 @@ function isSettingsController(value: unknown): value is SettingsController {
   const open = Reflect.get(value, "open");
   const openTabById = Reflect.get(value, "openTabById");
   return typeof open === "function" && typeof openTabById === "function";
+}
+
+interface PluginManagerController {
+  plugins: Record<string, unknown>;
+  disablePlugin(id: string): Promise<void>;
+  enablePlugin(id: string): Promise<void>;
+}
+
+/** 包装未公开的 app.plugins，实现 disablePlugin/enablePlugin 无感重载。 */
+function getPluginReloadController(app: App): ReloadController {
+  const manager = Reflect.get(app, "plugins") as Partial<PluginManagerController> | null | undefined;
+  if (
+    !manager ||
+    typeof manager.disablePlugin !== "function" ||
+    typeof manager.enablePlugin !== "function"
+  ) {
+    throw new Error("app.plugins is unavailable");
+  }
+  const plugins = manager.plugins ?? {};
+  return {
+    disablePlugin: (id) => manager.disablePlugin!(id),
+    enablePlugin: (id) => manager.enablePlugin!(id),
+    isLoaded: (id, expectedVersion) => {
+      const instance = plugins[id] as { manifest?: { version?: string } } | undefined;
+      if (!instance) return false;
+      return expectedVersion == null || instance.manifest?.version === expectedVersion;
+    },
+  };
 }

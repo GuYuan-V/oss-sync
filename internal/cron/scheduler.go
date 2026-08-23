@@ -1,3 +1,4 @@
+﻿// 定时调度
 package cron
 
 import (
@@ -50,6 +51,11 @@ func (s *Scheduler) Register() {
 			log.Printf("[OSS cron] PurgeOrphanAttachments error: %v", err)
 		}
 	})
+	_, _ = s.cron.AddFunc(spec, func() {
+		if err := s.cl.PurgeExpiredHistory(); err != nil {
+			log.Printf("[OSS cron] PurgeExpiredHistory error: %v", err)
+		}
+	})
 }
 
 func (s *Scheduler) Start() {
@@ -76,3 +82,4 @@ func (s *Scheduler) Stop(ctx context.Context) error {
 func (s *Scheduler) Cleanup() *Cleanup { return s.cl }
 
 func (s *Scheduler) Reconciler() *reconcile.Reconciler { return s.rc }
+

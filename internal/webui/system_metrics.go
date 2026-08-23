@@ -1,3 +1,4 @@
+﻿// 系统指标
 package webui
 
 import (
@@ -112,3 +113,4 @@ func cpuUsage(previous, current cpuSample) float64 {
 	}
 	return usagePercent(float64(total-idle), float64(total))
 }
+

@@ -1,3 +1,4 @@
+﻿// 上传处理
 package syncapi
 
 import (
@@ -17,6 +18,7 @@ import (
 
 	"github.com/oss/oss-server/internal/auth"
 	"github.com/oss/oss-server/internal/collaboration"
+	"github.com/oss/oss-server/internal/deviceauth"
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/settingspolicy"
@@ -27,6 +29,10 @@ const fallbackMaxFileSizeMB = 100
 // Upload 接收 Obsidian 原始字节流，同时兼容 multipart/form-data 客户端。
 func (h *Handler) Upload(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
+	if !ok {
+		return
+	}
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"), c.PostForm("client_id"))
 	if !ok {
 		return
 	}
@@ -74,6 +80,13 @@ func (h *Handler) Upload(c *gin.Context) {
 	vaultID, err := defaultVaultID(h.DB, u.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vaultID); err != nil {
+		h.writeDeviceAuthError(c, err)
+		return
+	}
+	if !h.recordDeviceActivityWithDID(c, u.ID, vaultID, did) {
 		return
 	}
 	storageKey := filestore.VaultStorageKey(vaultID, path)
@@ -222,3 +235,4 @@ func closeAndRemove(file *os.File, path string) {
 	_ = file.Close()
 	_ = os.Remove(path)
 }
+

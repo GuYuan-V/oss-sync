@@ -42,12 +42,14 @@ function harness(streamUrl, forceSSE = false) {
       return pendingPoll;
     },
   };
+  const baseline = { getCollaboration: () => null, setCollaboration: () => {}, save: async () => {}, load: async () => {}, bindCollaborationAccount: () => false };
   const plugin = {
     settings: { vaultId: "vault-1", username: "collab-user", forceSSE },
     syncEngine: { runOnce: async (options) => syncCalls.push(options) },
+    baseline,
     t: (key) => key,
   };
-  const app = { vault: {} };
+  const app = { vault: { getAbstractFileByPath: () => null, readBinary: async () => new ArrayBuffer(0), createBinary: async () => {}, modifyBinary: async () => {}, createFolder: async () => {} } };
   return {
     api,
     plugin,
@@ -190,16 +192,21 @@ test("syncs accepted collaboration content only for the current collaborator", a
       collabInbox: async () => ({ collaborations: [] }),
       downloadCollabContent: async (vaultID, fileID) => {
         downloads.push([vaultID, fileID]);
-        return { content: new TextEncoder().encode("# shared").buffer };
+        const bytes = new TextEncoder().encode("# shared");
+        const hash = await crypto.subtle.digest("SHA-256", bytes).then((d) => Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, "0")).join(""));
+        return { content: bytes.buffer, meta: { path: "", type: "markdown", hash, size: bytes.byteLength, mtime: 1, revision: 7, deleted: false } };
       },
     };
     const vault = {
       getAbstractFileByPath: () => null,
+      readBinary: async () => { throw new Error("missing file"); },
       createFolder: async () => {},
       createBinary: async (path, content) => created.push([path, content]),
+      modifyBinary: async () => {},
     };
     const plugin = {
       settings: { vaultId: "vault-1", username: "collab-user" },
+      baseline: { getCollaboration: () => null, setCollaboration: () => {}, save: async () => {}, load: async () => {}, bindCollaborationAccount: () => false },
       t: (key) => key,
     };
     const manager = new module.CollabManager({ vault }, api, plugin, () => {});
@@ -237,16 +244,21 @@ test("discovers accepted collaborations from another vault through the account i
       }),
       downloadCollabContent: async (vaultID, fileID) => {
         downloads.push([vaultID, fileID]);
-        return { content: new TextEncoder().encode("# shared").buffer };
+        const bytes = new TextEncoder().encode("# shared");
+        const hash = await crypto.subtle.digest("SHA-256", bytes).then((d) => Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, "0")).join(""));
+        return { content: bytes.buffer, meta: { path: "", type: "markdown", hash, size: bytes.byteLength, mtime: 1, revision: 7, deleted: false } };
       },
     };
     const vault = {
       getAbstractFileByPath: () => null,
+      readBinary: async () => { throw new Error("missing file"); },
       createFolder: async () => {},
       createBinary: async () => {},
+      modifyBinary: async () => {},
     };
     const plugin = {
       settings: { vaultId: "vault-1", username: "collab-user" },
+      baseline: { getCollaboration: () => null, setCollaboration: () => {}, save: async () => {}, load: async () => {}, bindCollaborationAccount: () => false },
       t: (key) => key,
     };
     const manager = new module.CollabManager({ vault }, api, plugin, () => {});
@@ -285,9 +297,10 @@ test("responds to an incoming collaboration through its owner vault", async () =
     };
     const plugin = {
       settings: { vaultId: "vault-1", username: "collab-user" },
+      baseline: { getCollaboration: () => null, setCollaboration: () => {}, save: async () => {}, load: async () => {}, bindCollaborationAccount: () => false },
       t: (key) => key,
     };
-    const manager = new module.CollabManager({ vault: {} }, api, plugin, () => {});
+    const manager = new module.CollabManager({ vault: { getAbstractFileByPath: () => null, readBinary: async () => new ArrayBuffer(0), createBinary: async () => {}, modifyBinary: async () => {}, createFolder: async () => {} } }, api, plugin, () => {});
     await manager.refresh();
 
     await manager.respond(entry, true);

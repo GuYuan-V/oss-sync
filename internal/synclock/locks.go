@@ -1,3 +1,4 @@
+﻿// 同步锁
 package synclock
 
 import "sync"
@@ -16,3 +17,4 @@ func Path(key string) *sync.Mutex {
 	value, _ := pathLocks.LoadOrStore(key, &sync.Mutex{})
 	return value.(*sync.Mutex)
 }
+

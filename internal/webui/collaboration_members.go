@@ -1,3 +1,4 @@
+﻿// 协作成员页面
 package webui
 
 import (
@@ -148,3 +149,4 @@ func (h *Handler) revokeMemberCollaborations(c *gin.Context) {
 	}
 	c.Redirect(http.StatusSeeOther, redirect+"?saved=1")
 }
+

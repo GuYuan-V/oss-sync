@@ -35,17 +35,28 @@ func newAcceptedCollaborationFixture(t *testing.T) acceptedCollaborationFixture 
 	if err != nil {
 		t.Fatal(err)
 	}
+	// collaborator device login for vault creation
 	code, loginBody := doJSON(t, router, http.MethodPost, "/api/auth/login", "",
 		map[string]string{"username": collaborator.Username, "password": "password123"})
 	if code != http.StatusOK {
 		t.Fatalf("collaborator login: %d %v", code, loginBody)
 	}
-	collaboratorToken := loginBody["token"].(string)
-	code, vaultBody := doJSON(t, router, http.MethodPost, "/api/vaults", collaboratorToken,
+	collabUserToken := loginBody["token"].(string)
+	code, devLogin := loginAsDevice(t, router, collaborator.Username, "password123", "collab-dev", "Collab Device")
+	if code != http.StatusOK {
+		t.Fatalf("collab device login: %d %v", code, devLogin)
+	}
+	collabDevToken := devLogin["token"].(string)
+	code, _ = doJSON(t, router, http.MethodPut, "/api/devices/collab-dev/authorization", collabUserToken, map[string]any{"status": "approved", "vault_ids": []string{}})
+	if code != http.StatusOK {
+		t.Fatalf("approve collab dev: %d", code)
+	}
+	code, vaultBody := doJSON(t, router, http.MethodPost, "/api/vaults", collabDevToken,
 		map[string]any{"name": "Collaborator Vault"})
 	if code != http.StatusCreated {
 		t.Fatalf("create collaborator vault: %d %v", code, vaultBody)
 	}
+	collaboratorToken := collabDevToken
 	collaboratorVaultID, ok := vaultBody["id"].(string)
 	if !ok || collaboratorVaultID == "" {
 		t.Fatalf("collaborator vault id: %#v", vaultBody)
@@ -194,12 +205,11 @@ func TestCollaborationContentAccessForAcceptedCollaborator(t *testing.T) {
 	if _, err := registerUser(fixture.db, "collab-contract-intruder", "password123"); err != nil {
 		t.Fatal(err)
 	}
-	code, loginBody := doJSON(t, fixture.router, http.MethodPost, "/api/auth/login", "",
-		map[string]string{"username": "collab-contract-intruder", "password": "password123"})
+	code, intruderLogin := loginAsDevice(t, fixture.router, "collab-contract-intruder", "password123", "intruder-dev", "Intruder Device")
 	if code != http.StatusOK {
-		t.Fatalf("intruder login: %d %v", code, loginBody)
+		t.Fatalf("intruder login: %d %v", code, intruderLogin)
 	}
-	intruderToken := loginBody["token"].(string)
+	intruderToken := intruderLogin["token"].(string)
 	path := "/api/vaults/" + fixture.vaultID + "/collaborations/files/" +
 		strconv.FormatUint(uint64(fixture.file.ID), 10) + "/content"
 
@@ -260,7 +270,11 @@ func TestCollaborationLegacyBoundVaultCanUploadAcceptedContent(t *testing.T) {
 
 	// When: it uploads through the legacy bound-Vault URL.
 	code, body := doJSON(t, fixture.router, http.MethodPost, path, fixture.collaboratorToken,
-		map[string]any{"content": "# collaborator edit"})
+		map[string]any{
+			"content":       "# collaborator edit",
+			"base_revision": fixture.file.Revision,
+			"operation_id":  "legacy-collab-upload",
+		})
 
 	// Then: the update is applied to the original collaboration file.
 	if code != http.StatusOK {
@@ -326,7 +340,7 @@ func TestCollaborationSSEAllowsLoopbackQueryToken(t *testing.T) {
 	server := httptest.NewServer(fixture.router)
 	defer server.Close()
 	path := "/api/vaults/" + fixture.vaultID + "/collaborations/stream?token=" +
-		url.QueryEscape(fixture.ownerToken) + "&client_id=test"
+		url.QueryEscape(fixture.ownerToken)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+path, nil)

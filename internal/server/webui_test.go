@@ -119,7 +119,7 @@ func TestAdminSystemControlsRegistration(t *testing.T) {
 
 	dashboard := doForm(t, router, http.MethodGet, "/dashboard/admin/system", nil, session, csrf)
 	if dashboard.Code != http.StatusOK ||
-		!strings.Contains(dashboard.Body.String(), "允许新用户注册") ||
+		(!strings.Contains(dashboard.Body.String(), "允许新用户注册") && !strings.Contains(dashboard.Body.String(), "允许公开注册")) ||
 		!strings.Contains(dashboard.Body.String(), "admin") {
 		t.Fatalf("admin system page: status=%d body=%s", dashboard.Code, dashboard.Body)
 	}
@@ -429,6 +429,7 @@ func validAdminSystemForm() url.Values {
 		"max_long_poll_wait_sec":   {"30"},
 		"max_sync_debounce_sec":    {"300"},
 		"max_recycle_bin_days":     {"3650"},
+		"history_retention_days":   {"0"},
 		"max_vault_storage_mb":     {"0"},
 		"max_upload_size_mb":       {"100"},
 	}

@@ -1,3 +1,4 @@
+﻿// Markdown 图片处理
 package markdown
 
 import (
@@ -109,3 +110,4 @@ func ReferencedAssets(source string) ([]string, error) {
 	}
 	return references, nil
 }
+

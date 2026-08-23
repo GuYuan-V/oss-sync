@@ -1,3 +1,4 @@
+﻿// 主题管理
 package webui
 
 import (
@@ -174,3 +175,4 @@ func (h *Handler) adminThemeFileSave(c *gin.Context) {
 	}
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/themes?saved=1")
 }
+

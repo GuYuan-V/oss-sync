@@ -190,55 +190,77 @@ func (h *Handler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	rawClientID := c.GetHeader(deviceauth.ClientIDHeader)
+	trimmedClientID := strings.TrimSpace(rawClientID)
+	isDeviceLogin := false
+	var clientID string
+	if trimmedClientID != "" {
+		normalized := deviceauth.NormalizeClientID(rawClientID)
+		if normalized == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid client id", "code": "invalid_client_id"})
+			return
+		}
+		isDeviceLogin = true
+		clientID = normalized
+	}
 	u, err := AuthenticateCredentials(h.DB, req.Username, req.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
-	token, expiresIn, err := IssueToken(h.Cfg, *u)
+	if !isDeviceLogin {
+		token, expiresIn, err := IssueToken(h.Cfg, *u)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "sign failed: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, AuthResponse{
+			Token:     token,
+			ExpiresIn: expiresIn,
+			UserID:    u.ID,
+			Username:  u.Username,
+			Role:      u.Role,
+		})
+		return
+	}
+	deviceName := deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader))
+	status, err := deviceauth.RegisterDevice(h.DB, u.ID, clientID, deviceName, time.Now())
+	if err != nil {
+		if errors.Is(err, deviceauth.ErrRevoked) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "this device has been revoked", "code": "device_revoked"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "登记设备失败: " + err.Error()})
+		return
+	}
+	token, expiresIn, err := IssueDeviceToken(h.Cfg, *u, jwt.DeviceID(clientID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "sign failed: " + err.Error()})
 		return
 	}
-	resp := AuthResponse{
-		Token:     token,
-		ExpiresIn: expiresIn,
-		UserID:    u.ID,
-		Username:  u.Username,
-		Role:      u.Role,
-	}
-
-	// 插件登录携带设备头：登记设备并返回设备授权状态。
-	clientID := deviceauth.NormalizeClientID(c.GetHeader(deviceauth.ClientIDHeader))
-	if clientID != "" {
-		deviceName := deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader))
-		status, err := deviceauth.RegisterDevice(h.DB, u.ID, clientID, deviceName, time.Now())
-		if err != nil {
-			if errors.Is(err, deviceauth.ErrRevoked) {
-				c.JSON(http.StatusForbidden, gin.H{"error": "this device has been revoked", "code": "device_revoked"})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "登记设备失败: " + err.Error()})
-			return
-		}
-		resp.DeviceStatus = status
-		resp.DeviceName = deviceName
-	}
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, AuthResponse{
+		Token:        token,
+		ExpiresIn:    expiresIn,
+		UserID:       u.ID,
+		Username:     u.Username,
+		Role:         u.Role,
+		DeviceStatus: status,
+		DeviceName:   deviceName,
+	})
 }
 
 // DeviceStatus 处理 GET /api/auth/device-status?client_id=xxx。
 // 插件在设备待授权期间每 5 秒轮询该接口。
 func (h *Handler) DeviceStatus(c *gin.Context) {
+	did, ok := RequireDeviceID(c, c.Query("client_id"), c.GetHeader(deviceauth.ClientIDHeader))
+	if !ok {
+		return
+	}
 	u, ok := RequireUser(c)
 	if !ok {
 		return
 	}
-	clientID := deviceauth.NormalizeClientID(c.Query("client_id"))
-	if clientID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id is required"})
-		return
-	}
+	clientID := string(did)
 	status, name, err := deviceauth.GetDevice(h.DB, u.ID, clientID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "device not found"})
@@ -299,13 +321,13 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 	})
 }
 
-func authenticateAny(db *gorm.DB, cfg *config.Config, header string) (*models.User, error) {
+func authenticateAny(db *gorm.DB, cfg *config.Config, header string) (*Identity, error) {
 	if header == "" {
 		return nil, errNoAuth
 	}
 	switch {
 	case strings.HasPrefix(header, "Bearer "):
-		return authenticateBearer(db, cfg, header[len("Bearer "):])
+		return authenticateBearerIdentity(db, cfg, header[len("Bearer "):])
 	case strings.HasPrefix(header, "Basic "):
 		user, pass, ok := parseBasic(header[len("Basic "):])
 		if !ok || pass == "" {
@@ -318,16 +340,30 @@ func authenticateAny(db *gorm.DB, cfg *config.Config, header string) (*models.Us
 		if u.PasswordHash == "" || bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(pass)) != nil {
 			return nil, errBadCred
 		}
-		return &u, nil
+		return &Identity{User: &u}, nil
 	default:
 		return nil, errBadScheme
 	}
 }
 
 func authenticateBearer(db *gorm.DB, cfg *config.Config, token string) (*models.User, error) {
+	ident, err := authenticateBearerIdentity(db, cfg, token)
+	if err != nil {
+		return nil, err
+	}
+	return ident.User, nil
+}
+
+func authenticateBearerIdentity(db *gorm.DB, cfg *config.Config, token string) (*Identity, error) {
 	claims, err := jwt.Parse(cfg.Auth.JWTSecret, token)
 	if err != nil {
 		return nil, errors.Join(errBadCred, err)
+	}
+	if claims.DeviceID != "" {
+		normalized := deviceauth.NormalizeClientID(string(claims.DeviceID))
+		if normalized == "" || normalized != string(claims.DeviceID) {
+			return nil, errors.Join(errBadCred, errors.New("invalid device identity"))
+		}
 	}
 	var u models.User
 	if err := db.First(&u, claims.UserID).Error; err != nil {
@@ -336,5 +372,13 @@ func authenticateBearer(db *gorm.DB, cfg *config.Config, token string) (*models.
 	if claims.TokenVersion != u.TokenVersion {
 		return nil, errBadCred
 	}
-	return &u, nil
+	ident := &Identity{
+		User:   &u,
+		Claims: claims,
+	}
+	if claims.DeviceID != "" {
+		ident.DeviceID = claims.DeviceID
+		ident.HasDID = true
+	}
+	return ident, nil
 }

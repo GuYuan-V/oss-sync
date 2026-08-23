@@ -1,3 +1,4 @@
+﻿// 启动初始化
 package auth
 
 import (
@@ -37,3 +38,4 @@ func EnsureBootstrapAdmin(db *gorm.DB, cfg *config.Config) (bool, error) {
 	}
 	return true, nil
 }
+

@@ -147,14 +147,32 @@ export class SidebarView extends ItemView {
   private renderConflicts(): void {
     const { plugin, contentEl } = this;
     const conflicts = plugin.baseline.conflicts();
-    if (conflicts.length === 0) return;
+    const collabConflicts = plugin.baseline.collaborationEntries().filter((e) => e.conflict !== null);
+    if (conflicts.length === 0 && collabConflicts.length === 0) return;
     const section = this.createSection(plugin.t("sidebar.conflicts"));
     for (const entry of conflicts) {
       const row = section.createDiv({ cls: "oss-sidebar-conflict" });
       row.createDiv({ cls: "oss-sidebar-conflict-path", text: entry.path });
+      row.createDiv({
+        cls: "oss-sidebar-conflict-meta",
+        text: plugin.t("sidebar.conflictSourceDevice", { revision: entry.remoteRevision }),
+      });
       const actions = row.createDiv({ cls: "oss-sidebar-actions" });
       actions.createEl("button", { text: plugin.t("sidebar.resolveConflict"), cls: "mod-cta" })
         .addEventListener("click", () => plugin.openConflictModal(entry.path));
+    }
+    for (const entry of collabConflicts) {
+      const row = section.createDiv({ cls: "oss-sidebar-conflict" });
+      row.createDiv({ cls: "oss-sidebar-conflict-path", text: entry.localPath });
+      const owner = entry.localPath.split("/")[1] ?? plugin.t("common.unknown");
+      const rev = entry.conflict?.remoteRevision ?? 0;
+      row.createDiv({
+        cls: "oss-sidebar-conflict-meta",
+        text: plugin.t("sidebar.conflictSourceCollab", { user: owner, revision: rev }),
+      });
+      const actions = row.createDiv({ cls: "oss-sidebar-actions" });
+      actions.createEl("button", { text: plugin.t("sidebar.resolveConflict"), cls: "mod-cta" })
+        .addEventListener("click", () => plugin.openCollaborationConflictModal(entry.vaultId, entry.fileId));
     }
   }
 

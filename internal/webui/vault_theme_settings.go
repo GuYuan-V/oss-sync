@@ -1,3 +1,4 @@
+﻿// 主题设置
 package webui
 
 import (
@@ -208,3 +209,4 @@ func themeConfigFromForm(c *gin.Context, fields []blog.ThemeSettingField) map[st
 	}
 	return raw
 }
+

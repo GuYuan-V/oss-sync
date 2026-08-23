@@ -29,7 +29,9 @@ import (
 	"github.com/oss/oss-server/internal/auth"
 	"github.com/oss/oss-server/internal/collaboration"
 	"github.com/oss/oss-server/internal/config"
+	"github.com/oss/oss-server/internal/deviceauth"
 	"github.com/oss/oss-server/internal/filestore"
+	"github.com/oss/oss-server/internal/jwt"
 	"github.com/oss/oss-server/internal/models"
 )
 
@@ -148,6 +150,10 @@ func (h *Handler) Check(c *gin.Context) {
 	if !ok {
 		return
 	}
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"))
+	if !ok {
+		return
+	}
 
 	var req CheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -164,6 +170,13 @@ func (h *Handler) Check(c *gin.Context) {
 	vaultID, err := defaultVaultID(h.DB, u.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vaultID); err != nil {
+		h.writeDeviceAuthError(c, err)
+		return
+	}
+	if !h.recordDeviceActivityWithDID(c, u.ID, vaultID, did) {
 		return
 	}
 
@@ -281,6 +294,10 @@ func (h *Handler) Download(c *gin.Context) {
 	if !ok {
 		return
 	}
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"))
+	if !ok {
+		return
+	}
 	path, valid := normalizeRelativePath(c.Query("path"))
 	if !valid {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "path is required"})
@@ -290,6 +307,13 @@ func (h *Handler) Download(c *gin.Context) {
 	vaultID, err := defaultVaultID(h.DB, u.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vaultID); err != nil {
+		h.writeDeviceAuthError(c, err)
+		return
+	}
+	if !h.recordDeviceActivityWithDID(c, u.ID, vaultID, did) {
 		return
 	}
 	var f models.File
@@ -342,12 +366,22 @@ func (h *Handler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req DeleteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var rawDelete map[string]any
+	if err := c.ShouldBindJSON(&rawDelete); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body: " + err.Error()})
 		return
 	}
-	normalized, valid := normalizeRelativePath(req.Path)
+	pathRaw, _ := rawDelete["path"].(string)
+	suppliedClientID, _ := rawDelete["client_id"].(string)
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"), suppliedClientID)
+	if !ok {
+		return
+	}
+	var req DeleteRequest
+	if pathRaw != "" {
+		req.Path = pathRaw
+	}
+	normalized, valid := normalizeRelativePath(pathRaw)
 	if !valid {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "path contains illegal segments"})
 		return
@@ -357,6 +391,13 @@ func (h *Handler) Delete(c *gin.Context) {
 	vaultID, err := defaultVaultID(h.DB, u.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vaultID); err != nil {
+		h.writeDeviceAuthError(c, err)
+		return
+	}
+	if !h.recordDeviceActivityWithDID(c, u.ID, vaultID, did) {
 		return
 	}
 	vaultLock := h.vaultLock(vaultID)
@@ -460,4 +501,21 @@ func discardDeletedContent(targetPath, stagedPath string) {
 // MarshalCheckResponse 给测试用，把 CheckResponse 序列化为 JSON。
 func MarshalCheckResponse(r CheckResponse) ([]byte, error) {
 	return json.Marshal(r)
+}
+
+func (h *Handler) recordDeviceActivityWithDID(c *gin.Context, userID uint, vaultID string, did jwt.DeviceID) bool {
+	err := deviceauth.Touch(
+		h.DB,
+		userID,
+		vaultID,
+		string(did),
+		deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader)),
+		nil,
+		time.Now(),
+	)
+	if err != nil {
+		h.writeDeviceError(c, err)
+		return false
+	}
+	return true
 }

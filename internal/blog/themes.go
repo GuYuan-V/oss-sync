@@ -1,3 +1,4 @@
+﻿// 博客主题
 package blog
 
 import (
@@ -109,3 +110,4 @@ func (h *Handler) customThemeTemplate(themeName string) (*template.Template, err
 	}
 	return template.New("custom-theme").Option("missingkey=error").Parse(string(raw))
 }
+

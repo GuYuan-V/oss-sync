@@ -1,3 +1,4 @@
+﻿// 同步策略
 package syncapi
 
 import (
@@ -7,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/oss/oss-server/internal/auth"
+	"github.com/oss/oss-server/internal/deviceauth"
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/settingspolicy"
 )
@@ -26,8 +29,15 @@ func (h *Handler) V2Strategy(c *gin.Context) {
 	if !ok {
 		return
 	}
-	clientID := h.requestClientID(c, c.Query("client_id"))
-	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, clientID) {
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"))
+	if !ok {
+		return
+	}
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vault.ID); err != nil {
+		h.writeDeviceAuthError(c, err)
+		return
+	}
+	if !h.recordDeviceActivityWithDID(c, u.ID, vault.ID, did) {
 		return
 	}
 	timing, err := settingspolicy.EffectiveForUser(h.DB, u.ID, int64(h.Cfg.Server.MaxFileSizeMB)<<20)
@@ -71,3 +81,4 @@ func (h *Handler) V2Strategy(c *gin.Context) {
 		LongPollWaitSec: timing.LongPollWaitSec,
 	})
 }
+

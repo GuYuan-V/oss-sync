@@ -34,7 +34,38 @@ export type DiagnosticEvent =
       readonly durationMs: number;
       readonly bytes?: number;
     }
-  | { readonly kind: "collab_activity"; readonly at: number; readonly entries: number; readonly newestCreatedAt?: string };
+  | { readonly kind: "collab_activity"; readonly at: number; readonly entries: number; readonly newestCreatedAt?: string }
+  | {
+      readonly kind: "api_error";
+      readonly at: number;
+      readonly scope: "collab_upload";
+      readonly status: number;
+      readonly code?: string;
+      readonly reason?: string;
+    }
+  | {
+      readonly kind: "runtime_info";
+      readonly at: number;
+      readonly pluginVersion: string;
+      readonly buildCommit?: string;
+      readonly buildTime?: string;
+      readonly serverVersion?: string;
+      readonly diagnosticsEnabled: boolean;
+    }
+  | {
+      readonly kind: "diagnostics_enabled";
+      readonly at: number;
+      readonly enabled: boolean;
+    }
+  | {
+      readonly kind: "collab_upload_attempt";
+      readonly at: number;
+      readonly hasBaseRevision: boolean;
+      readonly baseRevisionValid: boolean;
+      readonly hasOperationID: boolean;
+      readonly operationIDValid: boolean;
+      readonly operationIDLength: number;
+    };
 
 export class Diagnostics {
   private readonly events: DiagnosticEvent[] = [];
@@ -112,6 +143,49 @@ function sanitizeEvent(event: DiagnosticEvent): DiagnosticEvent | null {
         entries: finiteNumber(event.entries),
         ...(normalizedTimestamp(event.newestCreatedAt) ? { newestCreatedAt: normalizedTimestamp(event.newestCreatedAt) } : {}),
       };
+    case "api_error": {
+      if (event.scope !== "collab_upload") return null;
+      const status = finiteNumber(event.status);
+      if (!Number.isFinite(status)) return null;
+      return {
+        kind: "api_error",
+        at: finiteNumber(event.at),
+        scope: event.scope,
+        status,
+        ...(typeof event.code === "string" && event.code ? { code: event.code } : {}),
+        ...(typeof event.reason === "string" && event.reason ? { reason: event.reason } : {}),
+      };
+    }
+    case "runtime_info": {
+      if (typeof event.pluginVersion !== "string" || !event.pluginVersion) return null;
+      return {
+        kind: "runtime_info",
+        at: finiteNumber(event.at),
+        pluginVersion: event.pluginVersion.slice(0, 64),
+        ...(typeof event.buildCommit === "string" && event.buildCommit ? { buildCommit: event.buildCommit.slice(0, 64) } : {}),
+        ...(typeof event.buildTime === "string" && event.buildTime ? { buildTime: event.buildTime.slice(0, 64) } : {}),
+        ...(typeof event.serverVersion === "string" && event.serverVersion ? { serverVersion: event.serverVersion.slice(0, 64) } : {}),
+        diagnosticsEnabled: !!event.diagnosticsEnabled,
+      };
+    }
+    case "diagnostics_enabled": {
+      return {
+        kind: "diagnostics_enabled",
+        at: finiteNumber(event.at),
+        enabled: !!event.enabled,
+      };
+    }
+    case "collab_upload_attempt": {
+      return {
+        kind: "collab_upload_attempt",
+        at: finiteNumber(event.at),
+        hasBaseRevision: !!event.hasBaseRevision,
+        baseRevisionValid: !!event.baseRevisionValid,
+        hasOperationID: !!event.hasOperationID,
+        operationIDValid: !!event.operationIDValid,
+        operationIDLength: finiteNumber(event.operationIDLength),
+      };
+    }
   }
 }
 

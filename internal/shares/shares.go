@@ -1,3 +1,4 @@
+﻿// 分享管理
 package shares
 
 import (
@@ -366,3 +367,4 @@ func genShareID() (string, error) {
 	}
 	return string(out), nil
 }
+

@@ -363,7 +363,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 
 	ownerToken := registerAndLogin(t, router, "files-owner", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, ownerToken)
-	// 添加 files-user 为参与者以便网页访问。
+	// files-user 参与者授权
 	code, memberLogin := doJSON(t, router, http.MethodPost, "/api/auth/register", "",
 		map[string]string{"username": "files-user", "password": "password123"})
 	if code != http.StatusOK {
@@ -535,7 +535,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 	if err != nil || string(content) != "# Hello\n\n- [x] Finished\n- [ ] Next" {
 		t.Fatalf("restored content: %q err=%v", content, err)
 	}
-	// 历史记录新增 restore。
+	// 历史记录 restore 校验
 	var restoreHist models.FileHistory
 	if err := db.Where("vault_id = ? AND file_path = ? AND action = ?", vaultID, "Notes/A.md", "restore").
 		Order("id desc").First(&restoreHist).Error; err != nil {

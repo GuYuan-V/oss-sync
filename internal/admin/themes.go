@@ -1,3 +1,4 @@
+﻿// 模板管理
 package admin
 
 import (
@@ -193,3 +194,4 @@ func quoteName(name string) string {
 
 var _ = models.VaultSetting{}
 var _ = gorm.ErrRecordNotFound
+

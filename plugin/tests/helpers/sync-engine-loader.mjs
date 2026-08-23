@@ -4,11 +4,11 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-export async function loadSyncEngine() {
+export async function loadModule(entryPath) {
   const dir = await mkdtemp(join(tmpdir(), "oss-sync-engine-"));
   const outfile = join(dir, "sync-engine.mjs");
   await build({
-    entryPoints: ["src/sync-engine.ts"],
+    entryPoints: [entryPath],
     outfile,
     bundle: true,
     platform: "node",
@@ -43,7 +43,15 @@ export async function loadSyncEngine() {
   });
   const module = await import(pathToFileURL(outfile).href);
   return {
-    SyncEngine: module.SyncEngine,
+    module,
     cleanup: () => rm(dir, { recursive: true, force: true }),
+  };
+}
+
+export async function loadSyncEngine() {
+  const { module, cleanup } = await loadModule("src/sync-engine.ts");
+  return {
+    SyncEngine: module.SyncEngine,
+    cleanup,
   };
 }

@@ -1,65 +1,71 @@
 import debounce from "lodash.debounce";
-import { App, Notice, TFile, Vault } from "obsidian";
-import type OSSPlugin from "./main";
+import { Notice, TFile } from "obsidian";
+import type { App, Vault } from "obsidian";
+import { OSSApiClient, OSSApiError, type SyncFileMeta } from "./api.js";
 import {
-  BaselineEntry,
   BaselineStore,
-  ConflictEntry,
   normalizePath,
-  PendingOperation,
-} from "./baseline";
-import { OSSApiClient, OSSApiError, SyncFileMeta, SyncMode } from "./api";
-import { TaskPool } from "./task-pool";
-import { shouldSync } from "./blacklist";
-import { SyncRunCoordinator } from "./sync-run-coordinator";
-import { SyncStrategyManager } from "./strategy";
-import type { ConflictResolution } from "./conflict-modal";
-import type { Diagnostics } from "./diagnostics";
-import { localizeError } from "./localized-error";
+  type BaselineEntry,
+  type ConflictEntry,
+  type PendingOperation,
+} from "./baseline.js";
+import { shouldSync } from "./blacklist.js";
+import type { ConflictResolution } from "./conflict-modal.js";
+import type { Diagnostics } from "./diagnostics.js";
+import { localizeError } from "./localized-error.js";
+import type OSSPlugin from "./main.js";
+import { baselineFromAcknowledgement } from "./ordinary-sync-baseline.js";
+import { isOrdinarySyncConflict409 } from "./ordinary-sync-conflict-409.js";
+import { OrdinarySyncConflictResolver } from "./ordinary-sync-conflict-resolver.js";
+import {
+  OrdinarySyncFileAccess,
+  type LocalReadResult,
+} from "./ordinary-sync-file-access.js";
+import {
+  ordinarySyncCandidatePaths,
+  planOrdinarySyncActions,
+} from "./ordinary-sync-action-planner.js";
+import {
+  assertNeverOrdinarySyncAction,
+  type ExpectedLocalState,
+  type OrdinarySyncAction,
+  type OrdinarySyncActionOutcome,
+  type OrdinarySyncLocalMeta,
+  type OrdinarySyncPlanResult,
+} from "./ordinary-sync-actions.js";
+import { SyncRunCoordinator } from "./sync-run-coordinator.js";
+import { SyncStrategyManager } from "./strategy.js";
+import { TaskPool, type TaskResult } from "./task-pool.js";
 
 export type SyncState = "idle" | "syncing" | "error";
 
-interface LocalMeta {
-  path: string;
-  hash: string;
-  size: number;
-  mtime: number;
-}
+type RemoteSnapshot = {
+  readonly files: Map<string, SyncFileMeta>;
+  readonly nextCursor: number;
+  readonly recoverySnapshot: boolean;
+};
 
-type SyncAction =
-  | {
-      kind: "upload";
-      path: string;
-      local: LocalMeta;
-      baseRevision: number;
-      operationID: string;
-      operation?: PendingOperation;
-    }
-  | {
-      kind: "delete_remote";
-      path: string;
-      baseRevision: number;
-      operationID: string;
-      operation?: PendingOperation;
-    }
-  | { kind: "download"; path: string; remote: SyncFileMeta }
-  | { kind: "delete_local"; path: string; remote: SyncFileMeta }
-  | { kind: "delete_local_absent"; path: string }
-  | { kind: "adopt"; path: string; local: LocalMeta | null; remote: SyncFileMeta }
-  | { kind: "conflict"; path: string; local: LocalMeta | null; remote: SyncFileMeta };
+type LiveAcknowledgement = {
+  readonly path: string;
+  readonly server: SyncFileMeta;
+  readonly local: LocalReadResult | null;
+  readonly bytes: Uint8Array;
+  readonly bytesHash: string;
+};
 
 export class SyncEngine {
   private readonly api: OSSApiClient;
   private readonly baseline: BaselineStore;
   private readonly vault: Vault;
-  private readonly runCoordinator = new SyncRunCoordinator();
-  private readonly suppressed = new Set<string>();
   private readonly strategy: SyncStrategyManager;
-  private debounceFn: (() => void) & { cancel: () => void };
+  private readonly runCoordinator = new SyncRunCoordinator();
+  private readonly ordinaryFileAccess: OrdinarySyncFileAccess;
+  private readonly suppressed = new Set<string>();
   private enqueueChain: Promise<void> = Promise.resolve();
+  private debounceFn: (() => void) & { cancel: () => void };
   private pollTimer: number | null = null;
   private stopped = false;
-  private effectiveMode: SyncMode = "short_poll";
+  private effectiveMode: "short_poll" | "long_poll" = "short_poll";
   private longPollGen = 0;
   private longPollController: AbortController | null = null;
 
@@ -67,13 +73,14 @@ export class SyncEngine {
     app: App,
     api: OSSApiClient,
     baseline: BaselineStore,
-    private plugin: OSSPlugin,
-    private readonly diagnostics?: Diagnostics
+    private readonly plugin: OSSPlugin,
+    private readonly diagnostics?: Diagnostics,
   ) {
     this.api = api;
     this.baseline = baseline;
     this.vault = app.vault;
     this.strategy = new SyncStrategyManager(api);
+    this.ordinaryFileAccess = new OrdinarySyncFileAccess(this.vault, (path) => this.suppress(path));
     this.debounceFn = this.createDebounce();
   }
 
@@ -93,15 +100,10 @@ export class SyncEngine {
     this.debounceFn = this.createDebounce();
   }
 
-  /** 重启仓库轮询。 */
   resetPolling(): void {
     this.stopCurrentPolling();
-    if (this.stopped) return;
-    if (!this.plugin.settings.vaultId || !this.api.hasToken()) return;
-    if (this.effectiveMode === "long_poll") {
-      this.startLongPoll();
-      return;
-    }
+    if (this.stopped || !this.plugin.settings.vaultId || !this.api.hasToken()) return;
+    if (this.effectiveMode === "long_poll") return this.startLongPoll();
     const seconds = Math.max(10, this.plugin.settings.remotePollIntervalSec);
     this.pollTimer = window.setInterval(() => {
       if (!this.stopped && this.plugin.settings.vaultId && this.api.hasToken()) {
@@ -118,46 +120,39 @@ export class SyncEngine {
     this.stopLongPoll();
   }
 
-  /** 启动长轮询循环；每次调用都会先取消旧循环，保证单仓库单长轮询。 */
   private startLongPoll(): void {
-    const gen = ++this.longPollGen;
+    const generation = ++this.longPollGen;
     const controller = new AbortController();
     this.longPollController = controller;
-    void this.longPollLoop(gen, controller);
+    void this.longPollLoop(generation, controller);
   }
 
-  /** 停止长轮询。 */
   private stopLongPoll(): void {
-    this.longPollGen++;
-    if (this.longPollController) {
-      this.longPollController.abort();
-      this.longPollController = null;
-    }
+    this.longPollGen += 1;
+    this.longPollController?.abort();
+    this.longPollController = null;
   }
 
-  private async longPollLoop(gen: number, controller: AbortController): Promise<void> {
+  private async longPollLoop(generation: number, controller: AbortController): Promise<void> {
     const wait = this.strategy.getLongPollWaitSec();
-    while (!this.stopped && !controller.signal.aborted && gen === this.longPollGen) {
+    while (!this.stopped && !controller.signal.aborted && generation === this.longPollGen) {
       const vaultID = this.plugin.settings.vaultId;
       if (!vaultID || !this.api.hasToken()) return;
       const startedAt = Date.now();
       try {
         const result = await this.api.changes(vaultID, this.baseline.getCursor(), wait);
-        if (this.stopped || controller.signal.aborted || gen !== this.longPollGen) return;
-        const hasChange =
-          result.files.length > 0 || result.next_cursor > this.baseline.getCursor();
+        if (this.stopped || controller.signal.aborted || generation !== this.longPollGen) return;
+        const changed = result.files.length > 0 || result.next_cursor > this.baseline.getCursor();
         this.diagnostics?.record({
           kind: "poll",
           at: Date.now(),
           scope: "sync",
-          changed: hasChange,
+          changed,
           durationMs: Date.now() - startedAt,
         });
-        if (hasChange) {
-          await this.runOnce({ forceFull: false });
-        }
-      } catch (error) {
-        if (this.stopped || controller.signal.aborted || gen !== this.longPollGen) return;
+        if (changed) await this.runOnce({ forceFull: false });
+      } catch (error: unknown) {
+        if (this.stopped || controller.signal.aborted || generation !== this.longPollGen) return;
         this.diagnostics?.record({
           kind: "poll",
           at: Date.now(),
@@ -165,38 +160,28 @@ export class SyncEngine {
           durationMs: Date.now() - startedAt,
           failed: true,
         });
-        new Notice(this.plugin.t("sync.longPollFailed", {
-          error: localizeError(error, this.plugin.t.bind(this.plugin), this.plugin.t("common.unknownError")),
-        }));
+        new Notice(this.plugin.t("sync.longPollFailed", { error: this.localizedError(error) }));
         await sleep(3000);
       }
     }
   }
 
-  /** 每次同步运行前拉取服务端策略，并应用变化的模式与时间参数。 */
   private async applyStrategy(): Promise<void> {
     const vaultID = this.plugin.settings.vaultId;
     if (!this.api.hasToken() || !vaultID) return;
     try {
-      const userMode = this.plugin.settings.vaultSyncMode ?? "short_poll";
-      const previousMinDebounceSec = this.strategy.getMinDebounceSec();
-      const previousLongPollWaitSec = this.strategy.getLongPollWaitSec();
-      await this.strategy.fetch(vaultID, userMode);
+      const beforeDebounce = this.strategy.getMinDebounceSec();
+      const beforeWait = this.strategy.getLongPollWaitSec();
+      await this.strategy.fetch(vaultID, this.plugin.settings.vaultSyncMode ?? "short_poll");
       const nextMode = this.strategy.getEffectiveMode();
-      if (this.strategy.getMinDebounceSec() !== previousMinDebounceSec) {
-        this.resetDebounce();
-      }
-      const longPollWaitChanged =
-        this.strategy.getLongPollWaitSec() !== previousLongPollWaitSec;
-      if (
-        nextMode !== this.effectiveMode ||
-        (nextMode === "long_poll" && longPollWaitChanged)
-      ) {
+      if (this.strategy.getMinDebounceSec() !== beforeDebounce) this.resetDebounce();
+      if (nextMode !== this.effectiveMode || (nextMode === "long_poll" && this.strategy.getLongPollWaitSec() !== beforeWait)) {
         this.effectiveMode = nextMode;
         this.resetPolling();
       }
-    } catch {
-      // 策略获取失败不阻断本次同步，沿用上次模式。
+    } catch (error: unknown) {
+      if (error instanceof OSSApiError) return;
+      throw error;
     }
   }
 
@@ -204,94 +189,65 @@ export class SyncEngine {
     return this.suppressed.has(normalizePath(path));
   }
 
-  /** 侧边栏展示的同步模式文案。 */
   getEffectiveModeLabel(): string {
     return this.plugin.t(this.effectiveMode === "long_poll" ? "common.longPoll" : "common.shortPoll");
   }
 
   enqueueUpsert(path: string): void {
-    this.enqueue({
-      id: operationID(),
-      kind: "upsert",
-      path,
-      createdAt: Date.now(),
-    });
+    this.enqueue({ id: operationID(), kind: "upsert", path, createdAt: Date.now() });
   }
 
   enqueueDelete(path: string): void {
-    this.enqueue({
-      id: operationID(),
-      kind: "delete",
-      path,
-      createdAt: Date.now(),
-    });
+    this.enqueue({ id: operationID(), kind: "delete", path, createdAt: Date.now() });
   }
 
   enqueueDeleteTree(folderPath: string): void {
     const root = normalizePath(folderPath).replace(/\/+$/, "");
     if (!root || !shouldSync(root, this.plugin.settings.syncPoisonObsidianFiles)) return;
     const prefix = `${root}/`;
-    this.enqueueChain = this.enqueueChain
-      .then(async () => {
-        await this.baseline.load();
-        const paths = new Set<string>();
-        for (const path of this.baseline.paths()) {
-          if (path.startsWith(prefix)) paths.add(path);
+    this.enqueueChain = this.enqueueChain.then(async () => {
+      await this.baseline.load();
+      const paths = new Set<string>();
+      for (const path of this.baseline.paths()) if (path.startsWith(prefix)) paths.add(path);
+      for (const operation of this.baseline.pending()) {
+        if (operation.path.startsWith(prefix)) paths.add(operation.path);
+        if (operation.oldPath?.startsWith(prefix)) paths.add(operation.oldPath);
+      }
+      for (const path of paths) {
+        if (shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles)) {
+          this.baseline.putPending({ id: operationID(), kind: "delete", path, createdAt: Date.now() });
         }
-        for (const operation of this.baseline.pending()) {
-          if (operation.path.startsWith(prefix)) paths.add(operation.path);
-          if (operation.oldPath?.startsWith(prefix)) paths.add(operation.oldPath);
-        }
-        for (const path of paths) {
-          if (!shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles)) continue;
-          this.baseline.putPending({
-            id: operationID(),
-            kind: "delete",
-            path,
-            createdAt: Date.now(),
-          });
-        }
-        await this.baseline.save();
-        if (paths.size > 0) this.debounceFn();
-      })
-      .catch((error: unknown) => {
-        new Notice(this.plugin.t("sync.saveDeleteQueueFailed", {
-          error: errorMessage(error, this.plugin.t("common.unknownError")),
-        }));
-      });
+      }
+      await this.baseline.save();
+      if (paths.size > 0) this.debounceFn();
+    }).catch((error: unknown) => {
+      new Notice(this.plugin.t("sync.saveDeleteQueueFailed", { error: errorMessage(error, this.plugin.t("common.unknownError")) }));
+    });
   }
 
   enqueueRename(oldPath: string, newPath: string): void {
-    this.enqueue({
-      id: operationID(),
-      kind: "rename",
-      path: newPath,
-      oldPath,
-      createdAt: Date.now(),
-    });
+    this.enqueue({ id: operationID(), kind: "rename", path: newPath, oldPath, createdAt: Date.now() });
   }
 
   private enqueue(operation: PendingOperation): void {
     if (!shouldSync(operation.path, this.plugin.settings.syncPoisonObsidianFiles)) return;
     if (operation.oldPath && !shouldSync(operation.oldPath, this.plugin.settings.syncPoisonObsidianFiles)) return;
-    if (this.isSuppressed(operation.path) || (operation.oldPath && this.isSuppressed(operation.oldPath))) return;
+    if (this.isSuppressed(operation.path) || (operation.oldPath !== undefined && this.isSuppressed(operation.oldPath))) return;
     this.enqueueChain = this.enqueueChain.then(async () => {
       await this.baseline.load();
       this.baseline.putPending({
         ...operation,
         path: normalizePath(operation.path),
-        oldPath: operation.oldPath ? normalizePath(operation.oldPath) : undefined,
+        oldPath: operation.oldPath === undefined ? undefined : normalizePath(operation.oldPath),
       });
       await this.baseline.save();
       this.debounceFn();
     }).catch((error: unknown) => {
-      new Notice(this.plugin.t("sync.saveQueueFailed", {
-        error: errorMessage(error, this.plugin.t("common.unknownError")),
-      }));
+      new Notice(this.plugin.t("sync.saveQueueFailed", { error: errorMessage(error, this.plugin.t("common.unknownError")) }));
     });
   }
 
-  async runOnce(opts: { forceFull: boolean }): Promise<boolean> {
+  async runOnce(opts: { readonly forceFull: boolean }): Promise<boolean> {
     let succeeded = true;
     await this.runCoordinator.run(opts.forceFull, async (forceFull) => {
       succeeded = await this.executeRun(forceFull);
@@ -302,104 +258,67 @@ export class SyncEngine {
   private async executeRun(forceFull: boolean): Promise<boolean> {
     const vaultID = this.plugin.settings.vaultId;
     if (!this.api.hasToken() || !vaultID) {
-      this.plugin.setSyncState(
-        "error",
-        this.plugin.t(!this.api.hasToken() ? "sync.notLoggedIn" : "sync.vaultNotBound")
-      );
+      this.plugin.setSyncState("error", this.plugin.t(!this.api.hasToken() ? "sync.notLoggedIn" : "sync.vaultNotBound"));
       return false;
     }
     this.plugin.setSyncState("syncing");
     await this.enqueueChain;
-    forceFull = forceFull || !this.plugin.settings.incrementalCheck;
-
     try {
       await this.applyStrategy();
       await this.baseline.load();
+      let full = forceFull || !this.plugin.settings.incrementalCheck;
       if (this.baseline.bindVault(vaultID)) {
-        forceFull = true;
+        full = true;
         await this.baseline.save();
       }
-
-      const queuedBeforeFetch = this.baseline.pending();
-      if (this.needsFullSnapshotForDeletes(queuedBeforeFetch)) {
-        forceFull = true;
-      }
-      const remote = await this.fetchRemote(vaultID, forceFull);
-      const recoveryFull = forceFull || remote.recoverySnapshot;
+      if (this.needsFullSnapshotForDeletes(this.baseline.pending())) full = true;
+      const remote = await this.fetchRemote(vaultID, full);
       let pending = this.baseline.pending();
       if (remote.recoverySnapshot) {
         await this.prepareRecoveryRenames(pending, remote.files);
         pending = this.baseline.pending();
       }
       await this.processRenames(vaultID, pending, remote.files);
-
-      const remainingPending = this.baseline.pending();
-      const actions = await this.planActions(
-        recoveryFull,
-        remote.files,
-        remainingPending,
-        remote.recoverySnapshot
-      );
-
-      const pool = new TaskPool({
+      const plan = await this.planOrdinaryActions(full || remote.recoverySnapshot, remote.files, pending, remote.recoverySnapshot);
+      await this.applyPlanEffects(plan);
+      const results = await new TaskPool({
         maxConcurrency: this.plugin.settings.maxConcurrency,
         maxRetries: 2,
         baseDelayMs: 500,
-      });
-      const results = await pool.run(actions, async (action) => {
-        try {
-          await this.applyAction(vaultID, action);
-        } catch (error: unknown) {
-          if (error instanceof OSSApiError && error.status === 409 && error.current) {
-            const local = await this.localMeta(action.path);
-            await this.recordConflict(action.path, local, error.current);
-            return;
-          }
-          throw error;
-        }
-      });
-
-      const failures = results.filter((result) => !result.ok);
-      if (failures.length === 0) {
-        this.baseline.setCursor(remote.nextCursor);
+      }).run([...plan.actions], (action) => this.applyAction(vaultID, action));
+      if (hasUnresolvedAction(results)) {
         await this.baseline.save();
-        await this.api.acknowledge(vaultID, remote.nextCursor);
-      } else {
-        await this.baseline.save();
+        this.reportActionFailures(results);
+        return false;
       }
-
+      await this.api.acknowledge(vaultID, remote.nextCursor);
+      this.baseline.setCursor(remote.nextCursor);
+      await this.baseline.save();
       if (this.api.isClockDriftLarge()) {
-        new Notice(
-          this.plugin.t("sync.clockDrift", {
-            seconds: Math.round(this.api.getTimeOffset() / 1000),
-          }),
-          8000
-        );
+        new Notice(this.plugin.t("sync.clockDrift", { seconds: Math.round(this.api.getTimeOffset() / 1000) }), 8000);
       }
-      if (failures.length > 0) {
-        const failureSummary = this.plugin.t("notice.syncFailures", { count: failures.length });
-        this.plugin.setSyncState("error", failureSummary);
-        new Notice(failureSummary, 6000);
-      } else {
-        this.plugin.setSyncState("idle");
-      }
-		return failures.length === 0;
+      this.plugin.setSyncState("idle");
+      return true;
     } catch (error: unknown) {
-      const message = localizeError(error, this.plugin.t.bind(this.plugin), this.plugin.t("common.unknownError"));
+      const message = this.localizedError(error);
       this.plugin.setSyncState("error", message);
       new Notice(this.plugin.t("sync.error", { error: message }), 8000);
-		return false;
+      return false;
     }
   }
 
-  private async fetchRemote(
-    vaultID: string,
-    forceFull: boolean
-  ): Promise<{
-    files: Map<string, SyncFileMeta>;
-    nextCursor: number;
-    recoverySnapshot: boolean;
-  }> {
+  private localizedError(error: unknown): string {
+    return localizeError(error, this.plugin.t.bind(this.plugin), this.plugin.t("common.unknownError"));
+  }
+
+  private reportActionFailures(results: readonly TaskResult<OrdinarySyncActionOutcome>[]): void {
+    const count = results.filter((result) => !result.ok || result.result?.kind === "deferred_retry").length;
+    const message = this.plugin.t("notice.syncFailures", { count });
+    this.plugin.setSyncState("error", message);
+    new Notice(message, 6000);
+  }
+
+  private async fetchRemote(vaultID: string, forceFull: boolean): Promise<RemoteSnapshot> {
     const files = new Map<string, SyncFileMeta>();
     let useManifest = forceFull;
     let cursor = useManifest ? 0 : this.baseline.getCursor();
@@ -407,16 +326,9 @@ export class SyncEngine {
     while (true) {
       let page;
       try {
-        page = useManifest
-          ? await this.api.manifest(vaultID, cursor)
-          : await this.api.changes(vaultID, cursor);
+        page = useManifest ? await this.api.manifest(vaultID, cursor) : await this.api.changes(vaultID, cursor);
       } catch (error: unknown) {
-        if (
-          !useManifest &&
-          error instanceof OSSApiError &&
-          error.status === 410 &&
-          error.code === "history_compacted"
-        ) {
+        if (!useManifest && error instanceof OSSApiError && error.status === 410 && error.code === "history_compacted") {
           files.clear();
           cursor = 0;
           useManifest = true;
@@ -432,63 +344,39 @@ export class SyncEngine {
     }
   }
 
-  private async prepareRecoveryRenames(
-    operations: PendingOperation[],
-    remote: Map<string, SyncFileMeta>
-  ): Promise<void> {
+  private async prepareRecoveryRenames(operations: readonly PendingOperation[], remote: Map<string, SyncFileMeta>): Promise<void> {
     for (const operation of operations) {
       if (operation.kind !== "rename" || !operation.oldPath) continue;
-      if (!this.baseline.get(operation.oldPath) || remote.has(operation.oldPath)) continue;
-      const local = await this.localMeta(operation.path);
+      if (this.baseline.get(operation.oldPath) === null || remote.has(operation.oldPath)) continue;
+      const local = await this.readLocalMeta(operation.path);
       this.baseline.remove(operation.oldPath);
       this.baseline.removePending(operation.id);
-      if (local) {
-        this.baseline.putPending({
-          ...operation,
-          kind: "upsert",
-          oldPath: undefined,
-        });
-      }
+      if (local !== null) this.baseline.putPending({ ...operation, kind: "upsert", oldPath: undefined });
     }
     await this.baseline.save();
   }
 
-  private async processRenames(
-    vaultID: string,
-    operations: PendingOperation[],
-    remote: Map<string, SyncFileMeta>
-  ): Promise<void> {
+  private async processRenames(vaultID: string, operations: readonly PendingOperation[], remote: Map<string, SyncFileMeta>): Promise<void> {
     for (const operation of operations) {
       if (operation.kind !== "rename" || !operation.oldPath) continue;
-      if (
-        this.baseline.getConflict(operation.oldPath) ||
-        this.baseline.getConflict(operation.path)
-      ) {
-        continue;
-      }
+      if (this.baseline.getConflict(operation.oldPath) || this.baseline.getConflict(operation.path)) continue;
       const oldBaseline = this.baseline.get(operation.oldPath);
       const newBaseline = this.baseline.get(operation.path);
-      const local = await this.localMeta(operation.path);
-      if (!oldBaseline || !local) {
+      const target = await this.ordinaryFileAccess.readExact(operation.path);
+      const local = localMeta(operation.path, target);
+      if (!oldBaseline || !local || !target) {
         this.baseline.removePending(operation.id);
-        if (local) {
-          this.baseline.putPending({ ...operation, kind: "upsert", oldPath: undefined });
-        }
+        if (local) this.baseline.putPending({ ...operation, kind: "upsert", oldPath: undefined });
         continue;
       }
-      const oldRemote = remote.get(operation.oldPath);
-      const newRemote = remote.get(operation.path);
-      if (oldRemote && oldRemote.revision !== oldBaseline.serverRevision) {
-        await this.preserveBothAfterRenameSourceConflict(
-          vaultID,
-          operation,
-          oldRemote,
-          remote
-        );
+      const sourceRemote = remote.get(operation.oldPath);
+      const targetRemote = remote.get(operation.path);
+      if (sourceRemote && sourceRemote.revision !== oldBaseline.serverRevision) {
+        await this.preserveBothAfterRenameSourceConflict(vaultID, operation, sourceRemote, remote);
         continue;
       }
-      if (newRemote && newRemote.revision !== (newBaseline?.serverRevision ?? 0)) {
-        await this.recordConflict(operation.path, local, newRemote);
+      if (targetRemote && targetRemote.revision !== (newBaseline?.serverRevision ?? 0)) {
+        await this.recordConflict(operation.path, target, targetRemote);
         continue;
       }
       try {
@@ -502,316 +390,293 @@ export class SyncEngine {
         });
         remote.set(operation.oldPath, result.old);
         remote.set(operation.path, result.new);
-        this.baseline.set(operation.oldPath, baselineFromRemote(result.old, null));
-        this.baseline.set(operation.path, baselineFromRemote(result.new, local));
+        const current = await this.ordinaryFileAccess.readExact(operation.path);
+        this.baseline.set(operation.oldPath, this.deletedAcknowledgement(result.old, null));
+        this.baseline.set(operation.path, await this.liveAcknowledgement({
+          path: operation.path,
+          server: result.new,
+          local: current,
+          bytes: target.bytes,
+          bytesHash: target.hash,
+        }));
         this.baseline.removePending(operation.id);
+        this.queueCurrentLocalChange(operation.path, target, current);
       } catch (error: unknown) {
-        if (error instanceof OSSApiError && error.status === 409 && error.current) {
-          const conflictPath = normalizePath(error.current.path || operation.path);
-          if (conflictPath === operation.oldPath) {
-            await this.preserveBothAfterRenameSourceConflict(
-              vaultID,
-              operation,
-              error.current,
-              remote
-            );
-            continue;
-          }
-          await this.recordConflict(
-            conflictPath,
-            local,
-            error.current
-          );
-          continue;
+        if (!isOrdinarySyncConflict409(error)) throw error;
+        const path = normalizePath(error.current.path || operation.path);
+        if (path === operation.oldPath) {
+          await this.preserveBothAfterRenameSourceConflict(vaultID, operation, error.current, remote);
+        } else {
+          await this.recordConflict(path, target, error.current);
         }
-        throw error;
       }
     }
     await this.baseline.save();
   }
 
-  private async preserveBothAfterRenameSourceConflict(
-    vaultID: string,
-    operation: PendingOperation,
-    currentSource: SyncFileMeta,
-    remote: Map<string, SyncFileMeta>
-  ): Promise<void> {
-    remote.set(currentSource.path, currentSource);
-    if (currentSource.deleted) {
-      await this.applyRemoteDelete(currentSource);
-    } else {
-      await this.applyDownload(vaultID, currentSource);
-    }
+  private async preserveBothAfterRenameSourceConflict(vaultID: string, operation: PendingOperation, source: SyncFileMeta, remote: Map<string, SyncFileMeta>): Promise<void> {
+    remote.set(source.path, source);
+    const expected = expectedFromSnapshot(await this.ordinaryFileAccess.readExact(source.path));
+    const outcome = source.deleted ? await this.applyRemoteDelete(source, expected) : await this.applyDownload(vaultID, source, expected);
+    if (outcome.kind !== "resolved") return;
     this.baseline.removePending(operation.id);
-    this.baseline.putPending({
-      ...operation,
-      kind: "upsert",
-      oldPath: undefined,
+    this.baseline.putPending({ ...operation, kind: "upsert", oldPath: undefined });
+    new Notice(this.plugin.t("sync.remoteRenameConflict", { path: operation.oldPath ?? operation.path }), 8000);
+  }
+
+  private async planOrdinaryActions(forceFull: boolean, remote: Map<string, SyncFileMeta>, pending: readonly PendingOperation[], recoverySnapshot = false): Promise<OrdinarySyncPlanResult> {
+    const baseline = this.baselineSnapshot();
+    const vaultPaths = this.vaultPaths(forceFull);
+    const candidates = ordinarySyncCandidatePaths({ forceFull, remote, baseline, pending, conflicts: new Set(), vaultPaths });
+    const conflicts = new Set(candidates.filter((path) => this.baseline.getConflict(path) !== null));
+    const localByPath = new Map<string, OrdinarySyncLocalMeta | null>();
+    for (const path of ordinarySyncCandidatePaths({ forceFull, remote, baseline, pending, conflicts, vaultPaths })) {
+      localByPath.set(path, await this.readLocalMeta(path));
+    }
+    return planOrdinarySyncActions({
+      forceFull,
+      recoverySnapshot,
+      remote,
+      baseline,
+      pending,
+      localByPath,
+      conflicts,
+      vaultPaths,
+      createOperationId: operationID,
     });
-    new Notice(
-      this.plugin.t("sync.remoteRenameConflict", { path: operation.oldPath ?? operation.path }),
-      8000
-    );
   }
 
-  private async planActions(
-    forceFull: boolean,
-    remote: Map<string, SyncFileMeta>,
-    pending: PendingOperation[],
-    recoverySnapshot = false
-  ): Promise<SyncAction[]> {
-    const pendingByPath = new Map<string, PendingOperation>();
-    const renamePaths = new Set<string>();
-    for (const operation of pending) {
-      if (operation.kind === "rename") {
-        renamePaths.add(operation.path);
-        if (operation.oldPath) renamePaths.add(operation.oldPath);
-      } else {
-        pendingByPath.set(operation.path, operation);
-      }
-    }
-
-    const paths = new Set<string>();
-    for (const path of remote.keys()) paths.add(path);
-    for (const path of pendingByPath.keys()) paths.add(path);
-    if (forceFull) {
-      for (const path of this.baseline.paths()) paths.add(path);
-      for (const file of this.vault.getFiles()) {
-        if (shouldSync(file.path, this.plugin.settings.syncPoisonObsidianFiles)) {
-          paths.add(normalizePath(file.path));
-        }
-      }
-    }
-
-    const actions: SyncAction[] = [];
-    for (const path of paths) {
-      if (renamePaths.has(path) || this.baseline.getConflict(path)) continue;
-      const baseline = this.baseline.get(path);
-      const local = await this.localMeta(path, baseline);
-      const submittedRemote = remote.get(path);
-      const server = submittedRemote ?? (!forceFull && baseline ? remoteFromBaseline(path, baseline) : undefined);
-      const operation = pendingByPath.get(path);
-
-      if (!baseline) {
-        if (operation?.kind === "delete") {
-          if (server && !server.deleted) {
-            actions.push({
-              kind: "delete_remote",
-              path,
-              baseRevision: server.revision,
-              operationID: operation.id,
-              operation,
-            });
-          } else if (server?.deleted) {
-            actions.push({ kind: "adopt", path, local: null, remote: server });
-          } else {
-            this.baseline.removePending(operation.id);
-          }
-        } else if (local && !server) {
-          actions.push({
-            kind: "upload",
-            path,
-            local,
-            baseRevision: 0,
-            operationID: operation?.id ?? operationID(),
-            operation,
-          });
-        } else if (!local && server && !server.deleted) {
-          actions.push({ kind: "download", path, remote: server });
-        } else if (local && server && !server.deleted && local.hash === server.hash) {
-          actions.push({ kind: "adopt", path, local, remote: server });
-        } else if (local && server) {
-          actions.push({ kind: "conflict", path, local, remote: server });
-        } else if (!local && server?.deleted) {
-          actions.push({ kind: "adopt", path, local: null, remote: server });
-        } else if (operation) {
-          this.baseline.removePending(operation.id);
-        }
-        continue;
-      }
-
-      if (recoverySnapshot && !submittedRemote) {
-        if (baseline.serverDeleted) {
-          this.baseline.remove(path);
-          if (local) {
-            actions.push({
-              kind: "upload",
-              path,
-              local,
-              baseRevision: 0,
-              operationID: operation?.id ?? operationID(),
-              operation,
-            });
-          } else if (operation) {
-            this.baseline.removePending(operation.id);
-          }
-        } else if (!local) {
-          this.baseline.remove(path);
-          if (operation) this.baseline.removePending(operation.id);
-        } else if (local.hash === baseline.serverHash) {
-          actions.push({ kind: "delete_local_absent", path });
-        } else {
-          actions.push({
-            kind: "conflict",
-            path,
-            local,
-            remote: compactedDeleteMeta(path),
-          });
-        }
-        continue;
-      }
-
-      const localChanged = baseline.serverDeleted
-        ? local !== null
-        : local === null || local.hash !== baseline.serverHash;
-      const remoteChanged = server
-        ? server.revision !== baseline.serverRevision ||
-          server.hash !== baseline.serverHash ||
-          server.deleted !== baseline.serverDeleted
-        : forceFull;
-
-      if (!localChanged && !remoteChanged) {
-        if (operation) this.baseline.removePending(operation.id);
-        continue;
-      }
-      if (localChanged && !remoteChanged) {
-        if (local) {
-          actions.push({
-            kind: "upload",
-            path,
-            local,
-            baseRevision: baseline.serverRevision,
-            operationID: operation?.id ?? operationID(),
-            operation,
-          });
-        } else {
-          actions.push({
-            kind: "delete_remote",
-            path,
-            baseRevision: baseline.serverRevision,
-            operationID: operation?.id ?? operationID(),
-            operation,
-          });
-        }
-        continue;
-      }
-      if (!localChanged && remoteChanged && server) {
-        actions.push(
-          server.deleted
-            ? { kind: "delete_local", path, remote: server }
-            : { kind: "download", path, remote: server }
-        );
-        continue;
-      }
-      if (local && server && !server.deleted && local.hash === server.hash) {
-        actions.push({ kind: "adopt", path, local, remote: server });
-      } else if (server) {
-        actions.push({ kind: "conflict", path, local, remote: server });
-      }
-    }
-    return actions;
+  private async planActions(forceFull: boolean, remote: Map<string, SyncFileMeta>, pending: readonly PendingOperation[], recoverySnapshot = false): Promise<readonly OrdinarySyncAction[]> {
+    return (await this.planOrdinaryActions(forceFull, remote, pending, recoverySnapshot)).actions;
   }
 
-  private needsFullSnapshotForDeletes(pending: PendingOperation[]): boolean {
-    return pending.some(
-      (operation) =>
-        operation.kind === "delete" && this.baseline.get(operation.path) === null
-    );
+  private baselineSnapshot(): Map<string, BaselineEntry> {
+    const entries = new Map<string, BaselineEntry>();
+    for (const path of this.baseline.paths()) {
+      const entry = this.baseline.get(path);
+      if (entry) entries.set(path, entry);
+    }
+    return entries;
   }
 
-  private async applyAction(vaultID: string, action: SyncAction): Promise<void> {
-    switch (action.kind) {
-      case "upload": {
-        const file = this.vault.getAbstractFileByPath(action.path);
-    if (!(file instanceof TFile)) {
-      throw new Error(this.plugin.t("sync.localFileMissing", { path: action.path }));
-    }
-        const content = await this.vault.readBinary(file);
-        const result = await this.api.uploadV2(vaultID, {
-          path: action.path,
-          baseRevision: action.baseRevision,
-          hash: action.local.hash,
-          mtime: action.local.mtime,
-          operationID: action.operationID,
-          content,
-        });
-        this.baseline.set(action.path, baselineFromRemote(result, action.local));
-        if (action.operation) this.baseline.removePending(action.operation.id);
-        new Notice(this.plugin.t("sync.uploaded", { path: action.path }));
-        return;
+  private vaultPaths(forceFull: boolean): readonly string[] {
+    if (!forceFull) return [];
+    return this.vault.getFiles()
+      .filter((file) => shouldSync(file.path, this.plugin.settings.syncPoisonObsidianFiles))
+      .map((file) => normalizePath(file.path));
+  }
+
+  private async applyPlanEffects(plan: OrdinarySyncPlanResult): Promise<void> {
+    for (const id of plan.obsoletePendingIds) this.baseline.removePending(id);
+    for (const path of plan.removedBaselinePaths) this.baseline.remove(path);
+    await this.baseline.save();
+  }
+
+  private needsFullSnapshotForDeletes(pending: readonly PendingOperation[]): boolean {
+    return pending.some((operation) => operation.kind === "delete" && this.baseline.get(operation.path) === null);
+  }
+
+  private async applyAction(vaultID: string, action: OrdinarySyncAction): Promise<OrdinarySyncActionOutcome> {
+    try {
+      switch (action.kind) {
+        case "upload": return await this.applyUpload(vaultID, action);
+        case "delete_remote": return await this.applyRemoteDeleteRequest(vaultID, action);
+        case "download": return await this.applyDownload(vaultID, action.remote, action.expectedLocal);
+        case "delete_local": return await this.applyRemoteDelete(action.remote, action.expectedLocal);
+        case "delete_local_absent": return await this.applyCompactedDelete(action);
+        case "adopt": return await this.applyAdopt(action);
+        case "conflict": return await this.applyConflict(action);
+        case "reconcile": return await this.resolveReconciliation(vaultID, action);
+        default: return assertNeverOrdinarySyncAction(action);
       }
-      case "delete_remote": {
-        const result = await this.api.deleteV2(vaultID, {
-          path: action.path,
-          baseRevision: action.baseRevision,
-          operationID: action.operationID,
-          mtime: Date.now(),
-        });
-        this.baseline.set(action.path, baselineFromRemote(result, null));
-        if (action.operation) this.baseline.removePending(action.operation.id);
-        return;
-      }
-      case "download":
-        await this.applyDownload(vaultID, action.remote);
-        return;
-      case "delete_local":
-        await this.applyRemoteDelete(action.remote);
-        return;
-      case "delete_local_absent": {
-        const existing = this.vault.getAbstractFileByPath(action.path);
-        if (existing) {
-          this.suppress(action.path);
-          await this.vault.delete(existing, true);
-        }
-        this.baseline.remove(action.path);
-        this.baseline.removePendingForPath(action.path);
-        return;
-      }
-      case "adopt":
-        this.baseline.set(action.path, baselineFromRemote(action.remote, action.local));
-        this.baseline.removePendingForPath(action.path);
-        return;
-      case "conflict":
-        await this.recordConflict(action.path, action.local, action.remote);
+    } catch (error: unknown) {
+      return this.handleActionFailure(vaultID, action, error);
     }
   }
 
-  private async applyDownload(vaultID: string, remote: SyncFileMeta): Promise<void> {
-    const result = await this.api.downloadV2(vaultID, remote.path, remote.revision);
-    await this.ensureParentFolders(remote.path);
-    this.suppress(remote.path);
-    const existing = this.vault.getAbstractFileByPath(remote.path);
-    if (existing instanceof TFile) {
-      await this.vault.modifyBinary(existing, result.content, { mtime: result.meta.mtime });
-    } else {
-      await this.vault.createBinary(remote.path, result.content, { mtime: result.meta.mtime });
+  private async handleActionFailure(vaultID: string, action: OrdinarySyncAction, error: unknown): Promise<OrdinarySyncActionOutcome> {
+    if (!isOrdinarySyncConflict409(error)) throw error;
+    if (action.kind === "upload") {
+      return this.createResolver().resolve({ vaultId: vaultID, path: action.path, expectedHash: action.local.hash, remote: error.current });
     }
-    this.baseline.set(remote.path, baselineFromRemote(result.meta, {
+    const local = await this.ordinaryFileAccess.readExact(action.path);
+    await this.recordConflict(action.path, local, error.current);
+    return { kind: "conflicted" };
+  }
+
+  private async applyUpload(vaultID: string, action: Extract<OrdinarySyncAction, { readonly kind: "upload" }>): Promise<OrdinarySyncActionOutcome> {
+    const snapshot = await this.ordinaryFileAccess.readExact(action.path);
+    if (!snapshot || snapshot.hash !== action.local.hash) return { kind: "deferred_retry", reason: "stale_local" };
+    const server = await this.api.uploadV2(vaultID, {
+      path: action.path,
+      baseRevision: action.baseRevision,
+      hash: snapshot.hash,
+      mtime: snapshot.mtime,
+      operationID: action.operationID,
+      content: toArrayBuffer(snapshot.bytes),
+    });
+    const current = await this.ordinaryFileAccess.readExact(action.path);
+    this.baseline.set(action.path, server.deleted
+      ? this.deletedAcknowledgement(server, current)
+      : await this.liveAcknowledgement({ path: action.path, server, local: current, bytes: snapshot.bytes, bytesHash: snapshot.hash }));
+    if (action.operation) this.baseline.removePending(action.operation.id);
+    this.queueCurrentLocalChange(action.path, snapshot, current);
+    new Notice(this.plugin.t("sync.uploaded", { path: action.path }));
+    return { kind: "resolved" };
+  }
+
+  private async applyRemoteDeleteRequest(vaultID: string, action: Extract<OrdinarySyncAction, { readonly kind: "delete_remote" }>): Promise<OrdinarySyncActionOutcome> {
+    const server = await this.api.deleteV2(vaultID, {
+      path: action.path,
+      baseRevision: action.baseRevision,
+      operationID: action.operationID,
+      mtime: Date.now(),
+    });
+    const current = await this.ordinaryFileAccess.readExact(action.path);
+    this.baseline.set(action.path, this.deletedAcknowledgement(server, current));
+    if (action.operation) this.baseline.removePending(action.operation.id);
+    if (current) this.baseline.putPending({ id: operationID(), kind: "upsert", path: action.path, createdAt: Date.now() });
+    return { kind: "resolved" };
+  }
+
+  private async applyDownload(vaultID: string, remote: SyncFileMeta, expected: ExpectedLocalState): Promise<OrdinarySyncActionOutcome> {
+    const downloaded = await this.api.downloadV2(vaultID, remote.path, remote.revision);
+    const bytes = new Uint8Array(downloaded.content).slice();
+    const write = expected.kind === "absent"
+      ? await this.ordinaryFileAccess.create(remote.path, expected, bytes)
+      : await this.ordinaryFileAccess.replace(remote.path, expected, bytes);
+    if (write.kind === "stale") {
+      await this.recordConflict(remote.path, write.actual, downloaded.meta);
+      return { kind: "conflicted" };
+    }
+    const snapshot = write.snapshot;
+    this.baseline.set(remote.path, await this.liveAcknowledgement({
       path: remote.path,
-      hash: result.meta.hash,
-      size: result.meta.size,
-      mtime: result.meta.mtime,
+      server: downloaded.meta,
+      local: snapshot,
+      bytes,
+      bytesHash: await sha256Hex(bytes),
     }));
     this.baseline.removePendingForPath(remote.path);
     new Notice(this.plugin.t("sync.downloaded", { path: remote.path }));
+    return { kind: "resolved" };
   }
 
-  private async applyRemoteDelete(remote: SyncFileMeta): Promise<void> {
-    const existing = this.vault.getAbstractFileByPath(remote.path);
-    if (existing) {
-      this.suppress(remote.path);
-      await this.vault.delete(existing, true);
+  private async applyRemoteDelete(remote: SyncFileMeta, expected: ExpectedLocalState): Promise<OrdinarySyncActionOutcome> {
+    const deleted = await this.ordinaryFileAccess.deleteExact(remote.path, expected);
+    if (deleted.kind === "stale") {
+      await this.recordConflict(remote.path, deleted.actual, remote);
+      return { kind: "conflicted" };
     }
-    this.baseline.set(remote.path, baselineFromRemote(remote, null));
+    const appeared = await this.ordinaryFileAccess.readExact(remote.path);
+    this.baseline.set(remote.path, this.deletedAcknowledgement(remote, appeared));
     this.baseline.removePendingForPath(remote.path);
+    if (appeared) this.baseline.putPending({ id: operationID(), kind: "upsert", path: remote.path, createdAt: Date.now() });
+    return { kind: "resolved" };
   }
 
-  private async recordConflict(
-    path: string,
-    local: LocalMeta | null,
-    remote: SyncFileMeta
-  ): Promise<void> {
-    const conflict: ConflictEntry = {
+  private async applyCompactedDelete(action: Extract<OrdinarySyncAction, { readonly kind: "delete_local_absent" }>): Promise<OrdinarySyncActionOutcome> {
+    const remote = compactedDeleteMeta(action.path);
+    const deleted = await this.ordinaryFileAccess.deleteExact(action.path, action.expectedLocal);
+    if (deleted.kind === "stale") {
+      await this.recordConflict(action.path, deleted.actual, remote);
+      return { kind: "conflicted" };
+    }
+    this.baseline.remove(action.path);
+    this.baseline.removePendingForPath(action.path);
+    return { kind: "resolved" };
+  }
+
+  private async applyAdopt(action: Extract<OrdinarySyncAction, { readonly kind: "adopt" }>): Promise<OrdinarySyncActionOutcome> {
+    const local = await this.ordinaryFileAccess.readExact(action.path);
+    if (!matchesExpected(local, action.expectedLocal)) return this.conflictOutcome(action.path, local, action.remote);
+    if (action.remote.deleted) {
+      if (local || action.expectedLocal.kind !== "absent") return this.conflictOutcome(action.path, local, action.remote);
+      this.baseline.set(action.path, this.deletedAcknowledgement(action.remote, null));
+    } else {
+      if (!local || local.hash !== action.remote.hash) return this.conflictOutcome(action.path, local, action.remote);
+      this.baseline.set(action.path, await this.liveAcknowledgement({
+        path: action.path,
+        server: action.remote,
+        local,
+        bytes: local.bytes,
+        bytesHash: local.hash,
+      }));
+    }
+    this.baseline.removePendingForPath(action.path);
+    return { kind: "resolved" };
+  }
+
+  private async applyConflict(action: Extract<OrdinarySyncAction, { readonly kind: "conflict" }>): Promise<OrdinarySyncActionOutcome> {
+    return this.conflictOutcome(action.path, await this.ordinaryFileAccess.readExact(action.path), action.remote);
+  }
+
+  private resolveReconciliation(vaultID: string, action: Extract<OrdinarySyncAction, { readonly kind: "reconcile" }>): Promise<OrdinarySyncActionOutcome> {
+    return this.createResolver().resolve({ vaultId: vaultID, path: action.path, expectedHash: action.local.hash, remote: action.remote });
+  }
+
+  private createResolver(): OrdinarySyncConflictResolver {
+    return new OrdinarySyncConflictResolver({
+      baseline: this.baseline,
+      fileAccess: this.ordinaryFileAccess,
+      api: this.api,
+      recordConflict: (path, local, remote) => this.recordConflict(path, local, remote),
+      createOperationID: operationID,
+      now: () => Date.now(),
+    });
+  }
+
+  private async conflictOutcome(path: string, local: LocalReadResult | null, remote: SyncFileMeta): Promise<OrdinarySyncActionOutcome> {
+    await this.recordConflict(path, local, remote);
+    return { kind: "conflicted" };
+  }
+
+  private async liveAcknowledgement(input: LiveAcknowledgement): Promise<BaselineEntry> {
+    if (input.server.hash !== input.bytesHash) {
+      return {
+        serverRevision: input.server.revision,
+        serverHash: input.server.hash,
+        serverDeleted: false,
+        localHash: input.local?.hash ?? "",
+        localMTime: input.local?.mtime ?? 0,
+        localSize: input.local?.size ?? 0,
+      };
+    }
+    return baselineFromAcknowledgement({
+      kind: "live",
+      path: input.path,
+      bytes: input.bytes,
+      serverRevision: input.server.revision,
+      serverHash: input.server.hash,
+      localHash: input.local?.hash ?? "",
+      localMTime: input.local?.mtime ?? 0,
+      localSize: input.local?.size ?? 0,
+    });
+  }
+
+  private deletedAcknowledgement(remote: SyncFileMeta, local: LocalReadResult | null): BaselineEntry {
+    return baselineFromAcknowledgement({
+      kind: "deleted",
+      path: remote.path,
+      serverRevision: remote.revision,
+      serverHash: remote.hash,
+      localHash: local?.hash ?? "",
+      localMTime: local?.mtime ?? 0,
+      localSize: local?.size ?? 0,
+    });
+  }
+
+  private queueCurrentLocalChange(path: string, sent: LocalReadResult | null, current: LocalReadResult | null): void {
+    if (!current && sent) {
+      this.baseline.putPending({ id: operationID(), kind: "delete", path, createdAt: Date.now() });
+    } else if (current && (!sent || current.hash !== sent.hash)) {
+      this.baseline.putPending({ id: operationID(), kind: "upsert", path, createdAt: Date.now() });
+    }
+  }
+
+  private async recordConflict(path: string, local: LocalReadResult | null, remote: SyncFileMeta): Promise<void> {
+    const existed = this.baseline.getConflict(path) !== null;
+    this.baseline.putConflict({
       path,
       localHash: local?.hash ?? "",
       remoteRevision: remote.revision,
@@ -821,9 +686,7 @@ export class SyncEngine {
       remoteSize: remote.size,
       remoteType: remote.type,
       detectedAt: Date.now(),
-    };
-    const existed = this.baseline.getConflict(path) !== null;
-    this.baseline.putConflict(conflict);
+    });
     await this.baseline.save();
     if (!existed && !remote.deleted && remote.type === "markdown" && local) {
       this.plugin.openConflictModal(path);
@@ -836,57 +699,145 @@ export class SyncEngine {
     const vaultID = this.plugin.settings.vaultId;
     const conflict = this.baseline.getConflict(path);
     if (!vaultID || !conflict) throw new Error(this.plugin.t("sync.conflictNotFound"));
-    const file = this.vault.getAbstractFileByPath(path);
-
-    if (resolution === "accept_remote") {
-      if (conflict.remoteDeleted) {
-        await this.applyRemoteDelete(conflictToMeta(conflict));
-      } else {
-        await this.applyDownload(vaultID, conflictToMeta(conflict));
+    const expected = expectedFromHash(conflict.localHash);
+    let outcome: OrdinarySyncActionOutcome;
+    if (typeof resolution === "object" && (resolution as { kind: string }).kind === "ordered_merge") {
+      outcome = await this.orderedMergeConflict(vaultID, conflict, expected, (resolution as { kind: "ordered_merge"; content: string }).content);
+    } else {
+      switch (resolution as "accept_remote" | "force_local" | "keep_both") {
+        case "accept_remote":
+          outcome = conflict.remoteDeleted
+            ? await this.applyRemoteDelete(conflictToMeta(conflict), expected)
+            : await this.applyDownload(vaultID, conflictToMeta(conflict), expected);
+          break;
+        case "force_local":
+          outcome = await this.forceLocalConflict(vaultID, conflict, expected);
+          break;
+        case "keep_both":
+          outcome = await this.keepBothConflict(vaultID, conflict, expected);
+          break;
+        default:
+          return assertNeverResolution(resolution as never);
       }
-    } else if (resolution === "force_local") {
-      if (file instanceof TFile) {
-        const local = await this.localMeta(path);
-        if (!local) throw new Error(this.plugin.t("sync.localFileMissing", { path }));
-        const result = await this.api.uploadV2(vaultID, {
-          path,
-          baseRevision: conflict.remoteRevision,
-          hash: local.hash,
-          mtime: local.mtime,
-          operationID: operationID(),
-          content: await this.vault.readBinary(file),
-        });
-        this.baseline.set(path, baselineFromRemote(result, local));
-      } else {
-        const result = await this.api.deleteV2(vaultID, {
-          path,
+    }
+    if (outcome.kind !== "resolved") throw new Error(this.plugin.t("sync.conflictNotFound"));
+    this.baseline.removeConflict(path);
+    await this.baseline.save();
+  }
+
+  private async orderedMergeConflict(vaultID: string, conflict: ConflictEntry, expected: ExpectedLocalState, mergedContent: string): Promise<OrdinarySyncActionOutcome> {
+    const local = await this.ordinaryFileAccess.readExact(conflict.path);
+    if (!matchesExpected(local, expected)) return this.conflictOutcome(conflict.path, local, conflictToMeta(conflict));
+    const mergedBytes = new TextEncoder().encode(mergedContent);
+    this.baseline.removePendingForPath(conflict.path);
+    const op = { id: operationID(), kind: "upsert" as const, path: conflict.path, createdAt: Date.now() };
+    this.baseline.putPending(op);
+    await this.baseline.save();
+    const installed = await this.ordinaryFileAccess.replace(conflict.path, expected, mergedBytes);
+    if (installed.kind !== "replaced") {
+      this.baseline.removePending(op.id);
+      await this.baseline.save();
+      return this.conflictOutcome(conflict.path, installed.actual ?? null, conflictToMeta(conflict));
+    }
+    this.baseline.set(conflict.path, await this.liveAcknowledgement({
+      path: conflict.path,
+      server: conflictToMeta(conflict),
+      local: installed.snapshot,
+      bytes: mergedBytes,
+      bytesHash: installed.snapshot.hash,
+    }));
+    await this.baseline.save();
+    let acknowledged: import("./api.js").SyncFileMeta;
+    try {
+      acknowledged = await this.api.uploadV2(vaultID, {
+        path: conflict.path,
+        baseRevision: conflict.remoteRevision,
+        hash: installed.snapshot.hash,
+        mtime: installed.snapshot.mtime,
+        operationID: op.id,
+        content: mergedBytes.buffer as ArrayBuffer,
+      });
+    } catch (error) {
+      if (!isOrdinarySyncConflict409(error)) throw error;
+      return this.conflictOutcome(conflict.path, installed.snapshot, error.current);
+    }
+    const current = await this.ordinaryFileAccess.readExact(conflict.path);
+    this.baseline.set(conflict.path, await this.liveAcknowledgement({
+      path: conflict.path,
+      server: acknowledged,
+      local: current,
+      bytes: mergedBytes,
+      bytesHash: installed.snapshot.hash,
+    }));
+    this.baseline.removePending(op.id);
+    await this.baseline.save();
+    return { kind: "resolved" };
+  }
+
+  private async forceLocalConflict(vaultID: string, conflict: ConflictEntry, expected: ExpectedLocalState): Promise<OrdinarySyncActionOutcome> {
+    const local = await this.ordinaryFileAccess.readExact(conflict.path);
+    if (!matchesExpected(local, expected)) return this.conflictOutcome(conflict.path, local, conflictToMeta(conflict));
+    this.baseline.removePendingForPath(conflict.path);
+    try {
+      if (!local) {
+        const server = await this.api.deleteV2(vaultID, {
+          path: conflict.path,
           baseRevision: conflict.remoteRevision,
           operationID: operationID(),
           mtime: Date.now(),
         });
-        this.baseline.set(path, baselineFromRemote(result, null));
+        const current = await this.ordinaryFileAccess.readExact(conflict.path);
+        this.baseline.set(conflict.path, this.deletedAcknowledgement(server, current));
+        this.queueCurrentLocalChange(conflict.path, local, current);
+        return { kind: "resolved" };
       }
-    } else {
-      if (!(file instanceof TFile)) {
-        throw new Error(this.plugin.t("sync.localFileMissing", { path }));
-      }
-      const copyPath = conflictCopyPath(path);
-      await this.ensureParentFolders(copyPath);
-      const copy = await this.vault.createBinary(copyPath, await this.vault.readBinary(file));
-      if (conflict.remoteDeleted) {
-        await this.applyRemoteDelete(conflictToMeta(conflict));
-      } else {
-        await this.applyDownload(vaultID, conflictToMeta(conflict));
-      }
-      this.enqueueUpsert(copy.path);
+      const server = await this.api.uploadV2(vaultID, {
+        path: conflict.path,
+        baseRevision: conflict.remoteRevision,
+        hash: local.hash,
+        mtime: local.mtime,
+        operationID: operationID(),
+        content: toArrayBuffer(local.bytes),
+      });
+      const current = await this.ordinaryFileAccess.readExact(conflict.path);
+      this.baseline.set(conflict.path, await this.liveAcknowledgement({
+        path: conflict.path,
+        server,
+        local: current,
+        bytes: local.bytes,
+        bytesHash: local.hash,
+      }));
+      this.queueCurrentLocalChange(conflict.path, local, current);
+      return { kind: "resolved" };
+    } catch (error: unknown) {
+      if (!isOrdinarySyncConflict409(error)) throw error;
+      return this.conflictOutcome(conflict.path, local, error.current);
     }
-    this.baseline.removeConflict(path);
-    this.baseline.removePendingForPath(path);
+  }
+
+  private async keepBothConflict(vaultID: string, conflict: ConflictEntry, expected: ExpectedLocalState): Promise<OrdinarySyncActionOutcome> {
+    const local = await this.ordinaryFileAccess.readExact(conflict.path);
+    if (!local || !matchesExpected(local, expected)) return this.conflictOutcome(conflict.path, local, conflictToMeta(conflict));
+    this.baseline.removePendingForPath(conflict.path);
+    const copy = await this.ordinaryFileAccess.preserveSibling(conflict.path, expected, local.bytes);
+    if (copy.kind !== "preserved") {
+      return this.conflictOutcome(conflict.path, copy.kind === "stale" ? copy.actual ?? null : local, conflictToMeta(conflict));
+    }
+    this.baseline.putPending({ id: operationID(), kind: "upsert", path: copy.siblingPath, createdAt: Date.now() });
     await this.baseline.save();
+    const remote = conflictToMeta(conflict);
+    const outcome = remote.deleted
+      ? await this.applyRemoteDelete(remote, expected)
+      : await this.applyDownload(vaultID, remote, expected);
+    return outcome;
   }
 
   getConflict(path: string): ConflictEntry | null {
     return this.baseline.getConflict(path);
+  }
+
+  getBaseline(path: string): BaselineEntry | null {
+    return this.baseline.get(path);
   }
 
   dismissConflict(path: string): void {
@@ -894,47 +845,8 @@ export class SyncEngine {
     void this.baseline.save();
   }
 
-  private async localMeta(path: string, baseline?: BaselineEntry | null): Promise<LocalMeta | null> {
-    const file = this.vault.getAbstractFileByPath(path);
-    if (!(file instanceof TFile)) return null;
-    if (
-      baseline &&
-      baseline.localHash &&
-      baseline.localMTime === file.stat.mtime &&
-      baseline.localSize === file.stat.size
-    ) {
-      return {
-        path,
-        hash: baseline.localHash,
-        size: file.stat.size,
-        mtime: file.stat.mtime,
-      };
-    }
-    const content = await this.vault.readBinary(file);
-    return {
-      path,
-      hash: await sha256Hex(content),
-      size: file.stat.size,
-      mtime: file.stat.mtime,
-    };
-  }
-
-  private async ensureParentFolders(path: string): Promise<void> {
-    const parts = normalizePath(path).split("/");
-    parts.pop();
-    let current = "";
-    for (const part of parts) {
-      current = current ? `${current}/${part}` : part;
-      if (!this.vault.getAbstractFileByPath(current)) {
-        try {
-          await this.vault.createFolder(current);
-        } catch {
-        if (!this.vault.getAbstractFileByPath(current)) {
-          throw new Error(this.plugin.t("sync.mkdirFailed", { path: current }));
-        }
-        }
-      }
-    }
+  private async readLocalMeta(path: string): Promise<OrdinarySyncLocalMeta | null> {
+    return localMeta(path, await this.ordinaryFileAccess.readExact(path));
   }
 
   private suppress(path: string): void {
@@ -944,38 +856,40 @@ export class SyncEngine {
   }
 
   private createDebounce(): (() => void) & { cancel: () => void } {
-    return debounce(
-      () => void this.runOnce({ forceFull: false }),
-      Math.max(this.strategy.getMinDebounceSec(), this.plugin.settings.syncIntervalSec) * 1000
-    );
+    return debounce(() => void this.runOnce({ forceFull: false }), Math.max(this.strategy.getMinDebounceSec(), this.plugin.settings.syncIntervalSec) * 1000);
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function hasUnresolvedAction(results: readonly TaskResult<OrdinarySyncActionOutcome>[]): boolean {
+  for (const result of results) {
+    if (!result.ok || result.result === undefined) return true;
+    switch (result.result.kind) {
+      case "resolved":
+      case "conflicted":
+        break;
+      case "deferred_retry":
+        return true;
+      default:
+        return assertNeverOutcome(result.result);
+    }
+  }
+  return false;
 }
 
-function baselineFromRemote(remote: SyncFileMeta, local: LocalMeta | null): BaselineEntry {
-  return {
-    serverRevision: remote.revision,
-    serverHash: remote.hash,
-    serverDeleted: remote.deleted,
-    localHash: local?.hash ?? "",
-    localMTime: local?.mtime ?? 0,
-    localSize: local?.size ?? 0,
-  };
+function localMeta(path: string, local: LocalReadResult | null): OrdinarySyncLocalMeta | null {
+  return local ? { path, hash: local.hash, mtime: local.mtime, size: local.size } : null;
 }
 
-function remoteFromBaseline(path: string, baseline: BaselineEntry): SyncFileMeta {
-  return {
-    path,
-    type: classifyPath(path),
-    hash: baseline.serverHash,
-    size: baseline.localSize,
-    mtime: baseline.localMTime,
-    revision: baseline.serverRevision,
-    deleted: baseline.serverDeleted,
-  };
+function expectedFromSnapshot(local: LocalReadResult | null): ExpectedLocalState {
+  return local ? { kind: "hash", hash: local.hash } : { kind: "absent" };
+}
+
+function expectedFromHash(hash: string): ExpectedLocalState {
+  return hash ? { kind: "hash", hash } : { kind: "absent" };
+}
+
+function matchesExpected(local: LocalReadResult | null, expected: ExpectedLocalState): boolean {
+  return expected.kind === "absent" ? local === null : local !== null && local.hash === expected.hash;
 }
 
 function conflictToMeta(conflict: ConflictEntry): SyncFileMeta {
@@ -991,47 +905,43 @@ function conflictToMeta(conflict: ConflictEntry): SyncFileMeta {
 }
 
 function compactedDeleteMeta(path: string): SyncFileMeta {
-  return {
-    path,
-    type: classifyPath(path),
-    hash: "",
-    size: 0,
-    mtime: 0,
-    revision: 0,
-    deleted: true,
-  };
+  return { path, type: classifyPath(path), hash: "", size: 0, mtime: 0, revision: 0, deleted: true };
 }
 
 function classifyPath(path: string): "markdown" | "attachment" | "config" {
-  const lower = path.toLowerCase();
-  if (lower.endsWith(".md")) return "markdown";
-  if (lower.startsWith(".obsidian/")) return "config";
-  return "attachment";
+  if (path.toLowerCase().endsWith(".md")) return "markdown";
+  return path.toLowerCase().startsWith(".obsidian/") ? "config" : "attachment";
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes.slice());
+  return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
 function operationID(): string {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function conflictCopyPath(path: string): string {
-  const slash = path.lastIndexOf("/");
-  const directory = slash >= 0 ? path.slice(0, slash + 1) : "";
-  const filename = slash >= 0 ? path.slice(slash + 1) : path;
-  const dot = filename.lastIndexOf(".");
-  const base = dot > 0 ? filename.slice(0, dot) : filename;
-  const extension = dot > 0 ? filename.slice(dot) : "";
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  return `${directory}${base}_conflict_${timestamp}${extension}`;
-}
-
-async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", buffer);
-  return Array.from(new Uint8Array(digest))
-    .map((value) => value.toString(16).padStart(2, "0"))
-    .join("");
+  return typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+function assertNeverOutcome(value: never): never {
+  throw new Error(`Unhandled ordinary sync outcome: ${String(value)}`);
+}
+
+function assertNeverResolution(value: never): never {
+  throw new Error(`Unhandled conflict resolution: ${String(value)}`);
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }

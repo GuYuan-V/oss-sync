@@ -80,6 +80,7 @@ test("conflicts on first sync when an empty local file meets non-empty server co
     const baseline = {
       get: () => null,
       getConflict: () => null,
+      paths: () => [],
     };
     const remote = new Map([
       [
@@ -100,7 +101,7 @@ test("conflicts on first sync when an empty local file meets non-empty server co
     const actions = await engine.planActions(false, remote, []);
 
     assert.equal(actions.length, 1);
-    assert.equal(actions[0].kind, "conflict");
+    assert.equal(actions[0].kind, "reconcile");
     assert.equal(actions[0].local.size, 0);
     assert.equal(actions[0].local.hash, EMPTY_SHA256);
   } finally {
@@ -115,6 +116,7 @@ test("adopts a remote tombstone without downloading a deleted file", async () =>
     const baseline = {
       get: () => null,
       getConflict: () => null,
+      paths: () => [],
     };
     const vault = { getAbstractFileByPath: () => null };
     const remote = new Map([

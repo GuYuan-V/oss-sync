@@ -1,3 +1,4 @@
+﻿// 历史筛选
 package webui
 
 import (
@@ -163,3 +164,4 @@ func historyActionLabel(action string) string {
 		return action
 	}
 }
+

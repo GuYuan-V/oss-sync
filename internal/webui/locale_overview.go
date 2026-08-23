@@ -1,3 +1,4 @@
+﻿// 概览文案
 package webui
 
 func init() {
@@ -53,3 +54,4 @@ func init() {
 		"device.save_authorization":    {"保存授权", "Save authorization"},
 	})
 }
+

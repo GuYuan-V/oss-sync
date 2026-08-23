@@ -1,3 +1,4 @@
+﻿// 同步接口 v2
 package syncapi
 
 import (
@@ -109,8 +110,12 @@ func (h *Handler) v2ListChanges(c *gin.Context, manifest bool) {
 	if !ok {
 		return
 	}
-	clientID := h.requestClientID(c, c.Query("client_id"))
-	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, clientID) {
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"))
+	if !ok {
+		return
+	}
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vault.ID); err != nil {
+		h.writeDeviceAuthError(c, err)
 		return
 	}
 	after, err := parseInt64Default(c.Query("after"), 0)
@@ -152,7 +157,7 @@ func (h *Handler) v2ListChanges(c *gin.Context, manifest bool) {
 	vaultLock := h.vaultLock(vault.ID)
 	vaultLock.Lock()
 	defer vaultLock.Unlock()
-	if !h.recordDeviceActivity(c, u.ID, vault.ID, clientID) {
+	if !h.recordDeviceActivityWithDID(c, u.ID, vault.ID, did) {
 		return
 	}
 	if err := h.DB.Where("vault_id = ?", vault.ID).First(&state).Error; err != nil {
@@ -215,14 +220,20 @@ func (h *Handler) V2Ack(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	req.ClientID = h.requestClientID(c, req.ClientID)
-	if req.ClientID == "" || req.Cursor < 0 {
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"), req.ClientID)
+	if !ok {
+		return
+	}
+	if req.Cursor < 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sync acknowledgement"})
 		return
 	}
-	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, req.ClientID) {
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vault.ID); err != nil {
+		h.writeDeviceAuthError(c, err)
 		return
 	}
+	// Use claim for operation scope
+	req.ClientID = string(did)
 
 	vaultLock := h.vaultLock(vault.ID)
 	vaultLock.Lock()
@@ -240,7 +251,7 @@ func (h *Handler) V2Ack(c *gin.Context) {
 		h.DB,
 		u.ID,
 		vault.ID,
-		req.ClientID,
+		string(did),
 		deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader)),
 		&req.Cursor,
 		time.Now(),
@@ -279,15 +290,21 @@ func (h *Handler) V2Upload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "mtime must be integer milliseconds"})
 		return
 	}
-	clientID := h.requestClientID(c, c.Query("client_id"))
+	suppliedClientID := c.Query("client_id")
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), suppliedClientID)
+	if !ok {
+		return
+	}
 	operationID := cleanIdentifier(c.Query("operation_id"))
-	if clientID == "" || operationID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "client_id and operation_id are required"})
+	if operationID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "operation_id is required"})
 		return
 	}
-	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, clientID) {
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vault.ID); err != nil {
+		h.writeDeviceAuthError(c, err)
 		return
 	}
+	clientID := string(did)
 	effective, err := settingspolicy.EffectiveForVault(h.DB, vault.ID, h.maxUploadBytes())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -338,7 +355,7 @@ func (h *Handler) V2Upload(c *gin.Context) {
 	vaultLock := h.vaultLock(vault.ID)
 	vaultLock.Lock()
 	defer vaultLock.Unlock()
-	if !h.recordDeviceActivity(c, u.ID, vault.ID, clientID) {
+	if !h.recordDeviceActivityWithDID(c, u.ID, vault.ID, did) {
 		return
 	}
 	pathLock := h.pathLock(vault.ID + ":" + path)
@@ -440,7 +457,7 @@ func (h *Handler) V2Upload(c *gin.Context) {
 		if exists && !current.IsDeleted {
 			action = history.ActionModify
 		}
-		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActor(c, u), action, path, "", backupPath, revision); err != nil {
+		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActorWithDID(c, u, did), action, path, "", backupPath, revision); err != nil {
 			return err
 		}
 		return nil
@@ -484,8 +501,15 @@ func (h *Handler) V2Download(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "path contains illegal segments"})
 		return
 	}
-	clientID := h.requestClientID(c, c.Query("client_id"))
-	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, clientID) {
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"))
+	if !ok {
+		return
+	}
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vault.ID); err != nil {
+		h.writeDeviceAuthError(c, err)
+		return
+	}
+	if !h.recordDeviceActivityWithDID(c, u.ID, vault.ID, did) {
 		return
 	}
 	expectedRevision, err := parseInt64Default(c.Query("revision"), 0)
@@ -534,27 +558,48 @@ func (h *Handler) V2Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req v2DeleteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var rawDelete map[string]any
+	if err := c.ShouldBindJSON(&rawDelete); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	var req v2DeleteRequest
+	if v, ok := rawDelete["path"].(string); ok {
+		req.Path = v
+	}
+	if v, ok := rawDelete["client_id"].(string); ok {
+		req.ClientID = v
+	}
+	if v, ok := rawDelete["operation_id"].(string); ok {
+		req.OperationID = v
+	}
+	if v, ok := rawDelete["base_revision"].(float64); ok {
+		req.BaseRevision = int64(v)
+	}
+	if v, ok := rawDelete["client_mtime"].(float64); ok {
+		req.ClientMTime = int64(v)
+	}
 	var valid bool
 	req.Path, valid = normalizeRelativePath(req.Path)
-	req.ClientID = h.requestClientID(c, req.ClientID)
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"), req.ClientID)
+	if !ok {
+		return
+	}
 	req.OperationID = cleanIdentifier(req.OperationID)
-	if !valid || req.ClientID == "" || req.OperationID == "" || req.BaseRevision < 0 {
+	if !valid || req.OperationID == "" || req.BaseRevision < 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid delete request"})
 		return
 	}
-	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, req.ClientID) {
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vault.ID); err != nil {
+		h.writeDeviceAuthError(c, err)
 		return
 	}
+	req.ClientID = string(did)
 
 	vaultLock := h.vaultLock(vault.ID)
 	vaultLock.Lock()
 	defer vaultLock.Unlock()
-	if !h.recordDeviceActivity(c, u.ID, vault.ID, req.ClientID) {
+	if !h.recordDeviceActivityWithDID(c, u.ID, vault.ID, did) {
 		return
 	}
 	pathLock := h.pathLock(vault.ID + ":" + req.Path)
@@ -628,7 +673,7 @@ func (h *Handler) V2Delete(c *gin.Context) {
 			UpdateColumn("storage_used", gorm.Expr("CASE WHEN storage_used >= ? THEN storage_used - ? ELSE 0 END", current.Size, current.Size)).Error; err != nil {
 			return err
 		}
-		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActor(c, u), history.ActionDelete, req.Path, "", recycleAbs, revision); err != nil {
+		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActorWithDID(c, u, did), history.ActionDelete, req.Path, "", recycleAbs, revision); err != nil {
 			return err
 		}
 		result = current
@@ -672,30 +717,57 @@ func (h *Handler) V2Rename(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req v2RenameRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var rawRename map[string]any
+	if err := c.ShouldBindJSON(&rawRename); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	var req v2RenameRequest
+	if v, ok := rawRename["old_path"].(string); ok {
+		req.OldPath = v
+	}
+	if v, ok := rawRename["new_path"].(string); ok {
+		req.NewPath = v
+	}
+	if v, ok := rawRename["client_id"].(string); ok {
+		req.ClientID = v
+	}
+	if v, ok := rawRename["operation_id"].(string); ok {
+		req.OperationID = v
+	}
+	if v, ok := rawRename["base_revision"].(float64); ok {
+		req.BaseRevision = int64(v)
+	}
+	if v, ok := rawRename["target_revision"].(float64); ok {
+		req.TargetRevision = int64(v)
+	}
+	if v, ok := rawRename["client_mtime"].(float64); ok {
+		req.ClientMTime = int64(v)
 	}
 	var oldValid, newValid bool
 	req.OldPath, oldValid = normalizeRelativePath(req.OldPath)
 	req.NewPath, newValid = normalizeRelativePath(req.NewPath)
-	req.ClientID = h.requestClientID(c, req.ClientID)
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"), req.ClientID)
+	if !ok {
+		return
+	}
 	req.OperationID = cleanIdentifier(req.OperationID)
 	if !oldValid || !newValid ||
-		req.OldPath == req.NewPath || req.ClientID == "" || req.OperationID == "" ||
+		req.OldPath == req.NewPath || req.OperationID == "" ||
 		req.BaseRevision < 0 || req.TargetRevision < 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid rename request"})
 		return
 	}
-	if !h.requireDeviceVaultAccess(c, u.ID, vault.ID, req.ClientID) {
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vault.ID); err != nil {
+		h.writeDeviceAuthError(c, err)
 		return
 	}
+	req.ClientID = string(did)
 
 	vaultLock := h.vaultLock(vault.ID)
 	vaultLock.Lock()
 	defer vaultLock.Unlock()
-	if !h.recordDeviceActivity(c, u.ID, vault.ID, req.ClientID) {
+	if !h.recordDeviceActivityWithDID(c, u.ID, vault.ID, did) {
 		return
 	}
 	unlock := h.lockTwoPaths(vault.ID+":"+req.OldPath, vault.ID+":"+req.NewPath)
@@ -751,7 +823,9 @@ func (h *Handler) V2Rename(c *gin.Context) {
 			conflictPath = req.NewPath
 			return errRevisionConflict
 		}
-
+		// 注意：os.Rename 在数据库事务内执行。若进程在 rename 完成、commit 前崩溃，
+		// 文件系统与数据库将不一致。下方事务回滚逻辑仅覆盖事务返回 error 的情况。
+		// 崩溃一致性由 reconcile 任务保证（磁盘与数据库校验）。
 		oldDisk = h.fileDiskPath(oldFile)
 		newKey := filestore.VaultStorageKey(vault.ID, req.NewPath)
 		newDisk = filepath.Join(h.Cfg.Storage.DataDir, filepath.FromSlash(newKey))
@@ -805,7 +879,7 @@ func (h *Handler) V2Rename(c *gin.Context) {
 		oldResult = oldFile
 		newResult = target
 		// 记录重命名历史，快照旧路径正文。
-		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActor(c, u), history.ActionRename, req.NewPath, req.OldPath, newDisk, newRevision); err != nil {
+		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActorWithDID(c, u, did), history.ActionRename, req.NewPath, req.OldPath, newDisk, newRevision); err != nil {
 			return err
 		}
 		return nil
@@ -1081,3 +1155,4 @@ func isHex(value string) bool {
 	_, err := hex.DecodeString(value)
 	return err == nil
 }
+

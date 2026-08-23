@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadSyncEngine } from "./helpers/sync-engine-loader.mjs";
 
+async function shaHex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes.slice());
+  return Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 test("successful rename replaces the stale manifest view for the same run", async () => {
   const { SyncEngine, cleanup } = await loadSyncEngine();
   try {
@@ -501,18 +508,21 @@ test("source-side rename conflict preserves remote source and queues local targe
 test("recovery snapshot deletes unchanged files whose tombstones were compacted", async () => {
   const { SyncEngine, cleanup } = await loadSyncEngine();
   try {
+    const bytes = new TextEncoder().encode("same");
+    const hash = await shaHex(bytes);
     const file = {
       __tfile: true,
       path: "Notes/Deleted.md",
-      stat: { mtime: 10, size: 7 },
+      content: bytes.buffer,
+      stat: { mtime: 10, size: bytes.byteLength },
     };
     const baselineEntry = {
       serverRevision: 4,
-      serverHash: "same-hash",
+      serverHash: hash,
       serverDeleted: false,
-      localHash: "same-hash",
+      localHash: hash,
       localMTime: 10,
-      localSize: 7,
+      localSize: bytes.byteLength,
     };
     const baseline = {
       get(path) {
@@ -535,6 +545,9 @@ test("recovery snapshot deletes unchanged files whose tombstones were compacted"
       getFiles() {
         return [file];
       },
+      async readBinary(target) {
+        return target.content;
+      },
     };
     const plugin = {
       settings: {
@@ -545,7 +558,11 @@ test("recovery snapshot deletes unchanged files whose tombstones were compacted"
     };
     const engine = new SyncEngine({ vault }, {}, baseline, plugin);
     const actions = await engine.planActions(true, new Map(), [], true);
-    assert.deepEqual(actions, [{ kind: "delete_local_absent", path: file.path }]);
+    assert.deepEqual(actions, [{
+      kind: "delete_local_absent",
+      path: file.path,
+      expectedLocal: { kind: "hash", hash },
+    }]);
   } finally {
     await cleanup();
   }
@@ -554,18 +571,21 @@ test("recovery snapshot deletes unchanged files whose tombstones were compacted"
 test("recovery snapshot preserves locally changed compacted files as conflicts", async () => {
   const { SyncEngine, cleanup } = await loadSyncEngine();
   try {
+    const localBytes = new TextEncoder().encode("local");
+    const serverBytes = new TextEncoder().encode("server");
     const file = {
       __tfile: true,
       path: "Notes/Changed.md",
-      stat: { mtime: 20, size: 7 },
+      content: localBytes.buffer,
+      stat: { mtime: 20, size: localBytes.byteLength },
     };
     const baselineEntry = {
       serverRevision: 4,
-      serverHash: "server-hash",
+      serverHash: await shaHex(serverBytes),
       serverDeleted: false,
-      localHash: "local-hash",
+      localHash: await shaHex(localBytes),
       localMTime: 20,
-      localSize: 7,
+      localSize: localBytes.byteLength,
     };
     const baseline = {
       get(path) {
@@ -584,6 +604,9 @@ test("recovery snapshot preserves locally changed compacted files as conflicts",
       },
       getFiles() {
         return [file];
+      },
+      async readBinary(target) {
+        return target.content;
       },
     };
     const plugin = {

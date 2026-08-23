@@ -1,3 +1,4 @@
+﻿// 服务路由
 package server
 
 import (
@@ -17,7 +18,9 @@ import (
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/shares"
 	"github.com/oss/oss-server/internal/syncapi"
+	"github.com/oss/oss-server/internal/update"
 	"github.com/oss/oss-server/internal/vaults"
+	"github.com/oss/oss-server/internal/version"
 	"github.com/oss/oss-server/internal/webui"
 )
 
@@ -25,6 +28,10 @@ import (
 type Server struct {
 	Cfg *config.Config
 	DB  *gorm.DB
+	// Updater 非空时挂载 /api/admin/version 与 /api/admin/update/* 路由。
+	Updater *update.Updater
+	// UpdateService 为 helper 交接提供异步关闭回调，优于旧 supervisor 模型。
+	UpdateService *update.Service
 }
 
 // New 创建 Server 实例，确保磁盘根目录存在。
@@ -61,6 +68,9 @@ func (s *Server) Router() *gin.Engine {
 	if err != nil {
 		panic("webui.New: " + err.Error())
 	}
+	if s.UpdateService != nil && s.Updater != nil {
+		webH.SetUpdateService(s.UpdateService, s.Updater)
+	}
 	webH.Register(r)
 
 	vaultsH := vaults.New(s.DB, s.Cfg)
@@ -81,6 +91,16 @@ func (s *Server) Router() *gin.Engine {
 	sharesH := shares.New(s.DB, s.Cfg)
 	sharesH.Register(r)
 
+	if s.Updater != nil {
+		var updateH *update.Handler
+		if s.UpdateService != nil {
+			updateH = update.NewHandlerWithService(s.DB, s.Cfg, s.Updater, s.UpdateService.Manager(), s.UpdateService)
+		} else {
+			updateH = update.NewHandler(s.DB, s.Cfg, s.Updater)
+		}
+		updateH.Register(r)
+	}
+
 	return r
 }
 
@@ -88,33 +108,35 @@ func (s *Server) healthz(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
 		"env":     config.Env(),
-		"version": "0.1.0",
+		"version": version.Version,
 	})
 }
 
 func (s *Server) readyz(c *gin.Context) {
 	sqlDB, err := s.DB.DB()
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"ready": false, "error": err.Error()})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"ready": false, "version": version.Version, "error": err.Error()})
 		return
 	}
 	if err := sqlDB.Ping(); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"ready": false, "error": err.Error()})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"ready": false, "version": version.Version, "error": err.Error()})
 		return
 	}
 	var openStorageIssues int64
 	if err := s.DB.Model(&models.StorageIssue{}).
 		Where("resolved_at IS NULL AND kind IN ?", []string{"missing", "hash_mismatch"}).
 		Count(&openStorageIssues).Error; err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"ready": false, "error": err.Error()})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"ready": false, "version": version.Version, "error": err.Error()})
 		return
 	}
 	if openStorageIssues > 0 {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"ready":               false,
+			"version":             version.Version,
 			"open_storage_issues": openStorageIssues,
 		})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ready": true, "open_storage_issues": 0})
+	c.JSON(http.StatusOK, gin.H{"ready": true, "version": version.Version, "open_storage_issues": 0})
 }
+

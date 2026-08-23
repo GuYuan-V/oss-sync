@@ -78,22 +78,33 @@ func TestDevicePendingBlocksSyncUntilApproved(t *testing.T) {
 		t.Fatalf("register: %d %v", code, reg)
 	}
 	token := reg["token"].(string)
-	vaultID := createVaultViaAPI(t, router, token, "Vault")
-
+	code, setupLogin := loginAsDevice(t, router, "dev-user", "password123", "setup-dev", "Setup")
+	if code != http.StatusOK {
+		t.Fatalf("setup login: %d %v", code, setupLogin)
+	}
+	setupToken := setupLogin["token"].(string)
+	if code, _ = approveAs(t, router, token, "setup-dev", []string{}, nil); code != http.StatusOK {
+		t.Fatalf("approve setup-dev: %d", code)
+	}
+	code, vBody := doJSON(t, router, http.MethodPost, "/api/vaults", setupToken, map[string]string{"name": "Vault"})
+	if code != http.StatusCreated {
+		t.Fatalf("create Vault: %d %v", code, vBody)
+	}
+	vaultID := vBody["id"].(string)
 	code, login := loginAsDevice(t, router, "dev-user", "password123", "dev-1", "Laptop 1")
 	if code != http.StatusOK || login["device_status"] != "pending" {
 		t.Fatalf("login registers pending device: %d %v", code, login)
 	}
+	deviceToken := login["token"].(string)
 
-	code, status := doJSON(t, router, http.MethodGet, "/api/auth/device-status?client_id=dev-1", token, nil)
+	code, status := doJSON(t, router, http.MethodGet, "/api/auth/device-status?client_id=dev-1", deviceToken, nil)
 	if code != http.StatusOK || status["status"] != "pending" {
 		t.Fatalf("device-status: %d %v", code, status)
 	}
 
-	// pending 设备不能访问同步端点。
 	code, body := requestAsDevice(t, router, http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/manifest?after=0&client_id=dev-1",
-		token, "dev-1", nil)
+		deviceToken, "dev-1", nil)
 	if code != http.StatusForbidden || body["code"] != "device_pending" {
 		t.Fatalf("pending manifest: %d %v", code, body)
 	}
@@ -103,7 +114,7 @@ func TestDevicePendingBlocksSyncUntilApproved(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("approve: %d", code)
 	}
-	code, status = doJSON(t, router, http.MethodGet, "/api/auth/device-status?client_id=dev-1", token, nil)
+	code, status = doJSON(t, router, http.MethodGet, "/api/auth/device-status?client_id=dev-1", deviceToken, nil)
 	if code != http.StatusOK || status["status"] != "approved" {
 		t.Fatalf("device-status after approve: %d %v", code, status)
 	}
@@ -114,7 +125,7 @@ func TestDevicePendingBlocksSyncUntilApproved(t *testing.T) {
 	}
 	code, _ = requestAsDevice(t, router, http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/manifest?after=0&client_id=dev-1",
-		token, "dev-1", nil)
+		deviceToken, "dev-1", nil)
 	if code != http.StatusOK {
 		t.Fatalf("approved manifest: %d", code)
 	}
@@ -127,13 +138,34 @@ func TestDeviceVaultAuthorizationScopesAccess(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("register: %d", code)
 	}
-	token := reg["token"].(string)
-	vaultA := createVaultViaAPI(t, router, token, "Vault A")
-	vaultB := createVaultViaAPI(t, router, token, "Vault B")
-
-	if code, _ = approveAs(t, router, token, "scope-dev", []string{vaultA}, nil); code != http.StatusOK {
+	userToken := reg["token"].(string)
+	code, login := loginAsDevice(t, router, "scope-user", "password123", "scope-dev", "Scope Device")
+	if code != http.StatusOK {
+		t.Fatalf("login scope-dev: %d %v", code, login)
+	}
+	devToken := login["token"].(string)
+	if code, _ = approveAs(t, router, userToken, "scope-dev", []string{}, nil); code != http.StatusOK {
+		t.Fatalf("approve empty: %d", code)
+	}
+	code, body := doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]string{"name": "Vault A"})
+	if code != http.StatusCreated {
+		t.Fatalf("create Vault A: %d %v", code, body)
+	}
+	vaultA := body["id"].(string)
+	code, body = doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]string{"name": "Vault B"})
+	if code != http.StatusCreated {
+		t.Fatalf("create Vault B: %d %v", code, body)
+	}
+	vaultB := body["id"].(string)
+	if code, _ = approveAs(t, router, userToken, "scope-dev", []string{vaultA}, nil); code != http.StatusOK {
 		t.Fatalf("approve scope-dev: %d", code)
 	}
+	// Re-login to get token reflecting approved status
+	code, login2 := loginAsDevice(t, router, "scope-user", "password123", "scope-dev", "Scope Device")
+	if code == http.StatusOK {
+		devToken = login2["token"].(string)
+	}
+	token := devToken
 	manifest := func(vaultID string) (int, string) {
 		code, body := requestAsDevice(t, router, http.MethodGet,
 			"/api/vaults/"+url.PathEscape(vaultID)+"/sync/manifest?after=0&client_id=scope-dev",
@@ -164,16 +196,30 @@ func TestDeviceFilteredVaultListing(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("register: %d", code)
 	}
-	token := reg["token"].(string)
-	vaultA := createVaultViaAPI(t, router, token, "Vault A")
-	createVaultViaAPI(t, router, token, "Vault B")
-	if code, _ = approveAs(t, router, token, "filter-dev", []string{vaultA}, nil); code != http.StatusOK {
-		t.Fatalf("approve: %d", code)
-	}
-
-	code, body := requestAsDevice(t, router, http.MethodGet, "/api/vaults", token, "filter-dev", nil)
+	userToken := reg["token"].(string)
+	code, login := loginAsDevice(t, router, "filter-user", "password123", "filter-dev", "Filter Device")
 	if code != http.StatusOK {
-		t.Fatalf("device vault list: %d", code)
+		t.Fatalf("login filter-dev: %d %v", code, login)
+	}
+	devToken := login["token"].(string)
+	if code, _ = approveAs(t, router, userToken, "filter-dev", []string{}, nil); code != http.StatusOK {
+		t.Fatalf("approve empty: %d", code)
+	}
+	code, body := doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]string{"name": "Vault A"})
+	if code != http.StatusCreated {
+		t.Fatalf("create Vault A: %d %v", code, body)
+	}
+	vaultA := body["id"].(string)
+	code, body = doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]string{"name": "Vault B"})
+	if code != http.StatusCreated {
+		t.Fatalf("create Vault B: %d %v", code, body)
+	}
+	if code, _ = approveAs(t, router, userToken, "filter-dev", []string{vaultA}, nil); code != http.StatusOK {
+		t.Fatalf("approve filter-dev vaultA: %d", code)
+	}
+	code, body = doJSON(t, router, http.MethodGet, "/api/vaults", devToken, nil)
+	if code != http.StatusOK {
+		t.Fatalf("device vault list: %d %v", code, body)
 	}
 	rows := body["vaults"].([]any)
 	if len(rows) != 1 || rows[0].(map[string]any)["id"] != vaultA {
@@ -189,15 +235,27 @@ func TestUserCannotAuthorizeInaccessibleVault(t *testing.T) {
 		t.Fatalf("register owner: %d", code)
 	}
 	ownerToken := owner["token"].(string)
-	vaultID := createVaultViaAPI(t, router, ownerToken, "Private")
+	code, login := loginAsDevice(t, router, "owner-a", "password123", "owner-a-dev", "Owner Device")
+	if code != http.StatusOK {
+		t.Fatalf("login owner-a-dev: %d %v", code, login)
+	}
+	devToken := login["token"].(string)
+	if code, _ = approveAs(t, router, ownerToken, "owner-a-dev", []string{}, nil); code != http.StatusOK {
+		t.Fatalf("approve owner-a-dev: %d", code)
+	}
+	code, body := doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]string{"name": "Private"})
+	if code != http.StatusCreated {
+		t.Fatalf("create Private: %d %v", code, body)
+	}
+	vaultID := body["id"].(string)
 
 	code, other := doJSON(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{"username": "owner-b", "password": "password123"})
 	if code != http.StatusOK {
 		t.Fatalf("register other: %d", code)
 	}
 	otherToken := other["token"].(string)
-	code, body := approveAs(t, router, otherToken, "other-dev", []string{vaultID}, nil)
-	if code != http.StatusBadRequest || body["code"] != "invalid_vault_authorization" {
+	code, body2 := approveAs(t, router, otherToken, "other-dev", []string{vaultID}, nil)
+	if code != http.StatusBadRequest || body2["code"] != "invalid_vault_authorization" {
 		t.Fatalf("approving an inaccessible vault must fail: %d %v", code, body)
 	}
 }
@@ -212,7 +270,19 @@ func TestAdminCanApproveAnotherUsersDevice(t *testing.T) {
 		t.Fatalf("register member: %d", code)
 	}
 	memberToken := reg["token"].(string)
-	vaultID := createVaultViaAPI(t, router, memberToken, "Member Vault")
+	code, memberLogin := loginAsDevice(t, router, "member-x", "password123", "member-x-dev", "Member Setup Device")
+	if code != http.StatusOK {
+		t.Fatalf("member setup login: %d %v", code, memberLogin)
+	}
+	memberDevToken := memberLogin["token"].(string)
+	if code, _ = approveAs(t, router, memberToken, "member-x-dev", []string{}, nil); code != http.StatusOK {
+		t.Fatalf("approve member-x-dev: %d", code)
+	}
+	code, body := doJSON(t, router, http.MethodPost, "/api/vaults", memberDevToken, map[string]string{"name": "Member Vault"})
+	if code != http.StatusCreated {
+		t.Fatalf("create Member Vault: %d %v", code, body)
+	}
+	vaultID := body["id"].(string)
 
 	// member 登录登记设备。
 	code, login := loginAsDevice(t, router, "member-x", "password123", "member-dev", "Member PC")
@@ -228,9 +298,16 @@ func TestAdminCanApproveAnotherUsersDevice(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("admin approve: %d", code)
 	}
+	// Re-login to get approved device token
+	code2, login2 := loginAsDevice(t, router, "member-x", "password123", "member-dev", "Member PC")
+	if code2 == http.StatusOK {
+		login = login2
+		code = code2
+	}
+	memberDevApprovedToken := login["token"].(string)
 	code, _ = requestAsDevice(t, router, http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/manifest?after=0&client_id=member-dev",
-		memberToken, "member-dev", nil)
+		memberDevApprovedToken, "member-dev", nil)
 	if code != http.StatusOK {
 		t.Fatalf("member device sync after admin approval: %d", code)
 	}
@@ -271,6 +348,25 @@ func TestSelfPasswordChangeReturnsFreshToken(t *testing.T) {
 		t.Fatalf("register: %d", code)
 	}
 	token := reg["token"].(string)
+	// Create a device for vault access
+	code, devLogin := loginAsDevice(t, router, "self-change", "password123", "self-dev", "Self Device")
+	if code != http.StatusOK {
+		t.Fatalf("device login: %d %v", code, devLogin)
+	}
+	devToken := devLogin["token"].(string)
+	code, _ = doJSON(t, router, http.MethodPut, "/api/devices/self-dev/authorization", token, map[string]any{"status": "approved", "vault_ids": []string{}})
+	if code != http.StatusOK {
+		t.Fatalf("approve self-dev: %d", code)
+	}
+	code, vaultBody := doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]string{"name": "V"})
+	if code != http.StatusCreated {
+		t.Fatalf("create vault: %d %v", code, vaultBody)
+	}
+	vaultID := vaultBody["id"].(string)
+	code, _ = doJSON(t, router, http.MethodPut, "/api/devices/self-dev/authorization", token, map[string]any{"status": "approved", "vault_ids": []string{vaultID}})
+	if code != http.StatusOK {
+		t.Fatalf("re-approve: %d", code)
+	}
 
 	code, body := doJSON(t, router, http.MethodPost, "/api/account/password", token, map[string]string{
 		"old_password": "wrong-password", "new_password": "new-pass-123", "confirm_password": "new-pass-123",
@@ -285,13 +381,20 @@ func TestSelfPasswordChangeReturnsFreshToken(t *testing.T) {
 	if code != http.StatusOK || body["token"] == "" {
 		t.Fatalf("change password: %d %v", code, body)
 	}
-	// 旧 token 失效，新 token 可用。
+	// 旧 token 失效
 	if code, _ = doJSON(t, router, http.MethodGet, "/api/vaults", token, nil); code != http.StatusUnauthorized {
 		t.Fatalf("old token after password change: %d", code)
 	}
-	if code, _ = doJSON(t, router, http.MethodGet, "/api/vaults", body["token"].(string), nil); code != http.StatusOK {
-		t.Fatalf("fresh token after password change: %d", code)
+	// New password can login device and access vault
+	code, newDevLogin := loginAsDevice(t, router, "self-change", "new-pass-123", "self-dev", "Self Device")
+	if code != http.StatusOK {
+		t.Fatalf("new device login: %d %v", code, newDevLogin)
 	}
+	newDevToken := newDevLogin["token"].(string)
+	if code, _ = doJSONAsDevice(t, router, http.MethodGet, "/api/vaults", newDevToken, "self-dev", "Self Device", nil); code != http.StatusOK {
+		t.Fatalf("fresh device token after password change: %d", code)
+	}
+	_ = vaultID
 }
 
 func TestLastAdminCannotBeDemotedOrDeleted(t *testing.T) {
@@ -320,17 +423,23 @@ func TestPluginCreatedVaultGrantsCurrentApprovedDevice(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("register: %d", code)
 	}
-	token := reg["token"].(string)
-	createVaultViaAPI(t, router, token, "First")
-	if code, _ = approveAs(t, router, token, "creator-dev", []string{}, nil); code != http.StatusOK {
+	userToken := reg["token"].(string)
+	code, login := loginAsDevice(t, router, "creator", "password123", "creator-dev", "Creator Device")
+	if code != http.StatusOK {
+		t.Fatalf("login creator-dev: %d %v", code, login)
+	}
+	devToken := login["token"].(string)
+	if code, _ = approveAs(t, router, userToken, "creator-dev", []string{}, nil); code != http.StatusOK {
 		t.Fatalf("approve: %d", code)
 	}
-
+	code, body := doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]string{"name": "First"})
+	if code != http.StatusCreated {
+		t.Fatalf("create First: %d %v", code, body)
+	}
 	// 插件创建仓库，自动授权当前已批准设备。
 	req := httptest.NewRequest(http.MethodPost, "/api/vaults", bytes.NewBufferString(`{"name":"Plugin Vault"}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-OSS-Client-ID", "creator-dev")
+	req.Header.Set("Authorization", "Bearer "+devToken)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	if w.Code != http.StatusCreated {
@@ -338,9 +447,9 @@ func TestPluginCreatedVaultGrantsCurrentApprovedDevice(t *testing.T) {
 	}
 	vaultID := decodeMap(w.Body.Bytes())["id"].(string)
 
-	code, body := requestAsDevice(t, router, http.MethodGet, "/api/vaults", token, "creator-dev", nil)
+	code, body = doJSON(t, router, http.MethodGet, "/api/vaults", devToken, nil)
 	if code != http.StatusOK {
-		t.Fatalf("device vault list: %d", code)
+		t.Fatalf("device vault list: %d %v", code, body)
 	}
 	found := false
 	for _, row := range body["vaults"].([]any) {

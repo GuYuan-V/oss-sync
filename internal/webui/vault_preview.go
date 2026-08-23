@@ -1,3 +1,4 @@
+﻿// 仓库预览
 package webui
 
 import (
@@ -124,3 +125,4 @@ func (h *Handler) previewMarkdownShareID(vault models.Vault, filePath string) (s
 	}
 	return shareID, nil
 }
+
