@@ -98,23 +98,32 @@ func TestVaultCreationRequiresExplicitRequest(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("register: status=%d body=%v", code, registered)
 	}
-	token := registered["token"].(string)
-
-	code, listed := doJSON(t, router, http.MethodGet, "/api/vaults", token, nil)
+	userToken := registered["token"].(string)
+	code, login := loginAsDevice(t, router, "manual-vault", "password123", "manual-dev", "Manual Device")
+	if code != http.StatusOK {
+		t.Fatalf("login device: %d %v", code, login)
+	}
+	devToken := login["token"].(string)
+	if code, _ = approveAs(t, router, userToken, "manual-dev", []string{}, nil); code != http.StatusOK {
+		t.Fatalf("approve: %d", code)
+	}
+	code, listed := doJSON(t, router, http.MethodGet, "/api/vaults", devToken, nil)
 	rows, ok := listed["vaults"].([]any)
 	if code != http.StatusOK || !ok || len(rows) != 0 {
 		t.Fatalf("vaults before explicit create: status=%d body=%v", code, listed)
 	}
 
-	code, first := doJSON(t, router, http.MethodPost, "/api/vaults", token, map[string]string{
+	code, first := doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]string{
 		"name": "Notes",
 	})
 	if code != http.StatusCreated || first["is_default"] != true {
 		t.Fatalf("first explicit vault: status=%d body=%v", code, first)
 	}
-	code, second := doJSON(t, router, http.MethodPost, "/api/vaults", token, map[string]string{
-		"name": "Archive",
-	})
+	// re-authorize device to see new vaults
+	if code, _ = approveAs(t, router, userToken, "manual-dev", []string{first["id"].(string)}, nil); code != http.StatusOK {
+		t.Fatalf("re-approve after first vault: %d", code)
+	}
+	code, second := doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]string{"name": "Archive"})
 	if code != http.StatusCreated || second["is_default"] != false {
 		t.Fatalf("second explicit vault: status=%d body=%v", code, second)
 	}

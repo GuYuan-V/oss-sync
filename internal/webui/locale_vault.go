@@ -1,3 +1,4 @@
+﻿// 仓库文案
 package webui
 
 func init() {
@@ -145,3 +146,4 @@ func init() {
 		"member.revoke_all":              {"取消全部授权", "Revoke all"},
 	})
 }
+

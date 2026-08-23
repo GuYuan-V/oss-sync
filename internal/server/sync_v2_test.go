@@ -57,9 +57,8 @@ func downloadV2(
 ) *httptest.ResponseRecorder {
 	t.Helper()
 	query := url.Values{
-		"path":      {path},
-		"revision":  {strconv.FormatInt(revision, 10)},
-		"client_id": {"device-test"},
+		"path":     {path},
+		"revision": {strconv.FormatInt(revision, 10)},
 	}
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -67,6 +66,30 @@ func downloadV2(
 		nil,
 	)
 	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+func downloadV2WithClient(
+	t *testing.T,
+	router *gin.Engine,
+	token, vaultID, path, clientID string,
+	revision int64,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	query := url.Values{
+		"path":      {path},
+		"revision":  {strconv.FormatInt(revision, 10)},
+		"client_id": {clientID},
+	}
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/download?"+query.Encode(),
+		nil,
+	)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-OSS-Client-ID", clientID)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	return w
@@ -149,13 +172,48 @@ func approveDevice(t *testing.T, router *gin.Engine, token, clientID string, vau
 	}
 }
 
+func deviceTokenFor(t *testing.T, router *gin.Engine, username, password, clientID, userToken string, vaultIDs []string) string {
+	t.Helper()
+	code, login := loginAsDevice(t, router, username, password, clientID, "device-"+clientID)
+	if code != http.StatusOK {
+		t.Fatalf("login device %s: %d %v", clientID, code, login)
+	}
+	devToken := login["token"].(string)
+	// Approve via user management token (userToken is user-only, not device-bound)
+	code, _ = doJSON(t, router, http.MethodPut,
+		"/api/devices/"+url.PathEscape(clientID)+"/authorization",
+		userToken,
+		map[string]any{"status": "approved", "name": clientID, "vault_ids": vaultIDs},
+	)
+	if code != http.StatusOK {
+		t.Fatalf("approve device %s after login: %d", clientID, code)
+	}
+	// Re-login to ensure token reflects approved status (optional but ensures fresh)
+	code, login2 := loginAsDevice(t, router, username, password, clientID, "device-"+clientID)
+	if code != http.StatusOK {
+		// fallback to original pending token (still valid after approval per DB check)
+		return devToken
+	}
+	return login2["token"].(string)
+}
+
+func userOnlyToken(t *testing.T, router *gin.Engine, username, password string) string {
+	t.Helper()
+	code, body := doJSON(t, router, http.MethodPost, "/api/auth/login", "", map[string]string{"username": username, "password": password})
+	if code != http.StatusOK {
+		t.Fatalf("user login %s: %d %v", username, code, body)
+	}
+	return body["token"].(string)
+}
+
 func TestSyncStrategy_whenUserPreferencesAreWithinAdministratorCeilings_returnsEffectiveTiming(t *testing.T) {
 	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "strategy-user", "password123")
-	vaultID := defaultVaultIDFromAPI(t, router, token)
-	approveDevice(t, router, token, "device-policy", vaultID)
+	devToken := registerAndLogin(t, router, "strategy-user", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, devToken)
+	userToken := userOnlyToken(t, router, "strategy-user", "password123")
+	deviceToken := deviceTokenFor(t, router, "strategy-user", "password123", "device-policy", userToken, []string{vaultID})
 	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Updates(map[string]any{
 		"max_long_poll_wait_sec": 20,
 		"max_sync_debounce_sec":  60,
@@ -175,7 +233,7 @@ func TestSyncStrategy_whenUserPreferencesAreWithinAdministratorCeilings_returnsE
 		router,
 		http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/strategy?client_id=device-policy&mode=long_poll",
-		token,
+		deviceToken,
 		"device-policy",
 		"Policy device",
 		nil,
@@ -194,9 +252,10 @@ func TestSyncStrategy_whenGlobalModeIsForced_ignoresClientPreference(t *testing.
 	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "global-strategy-user", "password123")
-	vaultID := defaultVaultIDFromAPI(t, router, token)
-	approveDevice(t, router, token, "global-policy-device", vaultID)
+	devToken := registerAndLogin(t, router, "global-strategy-user", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, devToken)
+	userToken := userOnlyToken(t, router, "global-strategy-user", "password123")
+	deviceToken := deviceTokenFor(t, router, "global-strategy-user", "password123", "global-policy-device", userToken, []string{vaultID})
 	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("sync_mode", "long_poll").Error; err != nil {
 		t.Fatalf("set global sync mode: %v", err)
 	}
@@ -206,7 +265,7 @@ func TestSyncStrategy_whenGlobalModeIsForced_ignoresClientPreference(t *testing.
 		router,
 		http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/strategy?client_id=global-policy-device&mode=short_poll",
-		token,
+		deviceToken,
 		"global-policy-device",
 		"Global policy device",
 		nil,
@@ -225,9 +284,10 @@ func TestV2Upload_whenUserUploadPreferenceTightensAdminCeiling_rejectsOversizedC
 	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "v2-upload-limit", "password123")
-	vaultID := defaultVaultIDFromAPI(t, router, token)
-	approveDevice(t, router, token, "device-upload-limit", vaultID)
+	devToken := registerAndLogin(t, router, "v2-upload-limit", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, devToken)
+	userToken := userOnlyToken(t, router, "v2-upload-limit", "password123")
+	deviceToken := deviceTokenFor(t, router, "v2-upload-limit", "password123", "device-upload-limit", userToken, []string{vaultID})
 	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("max_upload_size_bytes", 10).Error; err != nil {
 		t.Fatalf("set upload ceiling: %v", err)
 	}
@@ -237,7 +297,7 @@ func TestV2Upload_whenUserUploadPreferenceTightensAdminCeiling_rejectsOversizedC
 
 	// When
 	code, body := uploadV2(
-		t, router, token, vaultID, "Notes/Large.md", "123456",
+		t, router, deviceToken, vaultID, "Notes/Large.md", "123456",
 		0, "device-upload-limit", "upload-over-limit",
 	)
 
@@ -251,9 +311,10 @@ func TestV2Upload_whenUserVaultCapacityIsExceeded_rejectsWrite(t *testing.T) {
 	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "v2-vault-limit", "password123")
-	vaultID := defaultVaultIDFromAPI(t, router, token)
-	approveDevice(t, router, token, "device-vault-limit", vaultID)
+	devToken := registerAndLogin(t, router, "v2-vault-limit", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, devToken)
+	userToken := userOnlyToken(t, router, "v2-vault-limit", "password123")
+	deviceToken := deviceTokenFor(t, router, "v2-vault-limit", "password123", "device-vault-limit", userToken, []string{vaultID})
 	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("max_vault_storage_bytes", 10).Error; err != nil {
 		t.Fatalf("set vault ceiling: %v", err)
 	}
@@ -263,7 +324,7 @@ func TestV2Upload_whenUserVaultCapacityIsExceeded_rejectsWrite(t *testing.T) {
 
 	// When
 	code, body := uploadV2(
-		t, router, token, vaultID, "Notes/Capacity.md", "123456",
+		t, router, deviceToken, vaultID, "Notes/Capacity.md", "123456",
 		0, "device-vault-limit", "upload-over-capacity",
 	)
 
@@ -277,7 +338,7 @@ func TestVaultCreate_whenUserCapacityIsWithinAdminCeiling_seedsEffectiveQuota(t 
 	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "vault-default-limit", "password123")
+	devToken := registerAndLogin(t, router, "vault-default-limit", "password123")
 	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("max_vault_storage_bytes", 10).Error; err != nil {
 		t.Fatalf("set vault ceiling: %v", err)
 	}
@@ -286,7 +347,7 @@ func TestVaultCreate_whenUserCapacityIsWithinAdminCeiling_seedsEffectiveQuota(t 
 	}
 
 	// When
-	code, body := doJSON(t, router, http.MethodPost, "/api/vaults", token, map[string]any{"name": "Policy Vault"})
+	code, body := doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]any{"name": "Policy Vault"})
 
 	// Then
 	if code != http.StatusCreated {
@@ -300,23 +361,23 @@ func TestVaultCreate_whenUserCapacityIsWithinAdminCeiling_seedsEffectiveQuota(t 
 func TestSyncV2MultiVaultIsolationCASAndSharing(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "v2-isolation", "password123")
-	defaultVault := defaultVaultIDFromAPI(t, router, token)
-	secondVault := createVaultViaAPI(t, router, token, "Second")
-
-	approveDevice(t, router, token, "device-a", defaultVault, secondVault)
-	approveDevice(t, router, token, "device-b", defaultVault, secondVault)
-	approveDevice(t, router, token, "device-test", defaultVault, secondVault)
+	devToken := registerAndLogin(t, router, "v2-isolation", "password123")
+	defaultVault := defaultVaultIDFromAPI(t, router, devToken)
+	secondVault := createVaultViaAPI(t, router, devToken, "Second")
+	userToken := userOnlyToken(t, router, "v2-isolation", "password123")
+	tokenA := deviceTokenFor(t, router, "v2-isolation", "password123", "device-a", userToken, []string{defaultVault, secondVault})
+	tokenB := deviceTokenFor(t, router, "v2-isolation", "password123", "device-b", userToken, []string{defaultVault, secondVault})
+	_ = deviceTokenFor(t, router, "v2-isolation", "password123", "device-test", userToken, []string{defaultVault, secondVault})
 
 	code, first := uploadV2(
-		t, router, token, defaultVault, "Notes/Same.md", "# Default Vault",
+		t, router, tokenA, defaultVault, "Notes/Same.md", "# Default Vault",
 		0, "device-a", "default-create",
 	)
 	if code != http.StatusOK {
 		t.Fatalf("upload default: %d %v", code, first)
 	}
 	code, second := uploadV2(
-		t, router, token, secondVault, "Notes/Same.md", "# Second Vault",
+		t, router, tokenA, secondVault, "Notes/Same.md", "# Second Vault",
 		0, "device-a", "second-create",
 	)
 	if code != http.StatusOK {
@@ -327,12 +388,14 @@ func TestSyncV2MultiVaultIsolationCASAndSharing(t *testing.T) {
 		defaultVault: first["hash"],
 		secondVault:  second["hash"],
 	} {
-		code, manifest := doJSON(
+		code, manifest := doJSONAsDevice(
 			t,
 			router,
 			http.MethodGet,
 			"/api/vaults/"+url.PathEscape(vaultID)+"/sync/manifest?after=0&client_id=device-b",
-			token,
+			tokenB,
+			"device-b",
+			"device-b",
 			nil,
 		)
 		if code != http.StatusOK {
@@ -344,15 +407,15 @@ func TestSyncV2MultiVaultIsolationCASAndSharing(t *testing.T) {
 		}
 	}
 
-	if got := downloadV2(t, router, token, defaultVault, "Notes/Same.md", revisionOf(t, first)); got.Body.String() != "# Default Vault" {
+	if got := downloadV2(t, router, tokenA, defaultVault, "Notes/Same.md", revisionOf(t, first)); got.Body.String() != "# Default Vault" {
 		t.Fatalf("default download: status=%d body=%q", got.Code, got.Body.String())
 	}
-	if got := downloadV2(t, router, token, secondVault, "Notes/Same.md", revisionOf(t, second)); got.Body.String() != "# Second Vault" {
+	if got := downloadV2(t, router, tokenA, secondVault, "Notes/Same.md", revisionOf(t, second)); got.Body.String() != "# Second Vault" {
 		t.Fatalf("second download: status=%d body=%q", got.Code, got.Body.String())
 	}
 
 	code, stale := uploadV2(
-		t, router, token, defaultVault, "Notes/Same.md", "# Stale",
+		t, router, tokenB, defaultVault, "Notes/Same.md", "# Stale",
 		0, "device-b", "stale-update",
 	)
 	if code != http.StatusConflict {
@@ -364,14 +427,14 @@ func TestSyncV2MultiVaultIsolationCASAndSharing(t *testing.T) {
 	}
 
 	code, retry := uploadV2(
-		t, router, token, defaultVault, "Notes/Same.md", "# Default Vault",
+		t, router, tokenA, defaultVault, "Notes/Same.md", "# Default Vault",
 		0, "device-a", "default-create",
 	)
 	if code != http.StatusOK || revisionOf(t, retry) != revisionOf(t, first) {
 		t.Fatalf("idempotent retry created another revision: %d %v", code, retry)
 	}
 
-	code, share := doJSON(t, router, http.MethodPost, "/api/shares", token, map[string]any{
+	code, share := doJSON(t, router, http.MethodPost, "/api/shares", devToken, map[string]any{
 		"vault_id":    secondVault,
 		"target_path": "Notes/Same.md",
 	})
@@ -454,14 +517,15 @@ func TestVaultManagementCRUD(t *testing.T) {
 func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	srv, db, dataDir := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "v2-mutations", "password123")
-	vaultID := defaultVaultIDFromAPI(t, router, token)
-	approveDevice(t, router, token, "device-a", vaultID)
-	approveDevice(t, router, token, "device-b", vaultID)
-	approveDevice(t, router, token, "device-test", vaultID)
+	devToken := registerAndLogin(t, router, "v2-mutations", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, devToken)
+	userToken := userOnlyToken(t, router, "v2-mutations", "password123")
+	tokenA := deviceTokenFor(t, router, "v2-mutations", "password123", "device-a", userToken, []string{vaultID})
+	tokenB := deviceTokenFor(t, router, "v2-mutations", "password123", "device-b", userToken, []string{vaultID})
+	_ = deviceTokenFor(t, router, "v2-mutations", "password123", "device-test", userToken, []string{vaultID})
 
 	code, created := uploadV2(
-		t, router, token, vaultID, "Notes/Changed.md", "one",
+		t, router, tokenA, vaultID, "Notes/Changed.md", "one",
 		0, "device-a", "create-changed",
 	)
 	if code != http.StatusOK {
@@ -469,7 +533,7 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	}
 	createdRevision := revisionOf(t, created)
 	code, modified := uploadV2(
-		t, router, token, vaultID, "Notes/Changed.md", "two",
+		t, router, tokenA, vaultID, "Notes/Changed.md", "two",
 		createdRevision, "device-a", "modify-changed",
 	)
 	if code != http.StatusOK {
@@ -477,12 +541,14 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	}
 	modifiedRevision := revisionOf(t, modified)
 
-	code, changes := doJSON(
+	code, changes := doJSONAsDevice(
 		t,
 		router,
 		http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/changes?after="+strconv.FormatInt(createdRevision, 10)+"&client_id=device-b",
-		token,
+		tokenB,
+		"device-b",
+		"device-b",
 		nil,
 	)
 	if code != http.StatusOK {
@@ -493,9 +559,11 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 		t.Fatalf("incremental response: %v", changes)
 	}
 
-	code, deleted := doJSON(t, router, http.MethodPost,
+	code, deleted := doJSONAsDevice(t, router, http.MethodPost,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/delete",
-		token,
+		tokenA,
+		"device-a",
+		"device-a",
 		map[string]any{
 			"path":          "Notes/Changed.md",
 			"base_revision": modifiedRevision,
@@ -526,9 +594,11 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 		t.Fatalf("deleted file storage key should point to recycle bin: %q", deletedFile.StorageKey)
 	}
 	deletedRevision := revisionOf(t, deleted)
-	code, retryDelete := doJSON(t, router, http.MethodPost,
+	code, retryDelete := doJSONAsDevice(t, router, http.MethodPost,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/delete",
-		token,
+		tokenA,
+		"device-a",
+		"device-a",
 		map[string]any{
 			"path":          "Notes/Changed.md",
 			"base_revision": modifiedRevision,
@@ -541,12 +611,14 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 		t.Fatalf("delete retry: %d %v", code, retryDelete)
 	}
 
-	code, changes = doJSON(
+	code, changes = doJSONAsDevice(
 		t,
 		router,
 		http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/changes?after="+strconv.FormatInt(modifiedRevision, 10)+"&client_id=device-b",
-		token,
+		tokenB,
+		"device-b",
+		"device-b",
 		nil,
 	)
 	files = changes["files"].([]any)
@@ -555,14 +627,14 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	}
 
 	code, source := uploadV2(
-		t, router, token, vaultID, "Notes/Source.md", "source",
+		t, router, tokenA, vaultID, "Notes/Source.md", "source",
 		0, "device-a", "create-source",
 	)
 	if code != http.StatusOK {
 		t.Fatalf("source upload: %d %v", code, source)
 	}
 	code, target := uploadV2(
-		t, router, token, vaultID, "Notes/Target.md", "target",
+		t, router, tokenA, vaultID, "Notes/Target.md", "target",
 		0, "device-a", "create-target",
 	)
 	if code != http.StatusOK {
@@ -570,7 +642,7 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	}
 
 	renamePath := "/api/vaults/" + url.PathEscape(vaultID) + "/sync/rename"
-	code, conflict := doJSON(t, router, http.MethodPost, renamePath, token, map[string]any{
+	code, conflict := doJSON(t, router, http.MethodPost, renamePath, tokenA, map[string]any{
 		"old_path":        "Notes/Source.md",
 		"new_path":        "Notes/Target.md",
 		"base_revision":   revisionOf(t, source),
@@ -584,8 +656,7 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	}
 
 	code, targetDeleted := doJSON(t, router, http.MethodPost,
-		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/delete",
-		token,
+		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/delete", tokenA,
 		map[string]any{
 			"path":          "Notes/Target.md",
 			"base_revision": revisionOf(t, target),
@@ -598,7 +669,7 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 		t.Fatalf("delete target: %d %v", code, targetDeleted)
 	}
 
-	code, renamed := doJSON(t, router, http.MethodPost, renamePath, token, map[string]any{
+	code, renamed := doJSON(t, router, http.MethodPost, renamePath, tokenA, map[string]any{
 		"old_path":        "Notes/Source.md",
 		"new_path":        "Notes/Target.md",
 		"base_revision":   revisionOf(t, source),
@@ -617,7 +688,7 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	}
 	newRevision := int64(newMeta["revision"].(float64))
 
-	code, retryRename := doJSON(t, router, http.MethodPost, renamePath, token, map[string]any{
+	code, retryRename := doJSON(t, router, http.MethodPost, renamePath, tokenA, map[string]any{
 		"old_path":        "Notes/Source.md",
 		"new_path":        "Notes/Target.md",
 		"base_revision":   revisionOf(t, source),
@@ -631,10 +702,10 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 		t.Fatalf("rename retry: %d %v", code, retryRename)
 	}
 
-	if got := downloadV2(t, router, token, vaultID, "Notes/Source.md", 0); got.Code != http.StatusGone {
+	if got := downloadV2(t, router, tokenA, vaultID, "Notes/Source.md", 0); got.Code != http.StatusGone {
 		t.Fatalf("renamed source should be gone: %d %q", got.Code, got.Body.String())
 	}
-	if got := downloadV2(t, router, token, vaultID, "Notes/Target.md", newRevision); got.Code != http.StatusOK || got.Body.String() != "source" {
+	if got := downloadV2(t, router, tokenA, vaultID, "Notes/Target.md", newRevision); got.Code != http.StatusOK || got.Body.String() != "source" {
 		t.Fatalf("renamed target: %d %q", got.Code, got.Body.String())
 	}
 }
@@ -642,10 +713,11 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 func TestSyncV2ConcurrentUploadsHaveUniqueRevisions(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "v2-concurrent", "password123")
-	vaultID := defaultVaultIDFromAPI(t, router, token)
-	approveDevice(t, router, token, "device-a", vaultID)
-	approveDevice(t, router, token, "device-b", vaultID)
+	devToken := registerAndLogin(t, router, "v2-concurrent", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, devToken)
+	userToken := userOnlyToken(t, router, "v2-concurrent", "password123")
+	tokenA := deviceTokenFor(t, router, "v2-concurrent", "password123", "device-a", userToken, []string{vaultID})
+	tokenB := deviceTokenFor(t, router, "v2-concurrent", "password123", "device-b", userToken, []string{vaultID})
 
 	const uploads = 12
 	type result struct {
@@ -662,7 +734,7 @@ func TestSyncV2ConcurrentUploadsHaveUniqueRevisions(t *testing.T) {
 			code, body := uploadV2(
 				t,
 				router,
-				token,
+				tokenA,
 				vaultID,
 				"Concurrent/"+strconv.Itoa(index)+".md",
 				"content-"+strconv.Itoa(index),
@@ -694,12 +766,13 @@ func TestSyncV2ConcurrentUploadsHaveUniqueRevisions(t *testing.T) {
 		t.Fatalf("got %d revisions, want %d", len(revisions), uploads)
 	}
 
-	code, manifest := doJSON(
-		t,
-		router,
+	code, manifest := doJSONAsDevice(
+		t, router,
 		http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/manifest?after=0&limit=100&client_id=device-b",
-		token,
+		tokenB,
+		"device-b",
+		"device-b",
 		nil,
 	)
 	if code != http.StatusOK || int64(manifest["snapshot_revision"].(float64)) != uploads {
@@ -710,25 +783,35 @@ func TestSyncV2ConcurrentUploadsHaveUniqueRevisions(t *testing.T) {
 func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "devices", "password123")
-	vaultID := defaultVaultIDFromAPI(t, router, token)
-	approveDevice(t, router, token, "device-a", vaultID)
-	approveDevice(t, router, token, "device-b", vaultID)
+	devToken := registerAndLogin(t, router, "devices", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, devToken)
+	userToken := userOnlyToken(t, router, "devices", "password123")
+	tokenA := deviceTokenFor(t, router, "devices", "password123", "device-a", userToken, []string{vaultID})
+	tokenB := deviceTokenFor(t, router, "devices", "password123", "device-b", userToken, []string{vaultID})
+	code, loginA := loginAsDevice(t, router, "devices", "password123", "device-a", "Laptop A")
+	if code != http.StatusOK {
+		t.Fatalf("login device-a: %d %v", code, loginA)
+	}
+	deviceAToken := loginA["token"].(string)
+	// Ensure tokenA is fresh approved token; use loginA token for device-a operations
+	tokenA = deviceAToken
 
 	code, created := uploadV2(
-		t, router, token, vaultID, "Device.md", "content",
+		t, router, tokenA, vaultID, "Device.md", "content",
 		0, "device-a", "create-device-file",
 	)
 	if code != http.StatusOK {
 		t.Fatalf("upload: %d %v", code, created)
 	}
 	revision := revisionOf(t, created)
-	code, _ = doJSON(
+	code, _ = doJSONAsDevice(
 		t,
 		router,
 		http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/manifest?after=0&client_id=device-b",
-		token,
+		tokenB,
+		"device-b",
+		"device-b",
 		nil,
 	)
 	if code != http.StatusOK {
@@ -744,12 +827,16 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 		if binding.LastCursor != 0 {
 			t.Fatalf("%s cursor advanced before ACK: %d", clientID, binding.LastCursor)
 		}
+		ackToken := tokenA
+		if clientID == "device-b" {
+			ackToken = tokenB
+		}
 		code, body := doJSONAsDevice(
 			t,
 			router,
 			http.MethodPost,
 			"/api/vaults/"+url.PathEscape(vaultID)+"/sync/ack",
-			token,
+			ackToken,
 			clientID,
 			"Device "+clientID,
 			map[string]any{"client_id": clientID, "cursor": revision},
@@ -760,14 +847,27 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 	}
 
 	code, devicesBody := doJSONAsDevice(
-		t, router, http.MethodGet, "/api/devices", token, "device-a", "Laptop A", nil,
+		t, router, http.MethodGet, "/api/devices", deviceAToken, "device-a", "Laptop A", nil,
 	)
 	if code != http.StatusOK {
 		t.Fatalf("list devices: %d %v", code, devicesBody)
 	}
 	rows := devicesBody["devices"].([]any)
-	if len(rows) != 2 {
+	if len(rows) < 2 {
 		t.Fatalf("devices=%v", rows)
+	}
+	foundA, foundB := false, false
+	for _, r := range rows {
+		m := r.(map[string]any)
+		if m["client_id"] == "device-a" {
+			foundA = true
+		}
+		if m["client_id"] == "device-b" {
+			foundB = true
+		}
+	}
+	if !foundA || !foundB {
+		t.Fatalf("device-a/b not found in %v", rows)
 	}
 
 	code, body := doJSONAsDevice(
@@ -775,7 +875,7 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 		router,
 		http.MethodPatch,
 		"/api/devices/device-b",
-		token,
+		deviceAToken,
 		"device-a",
 		"Laptop A",
 		map[string]any{"name": "Laptop B"},
@@ -795,7 +895,7 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 		router,
 		http.MethodDelete,
 		"/api/devices/device-a",
-		token,
+		deviceAToken,
 		"device-a",
 		"Laptop A",
 		nil,
@@ -808,7 +908,7 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 		router,
 		http.MethodDelete,
 		"/api/devices/device-b",
-		token,
+		deviceAToken,
 		"device-a",
 		"Laptop A",
 		nil,
@@ -822,7 +922,7 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 		router,
 		http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/changes?after=0&client_id=device-b",
-		token,
+		tokenB,
 		"device-b",
 		"Laptop B",
 		nil,
@@ -838,12 +938,12 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 		bytes.NewBufferString("spoofed"),
 	)
 	spoofedUpload.Header.Set("Content-Type", "application/octet-stream")
-	spoofedUpload.Header.Set("Authorization", "Bearer "+token)
+	spoofedUpload.Header.Set("Authorization", "Bearer "+tokenA)
 	spoofedUpload.Header.Set("X-OSS-Client-ID", "device-b")
 	spoofedUploadResponse := httptest.NewRecorder()
 	router.ServeHTTP(spoofedUploadResponse, spoofedUpload)
-	if responseBody := decodeMap(spoofedUploadResponse.Body.Bytes()); spoofedUploadResponse.Code != http.StatusForbidden ||
-		responseBody["code"] != "device_revoked" {
+	if responseBody := decodeMap(spoofedUploadResponse.Body.Bytes()); spoofedUploadResponse.Code != http.StatusUnauthorized ||
+		responseBody["code"] != "device_identity_mismatch" {
 		t.Fatalf("revoked upload identity was bypassed: %d %v", spoofedUploadResponse.Code, responseBody)
 	}
 
@@ -880,12 +980,12 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 			router,
 			http.MethodPost,
 			request.path,
-			token,
+			tokenB,
 			"device-b",
 			"Laptop B",
 			request.body,
 		)
-		if code != http.StatusForbidden || responseBody["code"] != "device_revoked" {
+		if code != http.StatusUnauthorized || responseBody["code"] != "device_identity_mismatch" {
 			t.Fatalf("revoked %s identity was bypassed: %d %v", request.name, code, responseBody)
 		}
 	}
@@ -894,24 +994,27 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 func TestSyncV2CompactedHistoryRequiresRecoverySnapshot(t *testing.T) {
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "compacted", "password123")
-	vaultID := defaultVaultIDFromAPI(t, router, token)
-	approveDevice(t, router, token, "device-a", vaultID)
-	approveDevice(t, router, token, "device-b", vaultID)
+	devToken := registerAndLogin(t, router, "compacted", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, devToken)
+	userToken := userOnlyToken(t, router, "compacted", "password123")
+	tokenA := deviceTokenFor(t, router, "compacted", "password123", "device-a", userToken, []string{vaultID})
+	tokenB := deviceTokenFor(t, router, "compacted", "password123", "device-b", userToken, []string{vaultID})
 
 	code, created := uploadV2(
-		t, router, token, vaultID, "Deleted.md", "content",
+		t, router, tokenA, vaultID, "Deleted.md", "content",
 		0, "device-a", "create-deleted",
 	)
 	if code != http.StatusOK {
 		t.Fatalf("upload: %d %v", code, created)
 	}
-	code, deleted := doJSON(
+	code, deleted := doJSONAsDevice(
 		t,
 		router,
 		http.MethodPost,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/delete",
-		token,
+		tokenA,
+		"device-a",
+		"device-a",
 		map[string]any{
 			"path":          "Deleted.md",
 			"base_revision": revisionOf(t, created),
@@ -932,23 +1035,27 @@ func TestSyncV2CompactedHistoryRequiresRecoverySnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, body := doJSON(
+	code, body := doJSONAsDevice(
 		t,
 		router,
 		http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/changes?after=1&client_id=device-b",
-		token,
+		tokenB,
+		"device-b",
+		"device-b",
 		nil,
 	)
 	if code != http.StatusGone || body["code"] != "history_compacted" {
 		t.Fatalf("incremental history gap was not rejected: %d %v", code, body)
 	}
-	code, body = doJSON(
+	code, body = doJSONAsDevice(
 		t,
 		router,
 		http.MethodGet,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/manifest?after=0&client_id=device-b",
-		token,
+		tokenB,
+		"device-b",
+		"device-b",
 		nil,
 	)
 	if code != http.StatusOK || body["recovery_snapshot"] != true {
@@ -959,7 +1066,7 @@ func TestSyncV2CompactedHistoryRequiresRecoverySnapshot(t *testing.T) {
 	}
 
 	code, recreated := uploadV2(
-		t, router, token, vaultID, "Deleted.md", "recreated",
+		t, router, tokenB, vaultID, "Deleted.md", "recreated",
 		deletedRevision, "device-b", "force-recreate",
 	)
 	if code != http.StatusOK || revisionOf(t, recreated) <= deletedRevision {

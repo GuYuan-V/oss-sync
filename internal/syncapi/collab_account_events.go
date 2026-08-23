@@ -1,3 +1,4 @@
+﻿// 协作账户事件
 package syncapi
 
 import (
@@ -11,6 +12,7 @@ import (
 
 	"github.com/oss/oss-server/internal/auth"
 	"github.com/oss/oss-server/internal/collaboration"
+	"github.com/oss/oss-server/internal/deviceauth"
 	"github.com/oss/oss-server/internal/models"
 )
 
@@ -94,7 +96,7 @@ func (h *Handler) CollabAccountSSE(c *gin.Context) {
 }
 
 func (h *Handler) CollabAccountPoll(c *gin.Context) {
-	user, ok := auth.RequireUser(c)
+	user, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
 		return
 	}
@@ -113,27 +115,52 @@ func (h *Handler) CollabAccountPoll(c *gin.Context) {
 }
 
 func (h *Handler) collabEventUser(c *gin.Context) (*models.User, bool) {
-	if token := c.Query("token"); token != "" {
+	token := ""
+	if queryToken := c.Query("token"); queryToken != "" {
 		if !collabQueryTokenAllowed(c.Request, c.GetHeader("X-Forwarded-Proto")) {
 			c.AbortWithStatus(http.StatusForbidden)
 			return nil, false
 		}
-		user, err := auth.AuthenticateToken(h.DB, h.Cfg, token)
-		if err != nil {
+		token = queryToken
+	} else {
+		header := c.GetHeader("Authorization")
+		if !strings.HasPrefix(header, "Bearer ") {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return nil, false
 		}
-		return user, true
+		token = strings.TrimPrefix(header, "Bearer ")
 	}
-	header := c.GetHeader("Authorization")
-	if header == "" {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return nil, false
-	}
-	user, err := auth.AuthenticateToken(h.DB, h.Cfg, strings.TrimPrefix(header, "Bearer "))
+	identity, err := auth.AuthenticateIdentityToken(h.DB, h.Cfg, token)
 	if err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return nil, false
 	}
-	return user, true
+	c.Set(auth.ContextKeyCurrentUser, identity.User)
+	c.Set(auth.ContextKeyIdentity, identity)
+	did, ok := auth.RequireDeviceID(c, c.Query("client_id"), c.GetHeader(deviceauth.ClientIDHeader))
+	if !ok {
+		return nil, false
+	}
+	if err := deviceauth.CheckApproved(h.DB, identity.User.ID, string(did)); err != nil {
+		h.writeDeviceAuthError(c, err)
+		return nil, false
+	}
+	return identity.User, true
 }
+
+func (h *Handler) requireCollaborationDevice(c *gin.Context) (*models.User, string, bool) {
+	user, ok := auth.RequireUser(c)
+	if !ok {
+		return nil, "", false
+	}
+	did, ok := auth.RequireDeviceID(c, c.Query("client_id"), c.GetHeader(deviceauth.ClientIDHeader))
+	if !ok {
+		return nil, "", false
+	}
+	if err := deviceauth.CheckApproved(h.DB, user.ID, string(did)); err != nil {
+		h.writeDeviceAuthError(c, err)
+		return nil, "", false
+	}
+	return user, string(did), true
+}
+

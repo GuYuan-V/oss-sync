@@ -1,3 +1,4 @@
+﻿// 账户设置
 package webui
 
 import (
@@ -226,3 +227,4 @@ func (h *Handler) renderAccountError(c *gin.Context, user *models.User, status i
 	data.Error = message
 	h.render(c, status, "account", h.t(c, "page.account"), "account", "account", data)
 }
+

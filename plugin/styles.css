@@ -63,6 +63,105 @@
   color: var(--text-warning);
 }
 
+.oss-merge-context,
+.oss-merge-block {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+}
+.oss-merge-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+}
+.oss-merge-side {
+  display: grid;
+  gap: 4px;
+}
+.oss-merge-side-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+.oss-merge-text {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-s);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.oss-merge-text.is-removed {
+  background: color-mix(in srgb, var(--text-error) 10%, transparent);
+  border-left: 3px solid var(--text-error);
+}
+.oss-merge-text.is-added {
+  background: color-mix(in srgb, var(--text-warning) 12%, transparent);
+  border-left: 3px solid var(--text-warning);
+}
+.oss-merge-text.is-context {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+}
+.oss-merge-actions {
+  display: flex;
+  gap: 8px;
+}
+.oss-merge-order-btn {
+  min-height: 28px;
+  padding: 2px 10px;
+  font-size: var(--font-ui-smaller);
+}
+.oss-merge-order-btn.is-active {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+.oss-merge-final {
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+.oss-merge-final-title {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+.oss-merge-final-preview {
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.oss-merge-final-preview--colored {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  background: var(--background-secondary);
+}
+.oss-merge-final-preview--colored .oss-final-block {
+  display: grid;
+  gap: 4px;
+}
+.oss-merge-final-preview--colored .oss-final-block.is-context .oss-merge-text {
+  opacity: 0.85;
+}
+.oss-merge-final-preview--colored .oss-merge-text {
+  margin: 0;
+  padding: 4px 6px;
+}
+
 .oss-conflict-modal .oss-diff-row.is-omitted,
 .oss-conflict-modal .oss-diff-empty,
 .oss-history-detail-modal .oss-diff-row.is-omitted,

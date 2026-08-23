@@ -94,14 +94,31 @@ func registerAndLogin(t *testing.T, router *gin.Engine, user, pass string) strin
 	if code != http.StatusOK {
 		t.Fatalf("register: %d %v", code, body)
 	}
-	token := body["token"].(string)
-	code, vault := doJSON(t, router, http.MethodPost, "/api/vaults", token, map[string]string{
+	userToken := body["token"].(string)
+	clientID := "helper-device-" + user
+	raw, _ := json.Marshal(map[string]string{"username": user, "password": pass})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-OSS-Client-ID", clientID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("helper device login: %d %s", w.Code, w.Body.String())
+	}
+	var loginBody map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &loginBody)
+	devToken := loginBody["token"].(string)
+	code, authBody := doJSON(t, router, http.MethodPut, "/api/devices/"+url.PathEscape(clientID)+"/authorization", userToken, map[string]any{"status": "approved", "vault_ids": []string{}})
+	if code != http.StatusOK {
+		t.Fatalf("helper approve: %d %v", code, authBody)
+	}
+	code, vault := doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]string{
 		"name": "Test Vault",
 	})
 	if code != http.StatusCreated {
 		t.Fatalf("create test vault: %d %v", code, vault)
 	}
-	return token
+	return devToken
 }
 
 func uploadFile(t *testing.T, router *gin.Engine, token, path, content string, mtime int64) (int, map[string]any) {

@@ -1,3 +1,4 @@
+﻿// 控制台主题管理
 package webui
 
 import (
@@ -169,3 +170,4 @@ func (h *Handler) adminConsoleThemeDelete(c *gin.Context) {
 func (h *Handler) redirectConsoleThemeError(c *gin.Context, message string) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/console-themes?error="+url.QueryEscape(message))
 }
+

@@ -1,3 +1,4 @@
+﻿// 账户文案
 package webui
 
 func init() {
@@ -29,3 +30,4 @@ func init() {
 		"account.update_password":          {"更新密码", "Update password"},
 	})
 }
+

@@ -31,7 +31,9 @@ export class CollabManagerModal extends Modal {
       return;
     }
     for (const entry of collaborations) {
-      if (entry.collaborator_username === this.plugin.settings.username) this.renderIncoming(entry);
+      if (entry.collaborator_username !== this.plugin.settings.username) continue;
+      if (entry.status === "revoked") continue;
+      this.renderIncoming(entry);
     }
     const byArticle = new Map<string, CollabEntry[]>();
     for (const entry of collaborations) {

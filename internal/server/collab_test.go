@@ -62,13 +62,14 @@ func approveDeviceForVault(t *testing.T, router *gin.Engine, token, clientID, va
 func TestVaultSyncStrategy(t *testing.T) {
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
-	token := registerAndLogin(t, router, "strat-owner", "password123")
-	vaultID := defaultVaultIDFromAPI(t, router, token)
-	approveDeviceForVault(t, router, token, "strat-device", vaultID)
+	devToken := registerAndLogin(t, router, "strat-owner", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, devToken)
+	userToken := userOnlyToken(t, router, "strat-owner", "password123")
+	stratToken := deviceTokenFor(t, router, "strat-owner", "password123", "strat-device", userToken, []string{vaultID})
 
 	// 默认 user_choice：客户端选择生效。
-	code, body := doJSON(t, router, http.MethodGet,
-		"/api/vaults/"+vaultID+"/sync/strategy?client_id=strat-device&mode=long_poll", token, nil)
+	code, body := doJSONAsDevice(t, router, http.MethodGet,
+		"/api/vaults/"+vaultID+"/sync/strategy?client_id=strat-device&mode=long_poll", stratToken, "strat-device", "strat-device", nil)
 	if code != http.StatusOK {
 		t.Fatalf("strategy: %d %v", code, body)
 	}
@@ -83,8 +84,8 @@ func TestVaultSyncStrategy(t *testing.T) {
 	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("sync_mode", "short_poll").Error; err != nil {
 		t.Fatal(err)
 	}
-	code, body = doJSON(t, router, http.MethodGet,
-		"/api/vaults/"+vaultID+"/sync/strategy?client_id=strat-device&mode=long_poll", token, nil)
+	code, body = doJSONAsDevice(t, router, http.MethodGet,
+		"/api/vaults/"+vaultID+"/sync/strategy?client_id=strat-device&mode=long_poll", stratToken, "strat-device", "strat-device", nil)
 	if code != http.StatusOK {
 		t.Fatalf("strategy forced: %d", code)
 	}
@@ -133,9 +134,12 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 	}
 
 	// collab-user 登录并接受。
-	_, loginBody := doJSON(t, router, http.MethodPost, "/api/auth/login", "",
-		map[string]string{"username": "collab-user", "password": "password123"})
-	collabToken := loginBody["token"].(string)
+	code, devLogin := loginAsDevice(t, router, "collab-user", "password123", "collab-device", "Collab Device")
+	if code != http.StatusOK {
+		t.Fatalf("collab device login: %d %v", code, devLogin)
+	}
+	collabToken := devLogin["token"].(string)
+	code, _ = doJSON(t, router, http.MethodPut, "/api/devices/collab-device/authorization", collabToken, map[string]any{"status": "approved", "vault_ids": []string{}})
 	respond, _ := doJSON(t, router, http.MethodPost,
 		"/api/vaults/"+vaultID+"/collaborations/"+strconv.FormatUint(uint64(collab.ID), 10)+"/respond", collabToken,
 		map[string]any{"accept": true})
@@ -149,7 +153,11 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 	// collab-user 上传正文。
 	up, _ := doJSON(t, router, http.MethodPost,
 		"/api/vaults/"+vaultID+"/collaborations/files/"+strconv.FormatUint(uint64(file.ID), 10)+"/upload", collabToken,
-		map[string]any{"content": "# 协作者更新"})
+		map[string]any{
+			"content":       "# 协作者更新",
+			"base_revision": file.Revision,
+			"operation_id":  "collab-test-upload",
+		})
 	if up != http.StatusOK {
 		t.Fatalf("collab upload: %d", up)
 	}
@@ -175,9 +183,16 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 	if _, err := registerUser(db, "intruder", "password123"); err != nil {
 		t.Fatal(err)
 	}
-	_, intruderBody := doJSON(t, router, http.MethodPost, "/api/auth/login", "",
-		map[string]string{"username": "intruder", "password": "password123"})
-	intruderToken := intruderBody["token"].(string)
+	code, intruderLogin := loginAsDevice(t, router, "intruder", "password123", "intruder-dev", "Intruder Device")
+	if code != http.StatusOK {
+		t.Fatalf("intruder device login: %d %v", code, intruderLogin)
+	}
+	intruderToken := intruderLogin["token"].(string)
+	// approve intruder device so it reaches collaboration check
+	code, _ = doJSON(t, router, http.MethodPut, "/api/devices/intruder-dev/authorization", intruderToken, map[string]any{"status": "approved", "vault_ids": []string{}})
+	if code != http.StatusOK {
+		t.Fatalf("approve intruder: %d", code)
+	}
 	forbidden, _ := doJSON(t, router, http.MethodPost,
 		"/api/vaults/"+vaultID+"/collaborations/files/"+strconv.FormatUint(uint64(file.ID), 10)+"/upload", intruderToken,
 		map[string]any{"content": "x"})

@@ -20,6 +20,7 @@ import (
 	"github.com/oss/oss-server/internal/auth"
 	"github.com/oss/oss-server/internal/config"
 	"github.com/oss/oss-server/internal/models"
+	"github.com/oss/oss-server/internal/update"
 )
 
 // sessionCookie 是登录后网页会话的 HttpOnly cookie。
@@ -38,6 +39,14 @@ type Handler struct {
 	tpl           *template.Template
 	loginLimit    *auth.AttemptLimiter
 	registerLimit *auth.AttemptLimiter
+	updater       *update.Updater
+	updateSvc     *update.Service
+}
+
+// SetUpdateService 注入共享更新服务（直接注入，不代理 Bearer token）。
+func (h *Handler) SetUpdateService(svc *update.Service, up *update.Updater) {
+	h.updateSvc = svc
+	h.updater = up
 }
 
 // layoutData 是所有控制台页面共用的外壳数据。
@@ -175,6 +184,9 @@ func (h *Handler) Register(r *gin.Engine) {
 		adminGroup.POST("/system", h.adminSaveSystem)
 		adminGroup.GET("/data", h.adminDataPage)
 		adminGroup.POST("/system/database", h.adminSaveDatabase)
+		adminGroup.GET("/system/update/status", h.adminUpdateStatusJSON)
+		adminGroup.POST("/system/update/check", h.adminUpdateCheck)
+		adminGroup.POST("/system/update", h.adminUpdateTrigger)
 		adminGroup.GET("/themes", h.adminThemesPage)
 		adminGroup.POST("/themes/upload", h.adminThemeUpload)
 		adminGroup.POST("/themes/scaffold", h.adminThemeScaffold)

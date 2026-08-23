@@ -1,3 +1,4 @@
+﻿// 基础认证
 package auth
 
 import (
@@ -17,3 +18,4 @@ func parseBasic(payload string) (string, string, bool) {
 	}
 	return string(dec[:idx]), string(dec[idx+1:]), true
 }
+

@@ -1,3 +1,4 @@
+﻿// 通用文案
 package webui
 
 func init() {
@@ -80,3 +81,4 @@ func init() {
 		"files.delete_confirm":            {"确定删除 %s？删除后可在回收站中恢复。", "Delete %s? It can be restored from the recycle bin later."},
 	})
 }
+

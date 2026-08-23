@@ -1,3 +1,4 @@
+﻿// 博客资源
 package blog
 
 import (
@@ -160,3 +161,4 @@ func isRemoteReference(reference string) bool {
 	lower := strings.ToLower(reference)
 	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") || strings.HasPrefix(lower, "data:")
 }
+

@@ -1,3 +1,4 @@
+﻿// 错误文案
 package webui
 
 func init() {
@@ -84,5 +85,7 @@ func init() {
 		"err.username_taken":                  {"该用户名已存在，请换一个用户名。", "This username is already taken, please choose another."},
 		"err.vault_name_invalid":              {"仓库名称不能为空且不超过 128 字符", "Vault name is required and must not exceed 128 characters"},
 		"err.vault_not_found":                 {"仓库不存在", "Vault not found"},
+		"err.update_service_unavailable":      {"更新服务未初始化", "Update service not initialized"},
 	})
 }
+

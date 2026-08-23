@@ -1,3 +1,4 @@
+﻿// 协作传输
 package syncapi
 
 import (
@@ -26,3 +27,4 @@ func isLoopbackAddress(address string) bool {
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
 }
+

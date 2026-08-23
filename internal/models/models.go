@@ -1,3 +1,4 @@
+﻿// 数据模型
 package models
 
 import (
@@ -187,7 +188,7 @@ type DeviceVault struct {
 	UpdatedAt  time.Time
 }
 
-// StorageIssue 记录无法自动修复的存储异常，修复后仍保留记录。
+// StorageIssue 存储异常记录。
 type StorageIssue struct {
 	ID          uint   `gorm:"primaryKey"`
 	VaultID     string `gorm:"index;size:36;not null"`
@@ -288,3 +289,4 @@ type FileHistory struct {
 	ClientID   string    `gorm:"size:64"`
 	CreatedAt  time.Time `gorm:"index"`
 }
+

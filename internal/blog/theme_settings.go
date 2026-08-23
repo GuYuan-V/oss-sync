@@ -1,3 +1,4 @@
+﻿// 主题设置
 package blog
 
 import (
@@ -273,3 +274,4 @@ func ValidPublicURL(raw string) bool {
 	}
 	return parsed.Scheme == "http" || parsed.Scheme == "https"
 }
+

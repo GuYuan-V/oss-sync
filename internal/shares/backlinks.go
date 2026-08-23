@@ -1,3 +1,4 @@
+﻿// 分享反链
 package shares
 
 import (
@@ -100,3 +101,4 @@ var readAbsFile = func(p string) ([]byte, error) {
 func readFileBytes(p string) ([]byte, error) {
 	return os.ReadFile(p)
 }
+

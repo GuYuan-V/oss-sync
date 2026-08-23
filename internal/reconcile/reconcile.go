@@ -1,3 +1,4 @@
+﻿// 存储对账
 package reconcile
 
 import (
@@ -436,3 +437,4 @@ func truncate(value string, limit int) string {
 	}
 	return string(runes[:limit])
 }
+

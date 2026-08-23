@@ -1,3 +1,4 @@
+﻿// 管理后台
 package webui
 
 import (
@@ -639,3 +640,4 @@ func (h *Handler) adminRevokeDevice(c *gin.Context) {
 	}
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?saved=1")
 }
+

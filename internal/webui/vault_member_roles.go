@@ -1,3 +1,4 @@
+﻿// 成员角色
 package webui
 
 import (
@@ -120,3 +121,4 @@ func (h *Handler) removeMember(c *gin.Context) {
 	}
 	c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/members?saved=1")
 }
+

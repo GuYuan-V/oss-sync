@@ -1,3 +1,4 @@
+﻿// 设备管理
 package devices
 
 import (
@@ -79,13 +80,20 @@ func (h *Handler) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	currentID := deviceauth.NormalizeClientID(c.GetHeader(deviceauth.ClientIDHeader))
-	if currentID != "" {
-		if err := deviceauth.Touch(h.DB, user.ID, "", currentID, deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader)), nil, h.now()); err != nil &&
+	did, hasDID := auth.CurrentDeviceID(c)
+	if hasDID {
+		if _, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader)); !ok {
+			return
+		}
+		if err := deviceauth.Touch(h.DB, user.ID, "", string(did), deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader)), nil, h.now()); err != nil &&
 			!errors.Is(err, deviceauth.ErrRevoked) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+	}
+	currentID := ""
+	if hasDID {
+		currentID = string(did)
 	}
 
 	query := h.DB
@@ -364,9 +372,14 @@ func (h *Handler) Revoke(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid client id"})
 		return
 	}
-	if clientID == deviceauth.NormalizeClientID(c.GetHeader(deviceauth.ClientIDHeader)) {
-		c.JSON(http.StatusConflict, gin.H{"error": "current device cannot revoke itself"})
-		return
+	if did, hasDID := auth.CurrentDeviceID(c); hasDID {
+		if _, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader)); !ok {
+			return
+		}
+		if clientID == string(did) {
+			c.JSON(http.StatusConflict, gin.H{"error": "current device cannot revoke itself"})
+			return
+		}
 	}
 	now := h.now()
 	result := h.DB.Model(&models.ClientDevice{}).
@@ -434,3 +447,4 @@ func formatTime(value time.Time) string {
 	}
 	return value.UTC().Format(time.RFC3339)
 }
+

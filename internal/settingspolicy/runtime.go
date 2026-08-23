@@ -1,3 +1,4 @@
+// 运行时配置
 package settingspolicy
 
 import (
@@ -50,6 +51,5 @@ func HistoryRetentionDaysForVault(db *gorm.DB, vaultID string) (int, error) {
 	if err := db.First(&system, 1).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, fmt.Errorf("load system settings: %w", err)
 	}
-	limits := LimitsFor(system, 0)
-	return limits.HistoryRetentionDays, nil
+	return LimitsFor(system, 0).HistoryRetentionDays, nil
 }

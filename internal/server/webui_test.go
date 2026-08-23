@@ -119,7 +119,7 @@ func TestAdminSystemControlsRegistration(t *testing.T) {
 
 	dashboard := doForm(t, router, http.MethodGet, "/dashboard/admin/system", nil, session, csrf)
 	if dashboard.Code != http.StatusOK ||
-		!strings.Contains(dashboard.Body.String(), "允许新用户注册") ||
+		(!strings.Contains(dashboard.Body.String(), "允许新用户注册") && !strings.Contains(dashboard.Body.String(), "允许公开注册")) ||
 		!strings.Contains(dashboard.Body.String(), "admin") {
 		t.Fatalf("admin system page: status=%d body=%s", dashboard.Code, dashboard.Body)
 	}

@@ -1,3 +1,4 @@
+﻿// 概览页面
 package webui
 
 import (
@@ -152,3 +153,4 @@ func usagePercent(used, total float64) float64 {
 	}
 	return used / total * 100
 }
+

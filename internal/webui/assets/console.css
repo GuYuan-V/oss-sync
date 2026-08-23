@@ -493,6 +493,37 @@ input:focus {
 }
 .summary-strip dd { margin: 6px 0 0; font-size: 22px; font-weight: 850; }
 
+.database-config-form {
+  --database-config-form-control-height: 38px;
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  gap: 12px;
+  padding: 16px 20px 20px;
+  align-items: end;
+}
+
+.database-config-form .database-config-form__field > select,
+.database-config-form .database-config-form__field > input,
+.database-config-form .database-config-form__submit {
+  min-height: var(--database-config-form-control-height);
+}
+
+.database-config-form .database-config-form__actions {
+  margin: 0;
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.database-config-form .database-config-form__submit {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.database-config-form .database-config-form__notice {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+
 .control-grid { display: grid; gap: 16px; }
 .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .metric-grid {
@@ -567,7 +598,10 @@ input:focus {
 .gate-panel__copy { border-right: 1px solid var(--line); }
 .gate-panel h2, .ledger-panel h2 { margin: 0; font-size: clamp(21px, 3vw, 24px); letter-spacing: -.025em; }
 .gate-panel p { max-width: 58ch; color: var(--muted); line-height: 1.7; }
-.panel-note { margin: -4px 0 20px; padding: 0 28px; color: var(--muted); line-height: 1.65; }
+.panel-note { margin: -4px 0 20px; padding: 12px 24px 0; color: var(--muted); line-height: 1.65; }
+.ledger-panel > .panel-note { padding: 12px 24px 0; }
+.ledger-panel > .panel-note + .summary-strip,
+.ledger-panel > .panel-note + .database-config-form { margin-top: 12px; }
 .panel-empty {
   display: grid;
   align-items: center;
@@ -579,6 +613,7 @@ input:focus {
   line-height: 1.65;
   text-align: left;
 }
+.vault-archive-panel { margin-top: 16px; }
 .vault-archive-panel .panel-note { margin: 0; padding: 18px 24px 0; }
 .vault-archive-panel .panel-empty { min-height: 120px; padding: 28px 24px; }
 .file-name { display: block; margin-top: 4px; color: var(--muted); font: 10px/1.25 "IBM Plex Mono", "Cascadia Mono", monospace; overflow-wrap: anywhere; }
@@ -675,9 +710,56 @@ input:focus {
 
 .gate-form {
   display: grid;
-  gap: 30px;
-  align-content: center;
+  gap: 22px;
+  align-content: flex-start;
   background: #f7f9fd;
+  padding-top: 18px;
+}
+
+.system-settings-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.system-settings-group {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line-dark);
+  background: var(--surface-soft);
+  box-shadow: 0 12px 40px rgba(31, 48, 78, .06);
+}
+
+.system-settings-group__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+
+.system-settings-group__summary {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.system-settings-group__fields {
+  display: grid;
+  gap: 14px;
+}
+
+.system-settings-group .switch-control {
+  margin: 0;
+}
+
+.system-settings-group .system-settings-group__actions {
+  margin-top: 2px;
+}
+
+.system-settings-group__actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .switch-control {
@@ -978,9 +1060,6 @@ body.body--console .console {
 .side-nav__sublink:hover { color: var(--ink); }
 .side-nav__sublink.is-active { color: var(--cobalt); border-left-color: var(--cobalt); }
 
-.database-config-form { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(0, 2fr) auto; gap: 12px; align-items: end; }
-.database-config-form label { min-width: 0; }
-.database-config-form__notice { grid-column: 1 / -1; margin: 0; }
 .sidebar__foot { padding: 14px 10px; border-top: 1px solid var(--sidebar-border); }
 .theme-switcher { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
 .theme-switcher__btn {
@@ -1244,6 +1323,8 @@ body.body--console .console {
 :root[data-theme="dark"] th { background: #1a2234; }
 :root[data-theme="dark"] .summary-strip { background: rgba(26, 34, 52, .72); }
 :root[data-theme="dark"] .gate-panel, :root[data-theme="dark"] .ledger-panel { background: var(--paper); }
+:root[data-theme="dark"] .system-settings-group { box-shadow: none; border-color: var(--line); background: var(--surface-soft); }
+:root[data-theme="dark"] .system-settings-group + .system-settings-group { border-color: #29334a; }
 :root[data-theme="dark"] .role--admin { color: #a5bcff; background: #1c2740; }
 :root[data-theme="dark"] .role--user { color: #4fd1a5; background: #12352c; }
 :root[data-theme="dark"] .button--primary { background: var(--cobalt); box-shadow: 4px 4px 0 var(--button-shadow); }
@@ -1302,4 +1383,42 @@ body.body--console .console {
   border-radius: 3px;
   font: 13px/1.5 "IBM Plex Mono", "Cascadia Mono", monospace;
 }
+.server-update-panel { display: grid; gap: 0; }
+.server-update-summary small { display: block; margin-top: 6px; color: var(--muted); font: 10px/1.4 "IBM Plex Mono", "Cascadia Mono", monospace; overflow-wrap: anywhere; }
+.server-update-summary small:empty::before { content: "—"; }
+.server-update-body { display: grid; gap: 14px; padding: 16px 24px 18px; border-top: 1px solid var(--line); }
+.server-update-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.server-update-actions form { margin: 0; }
+.server-update-trigger { display: inline-flex; margin: 0; }
+.server-update-operation { display: inline-flex; gap: 8px; align-items: baseline; margin-left: auto; color: var(--muted); font: 11px/1.2 "IBM Plex Mono", "Cascadia Mono", monospace; white-space: nowrap; }
+.server-update-operation strong { color: var(--ink); font: 700 13px/1.2 "Aptos", "Segoe UI", sans-serif; }
+.server-update-check-result { display: grid; gap: 10px; }
+.server-update-check-result:empty { display: none; }
+.server-update-note { margin: 0; min-height: 1.4em; color: var(--muted); line-height: 1.6; font-size: 13px; }
+.server-update-note:empty { display: none; }
+.server-update-meta { display: none; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 0; font-size: 12px; line-height: 1.5; }
+.server-update-meta.is-visible { display: flex; }
+.server-update-meta__item { display: inline-flex; gap: 6px; align-items: center; min-width: 0; }
+.server-update-meta__label { color: var(--muted); font: 700 10px/1.2 "IBM Plex Mono", "Cascadia Mono", monospace; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.server-update-meta__value { font-weight: 700; overflow-wrap: anywhere; min-width: 0; }
+.server-update-meta__value a { color: var(--cobalt-dark); text-decoration: underline; text-underline-offset: 3px; }
+.server-update-meta__sep { color: var(--line-dark); }
+.server-update-meta__item--id { min-width: 0; }
+.server-update-meta__code { display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; padding: 1px 6px; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 3px; font: 11px/1.4 "IBM Plex Mono", "Cascadia Mono", monospace; }
+.server-update-status { padding: 0 24px 18px; border-top: 1px solid var(--line); }
+.server-update-status__summary { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 0; cursor: pointer; list-style: none; }
+.server-update-status__summary::-webkit-details-marker { display: none; }
+.server-update-status__toggle { color: var(--cobalt-dark); font: 700 11px/1.2 "IBM Plex Mono", "Cascadia Mono", monospace; text-decoration: underline; text-underline-offset: 3px; }
+.server-update-status__json { margin: 0; max-height: 260px; overflow: auto; font-size: 11px; }
 @media (max-width: 820px) { .button-row, .theme-setting-row__fields { grid-template-columns: 1fr; } }
+@media (max-width: 820px) {
+  .server-update-body { padding: 14px 16px 16px; }
+  .server-update-status { padding: 0 16px 16px; }
+  .server-update-meta__item--id { margin-left: 0; width: 100%; }
+  .server-update-meta__code { max-width: 100%; }
+  .server-update-operation { width: 100%; margin-left: 0; justify-content: flex-start; }
+}
+@media (max-width: 520px) {
+  .server-update-actions { gap: 10px; }
+  .server-update-actions .button { flex: 1 1 auto; }
+}

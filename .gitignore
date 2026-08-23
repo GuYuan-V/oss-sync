@@ -1,4 +1,4 @@
-# Operating system and editor files
+# OS & Editor
 .DS_Store
 Thumbs.db
 Desktop.ini
@@ -8,15 +8,16 @@ Desktop.ini
 *.swo
 *~
 
-# Local environment and secrets
+# Env & secrets
 .env
 .env.*
 !.env.example
 configs/config.local.yaml
 configs/*.local.yaml
 
-# Runtime data: databases, uploaded files, themes, recovery snapshots, and logs
-/data/
+# Runtime data
+/data/*
+!/data/.gitkeep
 *.db
 *.db-journal
 *.db-wal
@@ -25,35 +26,35 @@ configs/*.local.yaml
 *.sqlite3
 *.log
 
-# Go build and test artifacts
+# Go
 /bin/
-/oss-server
-/server
-/server.exe
-/server.exe~
+oss-server
+server
+server.exe
 *.exe
 *.test
 *.out
 coverage.txt
 coverage.out
+*.updated
 
-# Plugin dependencies and build outputs
+# Node / Plugin
 /plugin/node_modules/
 /plugin/main.js
 /plugin/*.js.map
 /plugin/dist/
 
-# Local automation, browser, and code-index artifacts
+# Local tools
 /.codegraph/
 /.omo/
 /.playwright-mcp/
 /.claude/
 
-# Temporary files
+# Temp
 *.tmp
 *.temp
 *.bak
 *.orig
 
-# Private working notes
-/项目技术需求说明书.md
+# Private docs (not for public repo)
+项目技术需求说明书.md

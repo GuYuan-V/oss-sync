@@ -1,3 +1,4 @@
+﻿// 认证页面
 package webui
 
 import (
@@ -87,3 +88,4 @@ func errorsIsNotFound(err error) bool {
 func vaultbackupPurge(tx *gorm.DB, h *Handler, vault models.Vault) (models.VaultBackup, error) {
 	return vaultbackup.PurgeWithTx(tx, h.Cfg.Storage.DataDir, vault)
 }
+

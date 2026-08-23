@@ -1,3 +1,4 @@
+﻿// 控制台主题
 package consoletheme
 
 import (
@@ -246,3 +247,4 @@ func dirStats(dir string) (int, int64, error) {
 	})
 	return count, size, err
 }
+

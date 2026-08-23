@@ -1,3 +1,4 @@
+﻿// 设置策略
 package settingspolicy
 
 import (
@@ -141,3 +142,4 @@ func maxInt64(value, minimum int64) int64 {
 	}
 	return value
 }
+

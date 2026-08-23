@@ -1,3 +1,4 @@
+﻿// 控制台主题选择
 package webui
 
 import (
@@ -61,3 +62,4 @@ func (h *Handler) consoleThemeAsset(c *gin.Context) {
 	}
 	c.File(path)
 }
+

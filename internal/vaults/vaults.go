@@ -1,3 +1,4 @@
+﻿// 仓库服务
 package vaults
 
 import (
@@ -84,6 +85,14 @@ func (h *Handler) List(c *gin.Context) {
 	if !ok {
 		return
 	}
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"))
+	if !ok {
+		return
+	}
+	if err := deviceauth.CheckApproved(h.DB, u.ID, string(did)); err != nil {
+		h.writeDeviceError(c, err)
+		return
+	}
 	var owned []models.Vault
 	if err := h.DB.Where("owner_id = ?", u.ID).Order("is_default desc, created_at asc").Find(&owned).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -94,43 +103,28 @@ func (h *Handler) List(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	// 插件请求携带 client_id 时，只返回该设备被授权的仓库。
-	clientID := deviceauth.NormalizeClientID(c.GetHeader(deviceauth.ClientIDHeader))
-	var authorized map[string]struct{}
-	if clientID != "" {
-		if err := deviceauth.CheckApproved(h.DB, u.ID, clientID); err != nil {
-			h.writeDeviceError(c, err)
-			return
-		}
-		var accesses []models.DeviceVaultAccess
-		if err := h.DB.Where("user_id = ? AND client_id = ?", u.ID, clientID).
-			Find(&accesses).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		authorized = make(map[string]struct{}, len(accesses))
-		for _, access := range accesses {
-			authorized[access.VaultID] = struct{}{}
-		}
+	var accesses []models.DeviceVaultAccess
+	if err := h.DB.Where("user_id = ? AND client_id = ?", u.ID, string(did)).
+		Find(&accesses).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
-
+	authorized := make(map[string]struct{}, len(accesses))
+	for _, access := range accesses {
+		authorized[access.VaultID] = struct{}{}
+	}
 	out := make([]vaultOut, 0, len(owned)+len(memberships))
 	for _, vault := range owned {
-		if authorized != nil {
-			if _, ok := authorized[vault.ID]; !ok {
-				continue
-			}
+		if _, ok := authorized[vault.ID]; !ok {
+			continue
 		}
 		out = append(out, h.toOut(vault, vaultaccess.RoleOwner))
 	}
 	for _, member := range memberships {
 		var vault models.Vault
 		if err := h.DB.Where("id = ?", member.VaultID).First(&vault).Error; err == nil {
-			if authorized != nil {
-				if _, ok := authorized[vault.ID]; !ok {
-					continue
-				}
+			if _, ok := authorized[vault.ID]; !ok {
+				continue
 			}
 			out = append(out, h.toOut(vault, member.Role))
 		}
@@ -141,6 +135,14 @@ func (h *Handler) List(c *gin.Context) {
 func (h *Handler) Create(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {
+		return
+	}
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"))
+	if !ok {
+		return
+	}
+	if err := deviceauth.CheckApproved(h.DB, u.ID, string(did)); err != nil {
+		h.writeDeviceError(c, err)
 		return
 	}
 	var req createRequest
@@ -183,18 +185,9 @@ func (h *Handler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	// 插件创建仓库时，为发起请求的已批准设备自动授权新仓库。
-	clientID := deviceauth.NormalizeClientID(c.GetHeader(deviceauth.ClientIDHeader))
-	if clientID != "" {
-		if err := deviceauth.CheckApproved(h.DB, u.ID, clientID); err != nil {
-			h.writeDeviceError(c, err)
-			return
-		}
-		if err := deviceauth.GrantAccess(h.DB, u.ID, clientID, vault.ID, u.ID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+	if err := deviceauth.GrantAccess(h.DB, u.ID, string(did), vault.ID, u.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	c.JSON(http.StatusCreated, h.toOut(vault, vaultaccess.RoleOwner))
 }
@@ -499,3 +492,4 @@ func (h *Handler) toOut(vault models.Vault, accessRole string) vaultOut {
 		AccessRole: accessRole, StorageQuota: vault.StorageQuota, StorageUsed: vault.StorageUsed,
 		HeadRevision: state.HeadRevision, CreatedAt: vault.CreatedAt.Format(time.RFC3339), UpdatedAt: vault.UpdatedAt.Format(time.RFC3339)}
 }
+

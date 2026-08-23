@@ -1,23 +1,16 @@
+// 协作接口
 package syncapi
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/auth"
 	"github.com/oss/oss-server/internal/collaboration"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/history"
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/vaultaccess"
 )
@@ -79,7 +72,7 @@ func (h *Handler) collabOuts(rows []models.Collaboration) ([]collabOut, error) {
 
 // CollabList 列出当前用户在该仓库的协作关系（owner/manager 看全部，协作者看与自己相关）。
 func (h *Handler) CollabList(c *gin.Context) {
-	u, ok := auth.RequireUser(c)
+	u, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
 		return
 	}
@@ -127,7 +120,7 @@ func (h *Handler) CollabList(c *gin.Context) {
 
 // CollabInbox lists collaborations received by the authenticated user across Vaults.
 func (h *Handler) CollabInbox(c *gin.Context) {
-	u, ok := auth.RequireUser(c)
+	u, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
 		return
 	}
@@ -146,7 +139,7 @@ func (h *Handler) CollabInbox(c *gin.Context) {
 
 // CollabInvite 邀请用户协作 Markdown 文件。
 func (h *Handler) CollabInvite(c *gin.Context) {
-	u, vault, _, ok := h.requireVaultActor(c)
+	u, vault, _, _, ok := h.requireVaultActorSync(c)
 	if !ok {
 		return
 	}
@@ -191,7 +184,7 @@ func (h *Handler) CollabInvite(c *gin.Context) {
 
 // CollabRespond 被邀请者接受或拒绝。协作者即使尚未获得 Vault 成员资格也能响应邀请。
 func (h *Handler) CollabRespond(c *gin.Context) {
-	u, ok := auth.RequireUser(c)
+	u, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
 		return
 	}
@@ -227,7 +220,7 @@ func (h *Handler) CollabRespond(c *gin.Context) {
 
 // CollabRevoke 撤回邀请或解除协作（owner/manager）。
 func (h *Handler) CollabRevoke(c *gin.Context) {
-	u, _, _, ok := h.requireVaultActor(c)
+	u, _, _, _, ok := h.requireVaultActorSync(c)
 	if !ok {
 		return
 	}
@@ -253,7 +246,7 @@ func (h *Handler) CollabRevoke(c *gin.Context) {
 
 // CollabLeave lets an accepted collaborator actively end their collaboration.
 func (h *Handler) CollabLeave(c *gin.Context) {
-	u, ok := auth.RequireUser(c)
+	u, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
 		return
 	}
@@ -275,128 +268,6 @@ func (h *Handler) CollabLeave(c *gin.Context) {
 		VaultID: row.VaultID, FileID: row.FileID, Kind: "revoked", At: time.Now().UnixMilli(),
 	}, []uint{row.OwnerID, row.CollaboratorID})
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
-}
-
-// CollabUpload 协作者上传正文（以协作者身份写入原文件）。
-func (h *Handler) CollabUpload(c *gin.Context) {
-	u, ok := auth.RequireUser(c)
-	if !ok {
-		return
-	}
-	vaultID := c.Param("vault_id")
-	var vault models.Vault
-	if err := h.DB.Where("id = ?", vaultID).First(&vault).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
-		return
-	}
-	fileID, err := strconv.ParseUint(c.Param("file_id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file id"})
-		return
-	}
-	// 校验协作关系。
-	var file models.File
-	if err := h.DB.Where("id = ? AND vault_id = ?", uint(fileID), vault.ID).First(&file).Error; err != nil {
-		file, err = h.acceptedCollaborationFile(u.ID, uint(fileID))
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		}
-		vault = models.Vault{}
-		if err := h.DB.Where("id = ?", file.VaultID).First(&vault).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
-			return
-		}
-	}
-	var collabRow models.Collaboration
-	if err := h.DB.Where("vault_id = ? AND file_id = ? AND collaborator_id = ? AND status = ?",
-		vault.ID, uint(fileID), u.ID, collaboration.StatusAccepted).First(&collabRow).Error; err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "你不是该文件的协作者"})
-		return
-	}
-	// 读取正文。
-	var req struct {
-		Content string `json:"content" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	content := []byte(req.Content)
-
-	clientID := h.requestClientID(c, c.Query("client_id"))
-	deviceName := deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader))
-	if deviceName == "" {
-		deviceName = "网页控制台"
-	}
-
-	vaultLock := h.vaultLock(vault.ID)
-	vaultLock.Lock()
-	defer vaultLock.Unlock()
-	pathLock := h.pathLock(vault.ID + ":" + file.Path)
-	pathLock.Lock()
-	defer pathLock.Unlock()
-
-	err = h.DB.Transaction(func(tx *gorm.DB) error {
-		revision, err := nextVaultRevision(tx, vault.ID)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(h.Cfg.Storage.DataDir, filepath.FromSlash(filestore.VaultStorageKey(vault.ID, file.Path)))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		// 原子写入：先写唯一临时文件，再 rename 到目标路径，
-		// 避免进程崩溃时留下部分写入的损坏文件，也避免覆盖同名 .tmp 文件。
-		tmpFile, err := os.CreateTemp(filepath.Dir(target), ".oss-upload-*")
-		if err != nil {
-			return err
-		}
-		tmp := tmpFile.Name()
-		defer os.Remove(tmp)
-		if _, err := tmpFile.Write(content); err != nil {
-			tmpFile.Close()
-			return err
-		}
-		if err := tmpFile.Close(); err != nil {
-			return err
-		}
-		if err := os.Rename(tmp, target); err != nil {
-			return err
-		}
-		sum := sha256.Sum256(content)
-		now := time.Now()
-		updates := map[string]any{
-			"revision":    revision,
-			"is_deleted":  false,
-			"deleted_at":  nil,
-			"hash":        fmt.Sprintf("%x", sum),
-			"size":        len(content),
-			"m_time":      now.UnixMilli(),
-			"storage_key": filestore.VaultStorageKey(vault.ID, file.Path),
-			"updated_at":  now,
-		}
-		if err := tx.Model(&models.File{}).Where("id = ?", file.ID).Updates(updates).Error; err != nil {
-			return err
-		}
-		actor := history.Actor{
-			Username:   u.Username,
-			DeviceName: deviceName,
-			ClientID:   clientID,
-		}
-		return history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, actor,
-			history.ActionModify, file.Path, "", target, revision)
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	h.notifyRevision(vault.ID)
-	h.publishCollaborationEvent(collaboration.Event{
-		VaultID: vault.ID, FileID: uint(fileID), FilePath: file.Path,
-		Kind: "changed", At: time.Now().UnixMilli(),
-	}, h.collaborationEventUsers(vault.ID, uint(fileID)))
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "file_path": file.Path})
 }
 
 // CollabSSE 建立 SSE 事件流。由于 EventSource 不能带 Authorization 头，
@@ -486,6 +357,3 @@ func (h *Handler) collabSSEAuthorize(c *gin.Context) (*models.User, models.Vault
 	}
 	return user, vault, true
 }
-
-var _ = gorm.ErrRecordNotFound
-var _ = vaultaccess.RoleOwner

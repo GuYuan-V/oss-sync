@@ -1,3 +1,4 @@
+﻿// 历史详情
 package webui
 
 import (
@@ -110,3 +111,4 @@ func newHistoryDiffLine(line string) historyDiffLine {
 		return historyDiffLine{Prefix: " ", Text: line[1:], Kind: "context"}
 	}
 }
+

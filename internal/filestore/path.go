@@ -1,3 +1,4 @@
+﻿// 存储路径
 package filestore
 
 import (
@@ -23,3 +24,4 @@ func DiskPath(dataDir string, file models.File) string {
 		filepath.FromSlash(file.Path),
 	)
 }
+

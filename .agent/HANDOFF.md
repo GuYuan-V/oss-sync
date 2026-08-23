@@ -2,45 +2,56 @@
 
 ## 当前目标
 
-维护 `main` 的稳定基线，并审核尚未合并的 PR #3。项目级智能体协作说明已补齐。
+完成 PR #3 的评审修复，保持在线更新、认证与同步改动可构建、可验证且不回退 `main` 已有能力。
 
 ## 当前状态
 
-- `main` 与 `origin/main` 当前基线为 `7ec2e3c`。
-- PR #1 与 PR #2 的评审修复均已合并，现有测试基线通过。
-- PR #3（在线更新、同步/权限调整及文档重写）仍为未合并状态，需独立审核后再决定是否接收。
+- `origin/main` 基线为 `c77d73e`，已同步到 PR #3 维护分支。
+- PR #3 的评审阻塞项已修复，代码提交为 `bd2a52a`。
+- 当前无已知合并阻塞，等待复审与合并决定。
 
 ## 已完成工作
 
-- PR #1 与 PR #2 已合并，修复了 JWT 算法校验、协作原子写入、历史保留期清理、Web UI 历史写入并发和 `Accept-Language` 解析等问题。
-- 新增根目录 `AGENTS.md`，明确架构入口、同步链路约束、生成物边界和最小验证命令。
+- 删除合并时残留的旧 `CollabUpload`，保留带设备身份、CAS revision 与 operation ID 的新实现。
+- 恢复历史保留期策略函数、每日清理任务、系统设置表单及中英文文案。
+- 恢复 V2 rename 崩溃一致性注释，修正 Windows 目录 fsync 测试的平台判断。
+- 插件更新仅接受 GitHub HTTPS Release URL，并校验单文件上限、size 与 SHA-256 digest。
+- 插件更新在替换前失败时恢复同步与协作后台任务；新增相应回归测试。
+- 修复 update handler 测试回调的 goroutine 数据竞争。
 
 ## 重要决策
 
-- 同步写入必须保持 Vault 隔离、设备授权、revision/operation ID 语义，以及数据库与磁盘状态的一致性。
-- 历史保留期是系统级设置；所有历史写入与清理继续通过 Vault 锁串行化。
-- `plugin/main.js`、`data/` 和本地数据库属于生成物或运行数据，不进入版本库。
+- 同步写入继续保持 Vault 隔离、设备授权、revision/operation ID 语义，以及数据库与磁盘状态一致性。
+- 历史清理按 Vault 加锁，并复用 `history.CleanupExpired`，不另建清理实现。
+- 插件更新文件单个上限为 20 MiB；缺失或不匹配的 Release digest/size 一律拒绝。
+- 更新失败只在旧插件实例仍存活时重启后台任务，避免新旧实例重复轮询。
 
 ## 修改的重要文件
 
-- `AGENTS.md`
-- `.agent/HANDOFF.md`
-- 后续审核重点：PR #3 的 `internal/update/`、认证/同步改动、配置与构建发布边界。
+- 合并回归：`internal/syncapi/collab.go`、`internal/cron/cleanup.go`、`internal/settingspolicy/runtime.go`
+- 管理页：`internal/webui/locale_admin.go`、`internal/webui/templates/admin_system.html`
+- 插件更新：`plugin/src/plugin-update.ts`、`plugin/src/main.ts` 及对应测试
+- 测试修正：`internal/update/atomic_marker_test.go`、`handler_trigger_test.go`
 
 ## 验证情况
 
-- 既有基线：`go build ./...`、`go vet ./...`、`go test ./...` 通过；插件类型检查与 69 项测试通过。
-- 本次只改 Markdown；已人工核对文档中的路径、工具链版本和验证命令，未重复运行代码测试。
+- `go test ./...` ✅
+- `go vet ./...` ✅
+- `go test -race ./...`：除 update 测试夹具竞态外其余包通过；修复后 `go test -race ./internal/update` ✅
+- Node.js 26：`npm exec tsc -- --noEmit` ✅
+- `npm test` ✅（249/249）
+- `npm run build` ✅
+- 最终插件更新定向测试 ✅（23/23）
 
 ## 已知问题 / 风险
 
-- PR #3 体量为 213 个文件、约 2.5 万行新增，且包含自更新、认证和同步核心路径；其作者验证范围不足以覆盖变更面。
-- `PurgeExpiredHistory`/`CleanupExpired` 仍无独立单测。
+- `PurgeExpiredHistory` / `history.CleanupExpired` 仍无独立单元测试，当前由编译、WebUI 设置测试和全量集成验证覆盖。
+- PR #3 变更面仍较大，合并前建议复核发布资产是否实际提供 GitHub `digest` 字段。
 
 ## 剩余工作
 
-- 完成 PR #3 的代码审核与必要验证，给出是否可合并的结论。
+- 等待 PR #3 复审与合并决定。
 
 ## 推荐下一步
 
-从 PR #3 的真实 diff 入手，优先检查在线更新的信任边界、跨重启/回滚、认证兼容性，以及同步 revision 与墓碑行为；不要仅依据 PR 描述。
+优先复核 PR #3 的最终 GitHub diff 与远程检查；若发布流程尚未写入 Release asset digest，先补齐发布流水线再启用在线更新。

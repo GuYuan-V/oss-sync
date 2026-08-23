@@ -1,3 +1,4 @@
+﻿// 主题克隆
 package blog
 
 import (
@@ -152,3 +153,4 @@ func writeThemeCopy(targetDir, rel string, content []byte) error {
 	}
 	return nil
 }
+

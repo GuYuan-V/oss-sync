@@ -21,6 +21,12 @@ const AUTH_CODE_KEYS: ReadonlyArray<readonly [string, TranslationKey]> = [
   ["device_revoked", "auth.deviceRevoked"],
   ["device_not_authorized", "auth.deviceUnauthorized"],
   ["device_unknown", "auth.deviceUnknown"],
+  ["device_identity_required", "auth.deviceIdentityRequired"],
+  ["device_identity_mismatch", "auth.deviceIdentityMismatch"],
+  ["missing_base_revision", "collab.errorMissingBaseRevision"],
+  ["invalid_base_revision", "collab.errorInvalidBaseRevision"],
+  ["missing_operation_id", "collab.errorMissingOperationID"],
+  ["invalid_operation_id", "collab.errorInvalidOperationID"],
 ];
 
 export function localizeError(error: unknown, t: Translator, fallback: string): string {

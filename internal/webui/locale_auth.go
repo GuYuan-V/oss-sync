@@ -1,3 +1,4 @@
+﻿// 认证文案
 package webui
 
 func init() {
@@ -37,3 +38,4 @@ func init() {
 		"auth.register_button":          {"创建账户", "Create account"},
 	})
 }
+

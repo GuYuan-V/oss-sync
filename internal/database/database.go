@@ -1,3 +1,4 @@
+﻿// 数据库初始化
 package database
 
 import (
@@ -299,3 +300,4 @@ func backfillVaultSettings(db *gorm.DB) error {
 	}
 	return nil
 }
+

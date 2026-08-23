@@ -1,3 +1,4 @@
+﻿// 系统管理
 package webui
 
 import (
@@ -48,6 +49,7 @@ type adminSystemData struct {
 	DatabaseDSN            string
 	Error                  string
 	Saved                  bool
+	Update                 adminUpdateStatus
 }
 
 type adminSystemInput struct {
@@ -103,6 +105,7 @@ func (h *Handler) adminSystemPage(c *gin.Context) {
 	data.ConfigMaxUploadSizeMB = configUploadBytes / bytesPerMegabyte
 	data.DatabaseDriver = h.Cfg.Database.Driver
 	data.DatabaseDSN = databaseStatusDSN(h.Cfg.Database.Driver, h.Cfg.Database.DSN)
+	data.Update = h.buildUpdateStatus()
 
 	h.render(c, http.StatusOK, "admin-system", h.t(c, "page.admin_system"), "admin", "admin-system", data)
 }
@@ -289,3 +292,4 @@ func (h *Handler) configuredMaxUploadBytes() int64 {
 	}
 	return maxMB * bytesPerMegabyte
 }
+

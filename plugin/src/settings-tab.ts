@@ -1,7 +1,9 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import type { ButtonComponent } from "obsidian";
 import type OSSPlugin from "./main";
 import type { OSSSettings } from "./settings";
 import { validateLoginCredentials } from "./login-state";
+import { isUpdateAvailable } from "./plugin-update";
 
 export class OSSSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: OSSPlugin) {
@@ -405,6 +407,19 @@ export class OSSSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.diagnosticsEnabled = value;
             await this.plugin.saveSettings();
+            this.plugin.emitDiagnosticsEnabled(value);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(this.plugin.t("settings.sync.conflictEditWarning"))
+      .setDesc(this.plugin.t("settings.sync.conflictEditWarningDesc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.conflictEditWarning)
+          .onChange(async (value) => {
+            this.plugin.settings.conflictEditWarning = value;
+            await this.plugin.saveSettings();
           })
       );
 
@@ -417,6 +432,249 @@ export class OSSSettingTab extends PluginSettingTab {
           if (!synced) new Notice(this.plugin.t("notice.syncIncomplete"));
         })
       );
+
+    // 插件更新对所有登录用户可见，服务端更新仅管理员
+    if (this.plugin.isLoggedIn()) {
+      this.renderUpdateSection(containerEl);
+    }
+    if (this.plugin.isAdmin()) {
+      this.renderServerUpdateSection(containerEl);
+    }
+  }
+
+  private renderUpdateSection(containerEl: HTMLElement): void {
+    containerEl.createEl("h3", { text: this.plugin.t("settings.update.title") });
+
+    new Setting(containerEl)
+      .setName(this.plugin.t("settings.update.repo"))
+      .setDesc(this.plugin.t("settings.update.repoDesc"))
+      .addText((text) =>
+        text
+          .setPlaceholder("helantianshen/oss-sync")
+          .setValue(this.plugin.settings.updateRepo)
+          .onChange(async (value) => {
+            this.plugin.settings.updateRepo = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    const status = new Setting(containerEl)
+      .setName(this.plugin.t("settings.update.status"))
+      .setDesc(
+        this.plugin.t("settings.update.currentVersion", {
+          version: this.plugin.manifest.version,
+        })
+      );
+
+    let applyButton: ButtonComponent | null = null;
+    status.addButton((button) =>
+      button.setButtonText(this.plugin.t("settings.update.check")).onClick(async () => {
+        button.setDisabled(true);
+        status.setDesc(this.plugin.t("settings.update.checking"));
+        if (applyButton) {
+          applyButton.buttonEl.remove();
+          applyButton = null;
+        }
+        try {
+          const result = await this.plugin.checkPluginUpdate();
+          if (isUpdateAvailable(result)) {
+            status.setDesc(
+              this.plugin.t("settings.update.available", {
+                from: result.currentVersion,
+                to: result.remoteVersion,
+              })
+            );
+            status.addButton((updateButton) => {
+              applyButton = updateButton;
+              updateButton
+                .setButtonText(this.plugin.t("settings.update.apply"))
+                .setCta()
+                .onClick(async () => {
+                  updateButton.setDisabled(true);
+                  try {
+                    await this.plugin.updatePluginFromRelease();
+                    new Notice(this.plugin.t("notice.updateCompleted"));
+                  } catch (error: unknown) {
+                    updateButton.setDisabled(false);
+                    new Notice(this.plugin.t("notice.updateFailed", { error: this.errorMessage(error) }));
+                  }
+                });
+            });
+          } else {
+            status.setDesc(
+              this.plugin.t("settings.update.latest", { version: result.remoteVersion })
+            );
+          }
+        } catch (error: unknown) {
+          status.setDesc(this.plugin.t("settings.update.checkFailed", { error: this.errorMessage(error) }));
+        } finally {
+          button.setDisabled(false);
+        }
+      })
+    );
+  }
+
+  private renderServerUpdateSection(containerEl: HTMLElement): void {
+    containerEl.createEl("h3", { text: this.plugin.t("settings.serverUpdate.title") });
+    containerEl.createEl("p", { text: this.plugin.t("settings.serverUpdate.desc"), cls: "setting-item-description" });
+
+    let currentVersion = this.plugin.t("common.unknown");
+    let latestVersion: string | null = null;
+    let checkId: string | null = null;
+    let candidateVersion: string | null = null;
+    let isChecking = false;
+    let isTriggering = false;
+    let isPolling = false;
+    let lastPollCount = 0;
+
+    const versionSetting = new Setting(containerEl)
+      .setName(this.plugin.t("settings.serverUpdate.statusLabel"))
+      .setDesc(this.plugin.t("settings.serverUpdate.current", { version: currentVersion }));
+
+    const statusSetting = new Setting(containerEl)
+      .setName(this.plugin.t("settings.serverUpdate.statusLabel"))
+      .setDesc(this.plugin.t("settings.serverUpdate.statusIdle"));
+
+    let checkButton: ButtonComponent | null = null;
+    let triggerButton: ButtonComponent | null = null;
+
+    const handleAuthError = (error: unknown): void => {
+      statusSetting.setDesc(this.plugin.t("settings.serverUpdate.authError"));
+      new Notice(this.plugin.t("notice.serverUpdateAuthFailed", { error: this.errorMessage(error) }));
+    };
+
+    const isAuthError = (error: unknown): boolean => {
+      const anyErr = error as { status?: number };
+      return anyErr && (anyErr.status === 401 || anyErr.status === 403);
+    };
+
+    const refreshTrigger = (): void => {
+      if (!triggerButton) return;
+      if (candidateVersion && checkId) {
+        triggerButton.buttonEl.style.display = "";
+        triggerButton.setButtonText(`更新版本到 ${candidateVersion}`);
+        triggerButton.setDisabled(isTriggering || isPolling || isChecking);
+      } else {
+        triggerButton.buttonEl.style.display = "none";
+      }
+    };
+
+    const doTrigger = async (): Promise<void> => {
+      if (!checkId || !candidateVersion) return;
+      if (!window.confirm(`确认将服务端更新到 ${candidateVersion}？`)) return;
+      if (isTriggering || isPolling) return;
+      isTriggering = true;
+      triggerButton?.setDisabled(true);
+      checkButton?.setDisabled(true);
+      statusSetting.setDesc(this.plugin.t("settings.serverUpdate.triggering"));
+      try {
+        const trigger = await this.plugin.triggerServerUpdate({ checkId, expectedVersion: candidateVersion });
+        if (!trigger.ok) throw new Error(trigger.error ?? trigger.code);
+        isTriggering = false;
+        isPolling = true;
+        lastPollCount = 0;
+        const poller = this.plugin.createServerUpdatePoller({ expectedVersion: candidateVersion! });
+        const outcome = await poller.poll();
+        isPolling = false;
+        lastPollCount = poller.getAttempts();
+        if (outcome.kind === "success") {
+          currentVersion = outcome.version;
+          versionSetting.setDesc(this.plugin.t("settings.serverUpdate.current", { version: currentVersion }));
+          statusSetting.setDesc(this.plugin.t("settings.serverUpdate.success", { version: outcome.version }));
+          new Notice(this.plugin.t("notice.serverUpdateSuccess", { version: outcome.version }));
+        } else if (outcome.kind === "rolled_back") {
+          currentVersion = outcome.currentVersion;
+          versionSetting.setDesc(this.plugin.t("settings.serverUpdate.current", { version: currentVersion }));
+          statusSetting.setDesc(this.plugin.t("settings.serverUpdate.rolledBack", { version: outcome.currentVersion }));
+          new Notice(this.plugin.t("notice.serverUpdateRolledBack", { version: outcome.currentVersion }));
+        } else if (outcome.kind === "failed") {
+          statusSetting.setDesc(this.plugin.t("settings.serverUpdate.failed", { state: outcome.state, error: outcome.error }));
+          new Notice(this.plugin.t("notice.serverUpdateFailed", { error: outcome.error }));
+        } else if (outcome.kind === "timeout") {
+          statusSetting.setDesc(this.plugin.t("settings.serverUpdate.timeout", { count: String(outcome.attempts) }));
+          new Notice(this.plugin.t("notice.serverUpdateFailed", { error: this.plugin.t("settings.serverUpdate.timeout", { count: String(outcome.attempts) }) }));
+        } else if (outcome.kind === "auth_error") {
+          handleAuthError(outcome.error);
+        }
+        checkButton?.setDisabled(false);
+        refreshTrigger();
+      } catch (error: unknown) {
+        isTriggering = false;
+        isPolling = false;
+        if (isAuthError(error)) handleAuthError(error);
+        else {
+          statusSetting.setDesc(this.plugin.t("settings.serverUpdate.triggerFailed", { error: this.errorMessage(error) }));
+          new Notice(this.plugin.t("notice.serverUpdateFailed", { error: this.errorMessage(error) }));
+        }
+        checkButton?.setDisabled(false);
+        refreshTrigger();
+      }
+    };
+
+    void this.plugin.getServerVersion().then((info) => {
+      currentVersion = info.version ?? currentVersion;
+      versionSetting.setDesc(this.plugin.t("settings.serverUpdate.current", { version: currentVersion }));
+    }).catch((error: unknown) => {
+      if (isAuthError(error)) {
+        versionSetting.setDesc(this.plugin.t("settings.serverUpdate.staleRole"));
+        handleAuthError(error);
+      }
+    });
+
+    new Setting(containerEl)
+      .setName(this.plugin.t("settings.serverUpdate.check"))
+      .setDesc(this.plugin.t("settings.serverUpdate.statusIdle"))
+      .addButton((button) => {
+        checkButton = button;
+        button.setButtonText(this.plugin.t("settings.serverUpdate.check")).onClick(async () => {
+          if (isChecking || isTriggering || isPolling) return;
+          isChecking = true;
+          button.setDisabled(true);
+          triggerButton?.setDisabled(true);
+          statusSetting.setDesc(this.plugin.t("settings.serverUpdate.statusChecking"));
+          try {
+            const check = await this.plugin.checkServerUpdate();
+            currentVersion = check.current_version;
+            latestVersion = check.latest_version;
+            checkId = check.check_id;
+            candidateVersion = check.candidate?.version ?? latestVersion;
+            versionSetting.setDesc(this.plugin.t("settings.serverUpdate.current", { version: currentVersion }));
+            if (check.update_available && candidateVersion && checkId) {
+              statusSetting.setDesc(this.plugin.t("settings.serverUpdate.available", { from: currentVersion, to: candidateVersion }));
+              refreshTrigger();
+            } else {
+              statusSetting.setDesc(this.plugin.t("settings.serverUpdate.noUpdate", { version: currentVersion }));
+              candidateVersion = null;
+              checkId = null;
+              refreshTrigger();
+            }
+          } catch (error: unknown) {
+            if (isAuthError(error)) handleAuthError(error);
+            else statusSetting.setDesc(this.plugin.t("settings.serverUpdate.checkFailed", { error: this.errorMessage(error) }));
+          } finally {
+            isChecking = false;
+            button.setDisabled(false);
+            if (!isTriggering && !isPolling) refreshTrigger();
+          }
+        });
+      })
+      .addButton((button) => {
+        triggerButton = button;
+        button.setButtonText("更新版本").setCta();
+        button.buttonEl.style.display = "none";
+        button.onClick(doTrigger);
+      });
+
+    void this.plugin.getServerUpdateStatus().then((s) => {
+      const state = s.state ?? s.last_update?.state ?? "idle";
+      currentVersion = s.version ?? currentVersion;
+      versionSetting.setDesc(this.plugin.t("settings.serverUpdate.current", { version: currentVersion }));
+      if (s.last_update?.state) {
+        statusSetting.setDesc(`${state}: ${s.last_update.phase ?? s.last_update.state}`);
+      }
+    }).catch((error: unknown) => {
+      if (isAuthError(error)) handleAuthError(error);
+    });
   }
 
   private validateCredentials(): string | null {

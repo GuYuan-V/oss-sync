@@ -6,6 +6,7 @@
 import { requestUrl } from "obsidian";
 import type { Diagnostics } from "./diagnostics";
 import type { OSSSettings } from "./settings";
+import { isValidOperationID, isValidServerRevision } from "./operation-id.js";
 
 export interface AuthResponse {
   token: string;
@@ -113,6 +114,12 @@ export interface SyncFileMeta {
   server_time?: number;
 }
 
+export interface CollaborationUploadInput {
+  readonly content: string;
+  readonly baseRevision: number;
+  readonly operationID: string;
+}
+
 export interface SyncManifestResponse {
   snapshot_revision: number;
   compacted_revision: number;
@@ -189,6 +196,84 @@ export class OSSApiError extends Error {
   }
 }
 
+export interface ServerVersionInfo {
+  readonly version: string;
+  readonly env: string;
+  readonly commit?: string;
+  readonly built_at?: string;
+}
+
+export interface ServerUpdateCandidate {
+  readonly version: string;
+  readonly tag: string;
+  readonly goos: string;
+  readonly goarch: string;
+  readonly asset_name: string;
+  readonly asset_url: string;
+  readonly release_url: string;
+  readonly size: number;
+  readonly digest: string;
+  readonly release_id: number;
+  readonly asset_id: number;
+}
+
+export interface ServerUpdateCheckResponse {
+  readonly check_id: string;
+  readonly candidate: ServerUpdateCandidate;
+  readonly current_version: string;
+  readonly latest_version: string;
+  readonly update_available: boolean;
+  readonly release_url: string;
+  readonly expires_at: number;
+}
+
+export interface ServerUpdateOperation {
+  readonly id: string;
+  readonly state: string;
+  readonly version: string;
+  readonly started_at_unix: number;
+  readonly updated_at_unix: number;
+  readonly error?: string;
+}
+
+export interface ServerUpdateStatusResponse {
+  readonly version: string;
+  readonly exec_path: string;
+  readonly backup_path: string;
+  readonly update_in_progress: boolean;
+  readonly state: string;
+  readonly last_check?: {
+    readonly checked_at: string;
+    readonly current_version: string;
+    readonly latest_version?: string;
+    readonly update_available: boolean;
+    readonly release_url?: string;
+    readonly note?: string;
+  };
+  readonly last_update?: {
+    readonly at: string;
+    readonly ok: boolean;
+    readonly code: string;
+    readonly phase: string;
+    readonly state: string;
+    readonly version?: string;
+    readonly error?: string;
+    readonly backup_path?: string;
+  };
+  readonly manager_status?: {
+    readonly active?: ServerUpdateOperation;
+    readonly history: readonly ServerUpdateOperation[];
+  };
+}
+
+export interface ServerUpdateTriggerResponse {
+  readonly ok: boolean;
+  readonly code: string;
+  readonly operation?: ServerUpdateOperation;
+  readonly version?: string;
+  readonly error?: string;
+}
+
 export class OSSApiClient {
   /** 服务端时间与本地时间的偏移，单位为毫秒。 */
   private timeOffset = 0;
@@ -221,6 +306,38 @@ export class OSSApiClient {
 
   async authStatus(): Promise<AuthStatus> {
     return this.doRequest<AuthStatus>("GET", "/api/auth/status");
+  }
+
+  /** 校验当前令牌是否有管理员权限（服务端 /api/admin 拒绝非管理员）。 */
+  async checkAdminAccess(): Promise<boolean> {
+    try {
+      await this.doRequest("GET", "/api/admin/users");
+      return true;
+    } catch (error) {
+      if (error instanceof OSSApiError && (error.status === 401 || error.status === 403)) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async getServerVersion(): Promise<ServerVersionInfo> {
+    return this.doRequest<ServerVersionInfo>("GET", "/api/admin/version");
+  }
+
+  async checkServerUpdate(): Promise<ServerUpdateCheckResponse> {
+    return this.doRequest<ServerUpdateCheckResponse>("GET", "/api/admin/update/check");
+  }
+
+  async getServerUpdateStatus(): Promise<ServerUpdateStatusResponse> {
+    return this.doRequest<ServerUpdateStatusResponse>("GET", "/api/admin/update/status");
+  }
+
+  async triggerServerUpdate(opts: { readonly checkId: string; readonly expectedVersion: string }): Promise<ServerUpdateTriggerResponse> {
+    return this.doRequest<ServerUpdateTriggerResponse>("POST", "/api/admin/update", {
+      check_id: opts.checkId,
+      expected_version: opts.expectedVersion,
+    });
   }
 
   async login(): Promise<AuthResponse> {
@@ -550,21 +667,81 @@ export class OSSApiClient {
   }
 
   /** 以协作者身份上传协作文件正文。 */
-  async collabUpload(vaultID: string, fileID: number, content: string): Promise<{ status: string }> {
+  async collabUpload(
+    vaultID: string,
+    fileID: number,
+    input: CollaborationUploadInput
+  ): Promise<SyncFileMeta> {
     const startedAt = Date.now();
+    const hasBaseRevision = input.baseRevision !== undefined && input.baseRevision !== null;
+    const hasOperationID = typeof input.operationID === "string" && input.operationID.length > 0;
+    const baseRevisionValid = isValidServerRevision(input.baseRevision);
+    const operationIDValid = isValidOperationID(input.operationID);
+    this.diagnostics?.record({
+      kind: "collab_upload_attempt",
+      at: Date.now(),
+      hasBaseRevision,
+      baseRevisionValid,
+      hasOperationID,
+      operationIDValid,
+      operationIDLength: typeof input.operationID === "string" ? input.operationID.length : 0,
+    });
+    if (!hasBaseRevision || !baseRevisionValid) {
+      const code = !hasBaseRevision ? "missing_base_revision" : "invalid_base_revision";
+      const err = new OSSApiError("base_revision is required", 400, undefined, code);
+      this.diagnostics?.record({
+        kind: "api_error",
+        at: Date.now(),
+        scope: "collab_upload",
+        status: 400,
+        code,
+        reason: "invalid_collaboration_upload_state",
+      });
+      throw err;
+    }
+    if (!hasOperationID || !operationIDValid) {
+      const raw = typeof input.operationID === "string" ? input.operationID.trim() : "";
+      const code = raw === "" ? "missing_operation_id" : "invalid_operation_id";
+      const err = new OSSApiError("operation_id is required", 400, undefined, code);
+      this.diagnostics?.record({
+        kind: "api_error",
+        at: Date.now(),
+        scope: "collab_upload",
+        status: 400,
+        code,
+        reason: "invalid_collaboration_upload_state",
+      });
+      throw err;
+    }
     try {
-      return await this.doRequest<{ status: string }>(
+      return await this.doRequest<SyncFileMeta>(
         "POST",
         `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/files/${encodeURIComponent(String(fileID))}/upload`,
-        { content }
+        {
+          content: input.content,
+          base_revision: input.baseRevision,
+          operation_id: input.operationID,
+        }
       );
+    } catch (error) {
+      if (error instanceof OSSApiError && error.status === 400) {
+        this.diagnostics?.record({
+          kind: "api_error",
+          at: Date.now(),
+          scope: "collab_upload",
+          status: error.status,
+          ...(error.code ? { code: error.code } : {}),
+          reason: "invalid_collaboration_upload_state",
+        });
+      }
+      throw error;
     } finally {
       this.diagnostics?.record({
         kind: "transfer",
         at: Date.now(),
         scope: "collab_upload",
         durationMs: Date.now() - startedAt,
-        bytes: new TextEncoder().encode(content).byteLength,
+        bytes: new TextEncoder().encode(input.content).byteLength,
       });
     }
   }

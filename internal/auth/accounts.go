@@ -1,3 +1,4 @@
+﻿// 账户管理
 package auth
 
 import (
@@ -11,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/oss/oss-server/internal/config"
+	"github.com/oss/oss-server/internal/deviceauth"
 	"github.com/oss/oss-server/internal/jwt"
 	"github.com/oss/oss-server/internal/models"
 )
@@ -99,15 +101,39 @@ func AuthenticateToken(db *gorm.DB, cfg *config.Config, token string) (*models.U
 	return authenticateBearer(db, cfg, token)
 }
 
+// AuthenticateIdentityToken validates a bearer token and returns its optional device binding.
+func AuthenticateIdentityToken(db *gorm.DB, cfg *config.Config, token string) (*Identity, error) {
+	return authenticateBearerIdentity(db, cfg, token)
+}
+
 // IssueToken 为用户签发与 API 登录相同的 JWT。
 func IssueToken(cfg *config.Config, user models.User) (string, int64, error) {
-	ttl := time.Duration(cfg.Auth.JWTTTLHours) * time.Hour
-	token, err := jwt.Sign(cfg.Auth.JWTSecret, jwt.Claims{
+	return issueToken(cfg, jwt.Claims{
 		UserID:       user.ID,
 		Username:     user.Username,
 		Role:         user.Role,
 		TokenVersion: user.TokenVersion,
-	}, ttl)
+	})
+}
+
+// IssueDeviceToken 为指定设备签发绑定 did 的 JWT，复用与 IssueToken 相同的签名逻辑。
+func IssueDeviceToken(cfg *config.Config, user models.User, deviceID jwt.DeviceID) (string, int64, error) {
+	normalized := deviceauth.NormalizeClientID(string(deviceID))
+	if normalized == "" {
+		return "", 0, errors.New("invalid device id")
+	}
+	return issueToken(cfg, jwt.Claims{
+		UserID:       user.ID,
+		Username:     user.Username,
+		Role:         user.Role,
+		TokenVersion: user.TokenVersion,
+		DeviceID:     jwt.DeviceID(normalized),
+	})
+}
+
+func issueToken(cfg *config.Config, claims jwt.Claims) (string, int64, error) {
+	ttl := time.Duration(cfg.Auth.JWTTTLHours) * time.Hour
+	token, err := jwt.Sign(cfg.Auth.JWTSecret, claims, ttl)
 	if err != nil {
 		return "", 0, err
 	}
@@ -149,7 +175,8 @@ func updatePassword(db *gorm.DB, userID uint, newPassword string) error {
 		return fmt.Errorf("生成密码哈希失败: %w", err)
 	}
 	return db.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]any{
-		"password_hash":  string(hash),
+		"password_hash": string(hash),
 		"token_version": gorm.Expr("token_version + 1"),
 	}).Error
 }
+

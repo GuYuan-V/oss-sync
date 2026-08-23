@@ -1,3 +1,4 @@
+﻿// 认证设置
 package auth
 
 import (
@@ -53,3 +54,4 @@ func SetRegistrationEnabled(db *gorm.DB, enabled bool) error {
 	}
 	return nil
 }
+

@@ -1,3 +1,4 @@
+﻿// 历史记录接口
 package syncapi
 
 import (
@@ -20,6 +21,7 @@ import (
 	"github.com/oss/oss-server/internal/deviceauth"
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/history"
+	"github.com/oss/oss-server/internal/jwt"
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/recycle"
 	"github.com/oss/oss-server/internal/vaultaccess"
@@ -57,6 +59,38 @@ func (h *Handler) requireVaultActor(c *gin.Context) (*models.User, models.Vault,
 		}
 	}
 	return u, vault, role, true
+}
+
+func (h *Handler) requireVaultActorSync(c *gin.Context) (*models.User, models.Vault, string, jwt.DeviceID, bool) {
+	u, ok := auth.RequireUser(c)
+	if !ok {
+		return nil, models.Vault{}, "", "", false
+	}
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"))
+	if !ok {
+		return nil, models.Vault{}, "", "", false
+	}
+	vault, role, err := vaultaccess.Resolve(h.DB, u.ID, c.Param("vault_id"))
+	if err != nil {
+		if u.Role == "admin" {
+			if err := h.DB.Where("id = ?", c.Param("vault_id")).First(&vault).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
+				return nil, models.Vault{}, "", "", false
+			}
+			role = vaultaccess.RoleAdmin
+		} else {
+			c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
+			return nil, models.Vault{}, "", "", false
+		}
+	}
+	if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vault.ID); err != nil {
+		h.writeDeviceAuthError(c, err)
+		return nil, models.Vault{}, "", "", false
+	}
+	if !h.recordDeviceActivityWithDID(c, u.ID, vault.ID, did) {
+		return nil, models.Vault{}, "", "", false
+	}
+	return u, vault, role, did, true
 }
 
 func (h *Handler) requireHistoryReader(c *gin.Context, path string) (*models.User, models.Vault, string, bool) {
@@ -99,6 +133,60 @@ func (h *Handler) requireHistoryReader(c *gin.Context, path string) (*models.Use
 	return u, vault, "collaborator", true
 }
 
+func (h *Handler) requireHistoryReaderSync(c *gin.Context, path string) (*models.User, models.Vault, string, jwt.DeviceID, bool) {
+	u, ok := auth.RequireUser(c)
+	if !ok {
+		return nil, models.Vault{}, "", "", false
+	}
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader), c.Query("client_id"))
+	if !ok {
+		return nil, models.Vault{}, "", "", false
+	}
+	vault, role, err := vaultaccess.Resolve(h.DB, u.ID, c.Param("vault_id"))
+	if err == nil || u.Role == "admin" {
+		if err != nil {
+			if err := h.DB.Where("id = ?", c.Param("vault_id")).First(&vault).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
+				return nil, models.Vault{}, "", "", false
+			}
+			role = vaultaccess.RoleAdmin
+		}
+		if err := deviceauth.CheckVaultAccess(h.DB, u.ID, string(did), vault.ID); err != nil {
+			h.writeDeviceAuthError(c, err)
+			return nil, models.Vault{}, "", "", false
+		}
+		if !h.recordDeviceActivityWithDID(c, u.ID, vault.ID, did) {
+			return nil, models.Vault{}, "", "", false
+		}
+		return u, vault, role, did, true
+	}
+	var file models.File
+	if err := h.DB.Where("vault_id = ? AND path = ?", c.Param("vault_id"), path).First(&file).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
+		return nil, models.Vault{}, "", "", false
+	}
+	var count int64
+	if err := h.DB.Model(&models.Collaboration{}).Where(
+		"vault_id = ? AND file_id = ? AND collaborator_id = ? AND status = ?",
+		file.VaultID, file.ID, u.ID, collaboration.StatusAccepted,
+	).Count(&count).Error; err != nil || count == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
+		return nil, models.Vault{}, "", "", false
+	}
+	if err := h.DB.Where("id = ?", file.VaultID).First(&vault).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
+		return nil, models.Vault{}, "", "", false
+	}
+	if err := deviceauth.CheckApproved(h.DB, u.ID, string(did)); err != nil {
+		h.writeDeviceAuthError(c, err)
+		return nil, models.Vault{}, "", "", false
+	}
+	if !h.recordDeviceActivityWithDID(c, u.ID, vault.ID, did) {
+		return nil, models.Vault{}, "", "", false
+	}
+	return u, vault, "collaborator", did, true
+}
+
 // historyActor 构造历史操作者信息。
 func (h *Handler) historyActor(c *gin.Context, u *models.User) history.Actor {
 	deviceName := deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader))
@@ -109,6 +197,18 @@ func (h *Handler) historyActor(c *gin.Context, u *models.User) history.Actor {
 		Username:   u.Username,
 		DeviceName: deviceName,
 		ClientID:   h.requestClientID(c, c.Query("client_id")),
+	}
+}
+
+func (h *Handler) historyActorWithDID(c *gin.Context, u *models.User, did jwt.DeviceID) history.Actor {
+	deviceName := deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader))
+	if deviceName == "" {
+		deviceName = "网页控制台"
+	}
+	return history.Actor{
+		Username:   u.Username,
+		DeviceName: deviceName,
+		ClientID:   string(did),
 	}
 }
 
@@ -142,7 +242,7 @@ func (h *Handler) V2HistoryList(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "path is required"})
 		return
 	}
-	_, vault, _, ok := h.requireHistoryReader(c, path)
+	_, vault, _, _, ok := h.requireHistoryReaderSync(c, path)
 	if !ok {
 		return
 	}
@@ -178,7 +278,7 @@ func (h *Handler) V2HistoryDetail(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "history not found"})
 		return
 	}
-	_, vault, _, ok := h.requireHistoryReader(c, row.FilePath)
+	_, vault, _, _, ok := h.requireHistoryReaderSync(c, row.FilePath)
 	if !ok {
 		return
 	}
@@ -228,7 +328,7 @@ func (h *Handler) currentFileContent(vaultID, path string) []byte {
 // V2HistoryRestore 处理 POST /api/vaults/:vault_id/sync/history/:history_id/restore?path=xxx。
 // 仅 owner / manager / 管理员可恢复。
 func (h *Handler) V2HistoryRestore(c *gin.Context) {
-	u, vault, role, ok := h.requireVaultActor(c)
+	u, vault, role, did, ok := h.requireVaultActorSync(c)
 	if !ok {
 		return
 	}
@@ -255,7 +355,7 @@ func (h *Handler) V2HistoryRestore(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "this history record has no snapshot", "code": "no_snapshot"})
 		return
 	}
-	meta, err := h.writeFileFromBytes(vault, row.FilePath, content, h.historyActor(c, u), history.ActionRestore, "")
+	meta, err := h.writeFileFromBytes(vault, row.FilePath, content, h.historyActorWithDID(c, u, did), history.ActionRestore, "")
 	if err != nil {
 		h.writeWriteError(c, err)
 		return
@@ -363,7 +463,7 @@ func (h *Handler) writeWriteError(c *gin.Context, err error) {
 
 // RecycleList 处理 GET /api/vaults/:vault_id/recycle-bin。
 func (h *Handler) RecycleList(c *gin.Context) {
-	_, vault, _, ok := h.requireVaultActor(c)
+	_, vault, _, _, ok := h.requireVaultActorSync(c)
 	if !ok {
 		return
 	}
@@ -399,7 +499,7 @@ func (h *Handler) RecycleList(c *gin.Context) {
 
 // RecycleRestore 处理 POST /api/vaults/:vault_id/recycle-bin/:file_id/restore。
 func (h *Handler) RecycleRestore(c *gin.Context) {
-	u, vault, role, ok := h.requireVaultActor(c)
+	u, vault, role, did, ok := h.requireVaultActorSync(c)
 	if !ok {
 		return
 	}
@@ -420,7 +520,7 @@ func (h *Handler) RecycleRestore(c *gin.Context) {
 
 	newKey := filestore.VaultStorageKey(vault.ID, file.Path)
 	newPath := filepath.Join(h.Cfg.Storage.DataDir, filepath.FromSlash(newKey))
-	actor := h.historyActor(c, u)
+	actor := h.historyActorWithDID(c, u, did)
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
 		// 从回收站移回正文。
 		if err := recycle.MoveOut(h.Cfg.Storage.DataDir, file, newPath); err != nil {
@@ -456,7 +556,7 @@ func (h *Handler) RecycleRestore(c *gin.Context) {
 
 // RecycleDelete 处理 POST /api/vaults/:vault_id/recycle-bin/:file_id/delete（永久删除）。
 func (h *Handler) RecycleDelete(c *gin.Context) {
-	_, vault, role, ok := h.requireVaultActor(c)
+	_, vault, role, _, ok := h.requireVaultActorSync(c)
 	if !ok {
 		return
 	}
@@ -506,3 +606,4 @@ func formatHistoryTime(t time.Time) string {
 	}
 	return t.UTC().Format(time.RFC3339)
 }
+

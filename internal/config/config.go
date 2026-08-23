@@ -1,3 +1,4 @@
+﻿// 配置加载
 package config
 
 import (
@@ -6,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -17,6 +19,7 @@ type Config struct {
 	Storage  StorageConfig  `yaml:"storage"`
 	Auth     AuthConfig     `yaml:"auth"`
 	Sync     SyncConfig     `yaml:"sync"`
+	Update   UpdateConfig   `yaml:"update"`
 }
 
 type ServerConfig struct {
@@ -51,6 +54,22 @@ type SyncConfig struct {
 	ReconcileIntervalHours int `yaml:"reconcile_interval_hours"`
 	TempFileMaxAgeHours    int `yaml:"temp_file_max_age_hours"`
 	OrphanFileGraceHours   int `yaml:"orphan_file_grace_hours"`
+}
+
+// UpdateConfig 配置服务端自动更新（仅管理员手动触发）。
+type UpdateConfig struct {
+	// GitHubRepo 是发布仓库，格式 owner/repo。
+	GitHubRepo string `yaml:"github_repo"`
+	// TimeoutSeconds 是 GitHub 请求的超时秒数，0 表示使用默认值 15，边界 5..120。
+	TimeoutSeconds int `yaml:"timeout_seconds"`
+	// UpdateTimeoutSeconds 是整次更新流程的超时秒数，0 表示使用默认值 600，边界 30..1800。
+	UpdateTimeoutSeconds int `yaml:"update_timeout_seconds"`
+	// CheckTTLSeconds 是检查结果缓存 TTL 秒数，0 表示使用默认值 3600，边界 60..86400。
+	CheckTTLSeconds int `yaml:"check_ttl_seconds"`
+	// CheckLimit 是检查更新接口的限流次数，0 表示使用默认值 6，边界 1..100。
+	CheckLimit int `yaml:"check_limit"`
+	// CheckWindowSeconds 是限流时间窗口秒数，0 表示使用默认值 60，边界 10..3600。
+	CheckWindowSeconds int `yaml:"check_window_seconds"`
 }
 
 // Load 读取与 OSS_ENV 对应的配置文件并合并环境变量覆盖。
@@ -136,6 +155,9 @@ func (c *Config) applyEnvOverrides() error {
 			c.Sync.ReconcileIntervalHours = hours
 		}
 	}
+	if v := os.Getenv("OSS_UPDATE_GITHUB_REPO"); v != "" {
+		c.Update.GitHubRepo = strings.TrimSpace(v)
+	}
 	return nil
 }
 
@@ -164,7 +186,69 @@ func (c *Config) validate() error {
 		c.Sync.OrphanFileGraceHours < 0 {
 		return fmt.Errorf("sync maintenance intervals cannot be negative")
 	}
+	if err := c.Update.validate(); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (c UpdateConfig) validate() error {
+	if s := strings.TrimSpace(c.GitHubRepo); s != "" {
+		if err := validateGitHubRepo(s); err != nil {
+			return err
+		}
+	}
+	if c.TimeoutSeconds != 0 && (c.TimeoutSeconds < 5 || c.TimeoutSeconds > 120) {
+		return fmt.Errorf("update.timeout_seconds 必须在 5..120 之间，收到 %d", c.TimeoutSeconds)
+	}
+	if c.UpdateTimeoutSeconds != 0 && (c.UpdateTimeoutSeconds < 30 || c.UpdateTimeoutSeconds > 1800) {
+		return fmt.Errorf("update.update_timeout_seconds 必须在 30..1800 之间，收到 %d", c.UpdateTimeoutSeconds)
+	}
+	if c.CheckTTLSeconds != 0 && (c.CheckTTLSeconds < 60 || c.CheckTTLSeconds > 86400) {
+		return fmt.Errorf("update.check_ttl_seconds 必须在 60..86400 之间，收到 %d", c.CheckTTLSeconds)
+	}
+	if c.CheckLimit != 0 && (c.CheckLimit < 1 || c.CheckLimit > 100) {
+		return fmt.Errorf("update.check_limit 必须在 1..100 之间，收到 %d", c.CheckLimit)
+	}
+	if c.CheckWindowSeconds != 0 && (c.CheckWindowSeconds < 10 || c.CheckWindowSeconds > 3600) {
+		return fmt.Errorf("update.check_window_seconds 必须在 10..3600 之间，收到 %d", c.CheckWindowSeconds)
+	}
+	return nil
+}
+
+func validateGitHubRepo(s string) error {
+	parts := strings.Split(s, "/")
+	if len(parts) != 2 {
+		return fmt.Errorf("update.github_repo 必须为 owner/repo 格式，收到 %q", s)
+	}
+	owner, repo := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	if owner == "" || repo == "" {
+		return fmt.Errorf("update.github_repo owner 与 repo 均不能为空，收到 %q", s)
+	}
+	if !isValidRepoPart(owner) || !isValidRepoPart(repo) {
+		return fmt.Errorf("update.github_repo 仅允许字母、数字、- _ . 字符，收到 %q", s)
+	}
+	return nil
+}
+
+func isValidRepoPart(p string) bool {
+	if len(p) == 0 || len(p) > 100 {
+		return false
+	}
+	for _, c := range p {
+		if (c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') ||
+			c == '-' || c == '_' || c == '.' {
+			continue
+		}
+		return false
+	}
+	// 不允许以 . 或 - 开头/结尾
+	if p[0] == '.' || p[0] == '-' || p[len(p)-1] == '.' || p[len(p)-1] == '-' {
+		return false
+	}
+	return true
 }
 
 func (c AuthConfig) EffectiveBootstrapAdminUsername() string {
@@ -201,6 +285,54 @@ func (c SyncConfig) EffectiveOrphanFileGraceHours() int {
 		return 24
 	}
 	return c.OrphanFileGraceHours
+}
+
+// EffectiveGitHubRepo 返回发布仓库，默认指向项目上游仓库。
+func (c UpdateConfig) EffectiveGitHubRepo() string {
+	if s := strings.TrimSpace(c.GitHubRepo); s != "" {
+		return s
+	}
+	return "helantianshen/oss-sync"
+}
+
+// EffectiveTimeout 返回 GitHub 请求超时，边界 5..120，默认 15。
+func (c UpdateConfig) EffectiveTimeout() time.Duration {
+	if c.TimeoutSeconds >= 5 && c.TimeoutSeconds <= 120 {
+		return time.Duration(c.TimeoutSeconds) * time.Second
+	}
+	return 15 * time.Second
+}
+
+// EffectiveUpdateTimeout 返回整次更新流程超时，边界 30..1800，默认 600（10 分钟）。
+func (c UpdateConfig) EffectiveUpdateTimeout() time.Duration {
+	if c.UpdateTimeoutSeconds >= 30 && c.UpdateTimeoutSeconds <= 1800 {
+		return time.Duration(c.UpdateTimeoutSeconds) * time.Second
+	}
+	return 600 * time.Second
+}
+
+// EffectiveCheckTTL 返回检查结果缓存 TTL，边界 60..86400，默认 3600（1 小时）。
+func (c UpdateConfig) EffectiveCheckTTL() time.Duration {
+	if c.CheckTTLSeconds >= 60 && c.CheckTTLSeconds <= 86400 {
+		return time.Duration(c.CheckTTLSeconds) * time.Second
+	}
+	return 3600 * time.Second
+}
+
+// EffectiveCheckLimit 返回检查更新接口的限流次数，边界 1..100，默认 6。
+func (c UpdateConfig) EffectiveCheckLimit() int {
+	if c.CheckLimit >= 1 && c.CheckLimit <= 100 {
+		return c.CheckLimit
+	}
+	return 6
+}
+
+// EffectiveCheckWindow 返回检查更新接口的限流窗口，边界 10..3600，默认 60。
+func (c UpdateConfig) EffectiveCheckWindow() time.Duration {
+	if c.CheckWindowSeconds >= 10 && c.CheckWindowSeconds <= 3600 {
+		return time.Duration(c.CheckWindowSeconds) * time.Second
+	}
+	return time.Minute
 }
 
 // Env 返回当前生效的环境标识（dev / prod）。
@@ -256,3 +388,4 @@ func configPath() (string, error) {
 	}
 	return filepath.Join("configs", fmt.Sprintf("config.%s.yaml", env)), nil
 }
+

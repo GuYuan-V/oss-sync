@@ -1,3 +1,4 @@
+﻿// 定时调度
 package cron
 
 import (
@@ -81,3 +82,4 @@ func (s *Scheduler) Stop(ctx context.Context) error {
 func (s *Scheduler) Cleanup() *Cleanup { return s.cl }
 
 func (s *Scheduler) Reconciler() *reconcile.Reconciler { return s.rc }
+
