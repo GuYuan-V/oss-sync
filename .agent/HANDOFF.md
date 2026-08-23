@@ -7,7 +7,8 @@
 ## 当前状态
 
 - PR #3 已合并到 `main`，合并提交为 `1dfba43`。
-- `.github/workflows/ci.yml` 已在本地配置，尚未提交或推送。
+- GitHub Actions CI 已推送到 `main`，代码提交为 `4036c1b`。
+- 首次 CI 运行 `32628115047` 全部通过。
 
 ## 已完成工作
 
@@ -29,8 +30,8 @@
 ## 验证情况
 
 - `actionlint v1.7.12 .github/workflows/ci.yml` ✅
-- 本次未修改业务代码，未重复执行上一轮已通过的 Go 与插件全量测试。
-- CI 实际运行待推送后由 GitHub Actions 验证。
+- GitHub Actions `Plugin` ✅（23s）：`npm ci`、TypeScript 检查、249 项测试、生产构建。
+- GitHub Actions `Backend` ✅（7m54s）：`go test -race ./...`、`go vet ./...`。
 
 ## 已知问题 / 风险
 
@@ -38,7 +39,7 @@
 
 ## 剩余工作
 
-- 获得授权后提交、推送，并检查首次 Actions 运行。
+- 无必要的 CI 实现工作。
 
 ## 推荐下一步
 
