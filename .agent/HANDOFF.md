@@ -9,7 +9,8 @@
 - PR #3 已合并到 `main`，合并提交为 `1dfba43`。
 - GitHub Actions CI 已推送到 `main`，代码提交为 `4036c1b`。
 - 首次 CI 运行 `32628115047` 全部通过。
-- `.github/workflows/release.yml` 已在本地新增，尚未提交或推送。
+- Release workflow 已推送到 `main`，代码提交为 `5096fb7`。
+- 推送后 CI 运行 `32630458708` 全部通过；普通 push 未触发 Release workflow，符合 Tag-only 设计。
 
 ## 已完成工作
 
@@ -42,6 +43,7 @@
 - `actionlint v1.7.12 .github/workflows/ci.yml .github/workflows/release.yml` ✅
 - 使用模拟版本 `0.1.3` 本地交叉构建五个服务端资产 ✅；Linux amd64 `--version` 注入校验 ✅
 - Node.js 26：`npm run build` 及 `main.js` / `manifest.json` / `styles.css` 收集校验 ✅
+- GitHub Actions `32630458708`：Plugin ✅（21s），Backend Race/Vet ✅（6m44s）
 - 真实 Tag 触发、Release 创建与 GitHub asset digest 待首次发布验证。
 
 ## 已知问题 / 风险
@@ -51,7 +53,7 @@
 
 ## 剩余工作
 
-- 获得授权后提交、推送；首次真实发布需由用户明确版本号并授权推送 Tag。
+- 首次真实发布需由用户明确版本号并授权推送 Tag。
 
 ## 推荐下一步
 
