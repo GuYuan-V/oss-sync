@@ -21,6 +21,8 @@ export type HttpFetch = (options: {
 export interface GitHubReleaseAsset {
   name: string;
   browser_download_url: string;
+  size?: number;
+  digest?: string | null;
 }
 
 export interface GitHubRelease {
@@ -35,6 +37,7 @@ export interface UpdateFile {
 }
 
 export const UPDATE_FILE_NAMES = ["main.js", "manifest.json", "styles.css"] as const;
+const MAX_UPDATE_FILE_BYTES = 20 * 1024 * 1024;
 
 // 版本比较
 
@@ -151,22 +154,48 @@ export class GitHubReleaseSource {
 
   /** 读取 Release 中指定资产的文本；资产缺失或下载失败返回 null。 */
   async downloadAssetText(release: GitHubRelease, name: string): Promise<string | null> {
-    const asset = release.assets.find((item) => item.name === name);
-    if (!asset) return null;
-    const result = await this.fetchImpl({ url: asset.browser_download_url, method: "GET" });
-    if (result.status >= 400) return null;
-    return result.text || new TextDecoder().decode(result.arrayBuffer);
+    if (!release.assets.some((item) => item.name === name)) return null;
+    try {
+      return new TextDecoder().decode(await this.downloadAsset(release, name));
+    } catch {
+      return null;
+    }
   }
 
   /** 下载指定资产；资产缺失或 HTTP 错误时抛错。 */
   async downloadAsset(release: GitHubRelease, name: string): Promise<ArrayBuffer> {
-    const asset = release.assets.find((item) => item.name === name);
-    if (!asset) {
+    const matches = release.assets.filter((item) => item.name === name);
+    if (matches.length === 0) {
       throw new Error(`release asset "${name}" not found`);
     }
-    const result = await this.fetchImpl({ url: asset.browser_download_url, method: "GET" });
+    if (matches.length !== 1) throw new Error(`release asset "${name}" is duplicated`);
+    const asset = matches[0];
+    if (!Number.isSafeInteger(asset.size) || asset.size! < 0 || asset.size! > MAX_UPDATE_FILE_BYTES) {
+      throw new Error(`release asset "${name}" has invalid size`);
+    }
+    const expectedDigest = asset.digest?.toLowerCase() ?? "";
+    if (!/^sha256:[0-9a-f]{64}$/.test(expectedDigest)) {
+      throw new Error(`release asset "${name}" has no valid SHA-256 digest`);
+    }
+    let assetURL: URL;
+    try {
+      assetURL = new URL(asset.browser_download_url);
+    } catch {
+      throw new Error(`release asset "${name}" has invalid download URL`);
+    }
+    if (assetURL.protocol !== "https:" || assetURL.hostname.toLowerCase() !== "github.com") {
+      throw new Error(`release asset "${name}" has invalid download URL`);
+    }
+    const result = await this.fetchImpl({ url: assetURL.toString(), method: "GET" });
     if (result.status >= 400) {
       throw new Error(`failed to download "${name}": HTTP ${result.status}`);
+    }
+    if (result.arrayBuffer.byteLength !== asset.size) {
+      throw new Error(`release asset "${name}" size mismatch`);
+    }
+    const actualDigest = await sha256(result.arrayBuffer);
+    if (actualDigest !== expectedDigest) {
+      throw new Error(`release asset "${name}" SHA-256 mismatch`);
     }
     return result.arrayBuffer;
   }
@@ -177,8 +206,15 @@ function isReleaseAsset(value: unknown): value is GitHubReleaseAsset {
   const record = value as Record<string, unknown>;
   return (
     typeof record.name === "string" &&
-    typeof record.browser_download_url === "string"
+    typeof record.browser_download_url === "string" &&
+    (record.size === undefined || typeof record.size === "number") &&
+    (record.digest === undefined || record.digest === null || typeof record.digest === "string")
   );
+}
+
+async function sha256(content: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", content);
+  return "sha256:" + Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 // 更新检查与资源下载

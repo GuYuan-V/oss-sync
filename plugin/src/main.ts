@@ -545,16 +545,27 @@ export default class OSSPlugin extends Plugin {
 
   private async applyPluginUpdateFiles(files: UpdateFile[]): Promise<void> {
     // 重载前停止同步与协作引擎，避免旧实例在替换文件后继续轮询。
+    const reload = getPluginReloadController(this.app);
+    const restartCollaboration = this.collabManager.isRunning();
     this.syncEngine.stop();
     this.collabManager.stop();
     const dir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
-    await applyPluginUpdate({
-      adapter: this.app.vault.adapter as PluginFileAdapter,
-      reload: getPluginReloadController(this.app),
-      dir,
-      pluginID: this.manifest.id,
-      files,
-    });
+    try {
+      await applyPluginUpdate({
+        adapter: this.app.vault.adapter as PluginFileAdapter,
+        reload,
+        dir,
+        pluginID: this.manifest.id,
+        files,
+      });
+    } catch (error) {
+      // 替换前失败时当前实例仍存活，恢复被暂停的后台任务。
+      if (this.loaded) {
+        this.syncEngine.start();
+        if (restartCollaboration) this.collabManager.start();
+      }
+      throw error;
+    }
   }
 
   private githubReleaseSource(): GitHubReleaseSource {

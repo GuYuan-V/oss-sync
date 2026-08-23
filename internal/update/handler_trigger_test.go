@@ -66,8 +66,6 @@ func newHandlerTestSetup(t *testing.T) (*Handler, *Manager, string, func()) {
 	return h, mgr, exePath, func() { _ = db }
 }
 
-
-
 func TestHandler_Trigger_Returns202WithManagerCandidate(t *testing.T) {
 	h, mgr, _, _ := newHandlerTestSetup(t)
 	candID := newCheckedForHandlerTest(t, mgr)
@@ -77,8 +75,8 @@ func TestHandler_Trigger_Returns202WithManagerCandidate(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{"check_id": candID, "version": "9.9.9"})
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/admin/update", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
-	shutdownCalled := false
-	h.svc.SetOnShutdown(func() { shutdownCalled = true })
+	shutdownCalled := make(chan struct{}, 1)
+	h.svc.SetOnShutdown(func() { shutdownCalled <- struct{}{} })
 	h.trigger(c)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("trigger status %d body %s want 202", w.Code, w.Body.String())
@@ -97,13 +95,9 @@ func TestHandler_Trigger_Returns202WithManagerCandidate(t *testing.T) {
 	if !ok || op["id"] == "" {
 		t.Errorf("operation missing %v", resp["operation"])
 	}
-	for i := 0; i < 20; i++ {
-		if shutdownCalled {
-			break
-		}
-		time.Sleep(30 * time.Millisecond)
-	}
-	if !shutdownCalled {
+	select {
+	case <-shutdownCalled:
+	case <-time.After(600 * time.Millisecond):
 		t.Error("shutdown not signaled after helper launch success")
 	}
 }

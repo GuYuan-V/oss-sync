@@ -136,3 +136,34 @@ test("synchronous collab start throw is caught by Notice path with no validation
     assert.ok(globalThis.__ossNotices.length >= 1);
   } finally { await plugin.onunload(); await cleanup(); restore(); }
 });
+
+test("plugin update failure restarts paused sync and collaboration", async () => {
+  const restore = installWindow();
+  const captured = { cb: null };
+  const { plugin, cleanup } = await createPlugin(captured);
+  try {
+    plugin.app.plugins = {
+      plugins: { "oss-sync": plugin },
+      async disablePlugin() {},
+      async enablePlugin() {},
+    };
+    plugin.app.vault.adapter = {
+      async read() { return "old"; },
+      async write() { throw new Error("write failed"); },
+      async rename() {},
+      async remove() {},
+    };
+    const calls = [];
+    plugin.syncEngine.stop = () => calls.push("sync-stop");
+    plugin.syncEngine.start = () => calls.push("sync-start");
+    plugin.collabManager.isRunning = () => true;
+    plugin.collabManager.stop = () => calls.push("collab-stop");
+    plugin.collabManager.start = () => calls.push("collab-start");
+
+    await assert.rejects(
+      plugin.applyPluginUpdateFiles([{ name: "main.js", content: new ArrayBuffer(0) }]),
+      /write failed/,
+    );
+    assert.deepEqual(calls, ["sync-stop", "collab-stop", "sync-start", "collab-start"]);
+  } finally { await plugin.onunload(); await cleanup(); restore(); }
+});

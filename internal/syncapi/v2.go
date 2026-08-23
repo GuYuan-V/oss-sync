@@ -1,4 +1,4 @@
-﻿// 同步接口 v2
+// 同步接口 v2
 package syncapi
 
 import (
@@ -824,6 +824,8 @@ func (h *Handler) V2Rename(c *gin.Context) {
 			return errRevisionConflict
 		}
 
+		// os.Rename 在事务内执行；若进程在 rename 后、commit 前崩溃，
+		// reconcile cron 负责修复磁盘与数据库的不一致。
 		oldDisk = h.fileDiskPath(oldFile)
 		newKey := filestore.VaultStorageKey(vault.ID, req.NewPath)
 		newDisk = filepath.Join(h.Cfg.Storage.DataDir, filepath.FromSlash(newKey))
@@ -1153,4 +1155,3 @@ func isHex(value string) bool {
 	_, err := hex.DecodeString(value)
 	return err == nil
 }
-

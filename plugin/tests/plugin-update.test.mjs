@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { loadUpdateModule } from "./helpers/plugin-update-loader.mjs";
 
@@ -12,6 +13,10 @@ function decode(buffer) {
 
 function manifestFile(version) {
   return encode(JSON.stringify({ id: "oss-sync", version }));
+}
+
+function digest(text) {
+  return `sha256:${createHash("sha256").update(text).digest("hex")}`;
 }
 
 function makeFakeAdapter(initial = {}) {
@@ -143,6 +148,8 @@ function releaseResponse({ tag = "v0.2.0", missingAssets = [] } = {}) {
     .map((name) => ({
       name,
       browser_download_url: `https://github.com/owner/repo/releases/download/${tag}/${name}`,
+      size: Buffer.byteLength(`content-of-${name}`),
+      digest: digest(`content-of-${name}`),
     }));
   return {
     status: 200,
@@ -277,6 +284,51 @@ test("downloadUpdateAssets downloads the release trio and rejects missing assets
     await assert.rejects(
       downloadUpdateAssets(new GitHubReleaseSource(makeFetch(() => missing).fetchImpl), missing.json),
       /main\.js/
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test("downloadUpdateAssets rejects size and SHA-256 mismatches", async () => {
+  const { downloadUpdateAssets, GitHubReleaseSource, cleanup } =
+    await loadUpdateModule("src/plugin-update.ts");
+  try {
+    for (const mutation of [
+      (asset) => { asset.size += 1; },
+      (asset) => { asset.digest = `sha256:${"0".repeat(64)}`; },
+    ]) {
+      const response = releaseResponse();
+      mutation(response.json.assets[0]);
+      const { fetchImpl } = makeFetch((url) => {
+        if (url.endsWith("/releases/latest")) return response;
+        return {
+          status: 200,
+          json: {},
+          text: "",
+          arrayBuffer: encode(`content-of-${url.split("/").pop()}`),
+          headers: {},
+        };
+      });
+      const source = new GitHubReleaseSource(fetchImpl);
+      const release = await source.latestRelease("owner/repo");
+      await assert.rejects(downloadUpdateAssets(source, release), /mismatch/);
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+test("downloadUpdateAssets rejects non-GitHub asset URLs", async () => {
+  const { downloadUpdateAssets, GitHubReleaseSource, cleanup } =
+    await loadUpdateModule("src/plugin-update.ts");
+  try {
+    const response = releaseResponse();
+    response.json.assets[0].browser_download_url = "https://example.com/main.js";
+    const source = new GitHubReleaseSource(makeFetch(() => response).fetchImpl);
+    await assert.rejects(
+      downloadUpdateAssets(source, response.json),
+      /invalid download URL/,
     );
   } finally {
     await cleanup();

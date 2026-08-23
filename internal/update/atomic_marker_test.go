@@ -100,16 +100,11 @@ func TestAtomicWriteMarker_PropagatesDirSyncError(t *testing.T) {
 }
 
 func TestAtomicWriteMarker_WindowsDirSyncExceptionNarrow(t *testing.T) {
-	// Documented narrow exception: only Windows and only unsupported errors are ignored
-	err := os.ErrInvalid
-	if runtime.GOOS != "windows" && isWindowsDirSyncUnsupported(err) {
-		// On non-Windows, should not be considered unsupported
-		// isWindowsDirSyncUnsupported checks message, not GOOS, so it will still return true for ErrInvalid
-		// But atomicWriteMarker only ignores if GOOS=="windows" && isWindowsDirSyncUnsupported -> on linux it will propagate
-		// So test that on linux, ErrInvalid is not ignored (already covered above)
+	got := isWindowsDirSyncUnsupported(os.ErrInvalid)
+	if runtime.GOOS == "windows" && !got {
+		t.Error("Windows should detect ErrInvalid as unsupported directory sync")
 	}
-	// Verify helper detects unsupported messages
-	if !isWindowsDirSyncUnsupported(os.ErrInvalid) {
-		t.Error("isWindowsDirSyncUnsupported should detect ErrInvalid")
+	if runtime.GOOS != "windows" && got {
+		t.Error("non-Windows platforms must not ignore ErrInvalid")
 	}
 }
