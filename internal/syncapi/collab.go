@@ -270,6 +270,113 @@ func (h *Handler) CollabLeave(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
+// CollabUpload 协作者上传正文（以协作者身份写入原文件）。
+func (h *Handler) CollabUpload(c *gin.Context) {
+	u, ok := auth.RequireUser(c)
+	if !ok {
+		return
+	}
+	vaultID := c.Param("vault_id")
+	var vault models.Vault
+	if err := h.DB.Where("id = ?", vaultID).First(&vault).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
+		return
+	}
+	fileID, err := strconv.ParseUint(c.Param("file_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file id"})
+		return
+	}
+	// 校验协作关系。
+	var file models.File
+	if err := h.DB.Where("id = ? AND vault_id = ?", uint(fileID), vault.ID).First(&file).Error; err != nil {
+		file, err = h.acceptedCollaborationFile(u.ID, uint(fileID))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+			return
+		}
+		vault = models.Vault{}
+		if err := h.DB.Where("id = ?", file.VaultID).First(&vault).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
+			return
+		}
+	}
+	var collabRow models.Collaboration
+	if err := h.DB.Where("vault_id = ? AND file_id = ? AND collaborator_id = ? AND status = ?",
+		vault.ID, uint(fileID), u.ID, collaboration.StatusAccepted).First(&collabRow).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "你不是该文件的协作者"})
+		return
+	}
+	// 读取正文。
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	content := []byte(req.Content)
+
+	clientID := h.requestClientID(c, c.Query("client_id"))
+	deviceName := deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader))
+	if deviceName == "" {
+		deviceName = "网页控制台"
+	}
+
+	vaultLock := h.vaultLock(vault.ID)
+	vaultLock.Lock()
+	defer vaultLock.Unlock()
+	pathLock := h.pathLock(vault.ID + ":" + file.Path)
+	pathLock.Lock()
+	defer pathLock.Unlock()
+
+	err = h.DB.Transaction(func(tx *gorm.DB) error {
+		revision, err := nextVaultRevision(tx, vault.ID)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(h.Cfg.Storage.DataDir, filepath.FromSlash(filestore.VaultStorageKey(vault.ID, file.Path)))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, content, 0o644); err != nil {
+			return err
+		}
+		sum := sha256.Sum256(content)
+		now := time.Now()
+		updates := map[string]any{
+			"revision":    revision,
+			"is_deleted":  false,
+			"deleted_at":  nil,
+			"hash":        fmt.Sprintf("%x", sum),
+			"size":        len(content),
+			"m_time":      now.UnixMilli(),
+			"storage_key": filestore.VaultStorageKey(vault.ID, file.Path),
+			"updated_at":  now,
+		}
+		if err := tx.Model(&models.File{}).Where("id = ?", file.ID).Updates(updates).Error; err != nil {
+			return err
+		}
+		actor := history.Actor{
+			Username:   u.Username,
+			DeviceName: deviceName,
+			ClientID:   clientID,
+		}
+		return history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, actor,
+			history.ActionModify, file.Path, "", target, revision)
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	h.notifyRevision(vault.ID)
+	h.publishCollaborationEvent(collaboration.Event{
+		VaultID: vault.ID, FileID: uint(fileID), FilePath: file.Path,
+		Kind: "changed", At: time.Now().UnixMilli(),
+	}, h.collaborationEventUsers(vault.ID, uint(fileID)))
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "file_path": file.Path})
+}
+
 // CollabSSE 建立 SSE 事件流。由于 EventSource 不能带 Authorization 头，
 // HTTPS 或本机回环连接允许短期 JWT 查询参数 token + client_id。
 func (h *Handler) CollabSSE(c *gin.Context) {

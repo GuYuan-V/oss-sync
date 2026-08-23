@@ -310,33 +310,3 @@ func normalizeRel(p string) string {
 	p = strings.TrimPrefix(p, "/")
 	return path.Clean(p)
 }
-
-// PurgeExpiredHistory 清理超过保留期的文件历史快照。
-// 仅处理设置了 history retention 的仓库。
-func (c *Cleanup) PurgeExpiredHistory() error {
-	var vaultIDs []string
-	if err := c.DB.Model(&models.Vault{}).
-		Distinct("id").
-		Pluck("id", &vaultIDs).Error; err != nil {
-		return err
-	}
-	now := c.now()
-	for _, vaultID := range vaultIDs {
-		retentionDays, err := settingspolicy.HistoryRetentionDaysForVault(c.DB, vaultID)
-		if err != nil {
-			return err
-		}
-		if retentionDays <= 0 {
-			continue
-		}
-		lock := synclock.Vault(vaultID)
-		lock.Lock()
-		err = history.CleanupExpired(c.DB, c.Cfg.Storage.DataDir, vaultID, retentionDays, now)
-		lock.Unlock()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-

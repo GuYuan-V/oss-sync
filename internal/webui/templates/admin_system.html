@@ -12,90 +12,53 @@
     </div>
     <form method="post" action="/dashboard/admin/system" class="gate-form stack-form">
       <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
-      <div class="system-settings-groups">
-        <section class="system-settings-group" aria-labelledby="system-group-registration">
-          <div class="system-settings-group__title" id="system-group-registration" role="heading" aria-level="3">{{.Layout.T "admin.registration_and_appearance"}}</div>
-          <p class="system-settings-group__summary">{{.Layout.T "admin.registration_and_appearance_help"}}</p>
-          <div class="system-settings-group__fields">
-            <label class="switch-control">
-              <input type="checkbox" name="registration_enabled" {{if .Data.RegistrationEnabled}}checked{{end}}>
-              <span class="switch-control__track" aria-hidden="true"></span>
-              <span>{{.Layout.T "admin.allow_public_registration"}}</span>
-            </label>
-            <label class="switch-control">
-              <input type="checkbox" name="custom_fragments_enabled" {{if .Data.CustomFragmentsEnabled}}checked{{end}}>
-              <span class="switch-control__track" aria-hidden="true"></span>
-              <span>{{.Layout.T "admin.custom_fragments"}}</span>
-              <small>{{.Layout.T "admin.custom_fragments_help"}}</small>
-            </label>
-          </div>
-        </section>
-
-        <section class="system-settings-group" aria-labelledby="system-group-sync">
-          <div class="system-settings-group__title" id="system-group-sync" role="heading" aria-level="3">{{.Layout.T "admin.sync_policy_group"}}</div>
-          <p class="system-settings-group__summary">{{.Layout.T "admin.sync_policy_group_help"}}</p>
-          <div class="system-settings-group__fields">
-            <label>
-              <span>{{.Layout.T "admin.global_sync_mode"}}</span>
-              <select name="sync_mode" required>
-                <option value="user_choice" {{if eq .Data.SyncMode "user_choice"}}selected{{end}}>{{.Layout.T "admin.sync_mode_user_choice"}}</option>
-                <option value="short_poll" {{if eq .Data.SyncMode "short_poll"}}selected{{end}}>{{.Layout.T "admin.sync_mode_short_poll"}}</option>
-                <option value="long_poll" {{if eq .Data.SyncMode "long_poll"}}selected{{end}}>{{.Layout.T "admin.sync_mode_long_poll"}}</option>
-              </select>
-              <small>{{.Layout.T "admin.sync_mode_policy_note"}}</small>
-            </label>
-            <label>
-              <span>{{.Layout.T "admin.max_long_poll_wait_sec"}}</span>
-              <input type="number" name="max_long_poll_wait_sec" min="1" max="30" value="{{.Data.MaxLongPollWaitSec}}" required>
-            </label>
-            <label>
-              <span>{{.Layout.T "admin.max_sync_debounce_sec"}}</span>
-              <input type="number" name="max_sync_debounce_sec" min="3" max="3600" value="{{.Data.MaxSyncDebounceSec}}" required>
-            </label>
-          </div>
-        </section>
-
-        <section class="system-settings-group" aria-labelledby="system-group-retention">
-          <div class="system-settings-group__title" id="system-group-retention" role="heading" aria-level="3">{{.Layout.T "admin.retention_storage_group"}}</div>
-          <p class="system-settings-group__summary">{{.Layout.T "admin.retention_storage_group_help"}}</p>
-          <div class="system-settings-group__fields">
-            <label>
-              <span>{{.Layout.T "admin.default_recycle_bin_days"}}</span>
-              <input type="number" name="default_recycle_bin_days" min="1" max="{{.Data.MaxRecycleBinDays}}" value="{{.Data.DefaultRecycleBinDays}}" required>
-            </label>
-            <label>
-              <span>{{.Layout.T "admin.max_recycle_bin_days"}}</span>
-              <input type="number" name="max_recycle_bin_days" min="1" max="3650" value="{{.Data.MaxRecycleBinDays}}" required>
-            </label>
-            <label>
-              <span>{{.Layout.T "admin.history_retention_days"}}</span>
-              <input type="number" name="history_retention_days" min="0" max="3650" value="{{.Data.HistoryRetentionDays}}" required>
-              <small>{{.Layout.T "admin.zero_means_no_history_cleanup"}}</small>
-            </label>
-          </div>
-        </section>
-
-        <section class="system-settings-group" aria-labelledby="system-group-upload">
-          <div class="system-settings-group__title" id="system-group-upload" role="heading" aria-level="3">{{.Layout.T "admin.storage_upload_group"}}</div>
-          <p class="system-settings-group__summary">{{.Layout.T "admin.storage_upload_group_help"}}</p>
-          <div class="system-settings-group__fields">
-            <label>
-              <span>{{.Layout.T "admin.max_vault_storage_mb"}}</span>
-              <input type="number" name="max_vault_storage_mb" min="0" value="{{.Data.MaxVaultStorageMB}}" required>
-              <small>{{.Layout.T "admin.zero_means_no_storage_limit"}}</small>
-            </label>
-            <label>
-              <span>{{.Layout.T "admin.max_upload_size_mb"}}</span>
-              <input type="number" name="max_upload_size_mb" min="1" max="{{.Data.ConfigMaxUploadSizeMB}}" value="{{.Data.MaxUploadSizeMB}}" required>
-              <small>{{.Layout.T "admin.config_hard_limit_mb" .Data.ConfigMaxUploadSizeMB}}</small>
-            </label>
-          </div>
-        </section>
-      </div>
-
-      <div class="system-settings-group__actions">
-        <button class="button button--primary" type="submit">{{.Layout.T "admin.save_system_settings"}}</button>
-      </div>
+       <label class="switch-control">
+         <input type="checkbox" name="registration_enabled" {{if .Data.RegistrationEnabled}}checked{{end}}>
+         <span class="switch-control__track" aria-hidden="true"></span>
+         <span>{{.Layout.T "admin.allow_public_registration"}}</span>
+       </label>
+       <label class="switch-control">
+         <input type="checkbox" name="custom_fragments_enabled" {{if .Data.CustomFragmentsEnabled}}checked{{end}}>
+         <span class="switch-control__track" aria-hidden="true"></span>
+         <span>{{.Layout.T "admin.custom_fragments"}}</span>
+         <small>{{.Layout.T "admin.custom_fragments_help"}}</small>
+       </label>
+       <label>
+         <span>{{.Layout.T "admin.global_sync_mode"}}</span>
+         <select name="sync_mode" required>
+           <option value="user_choice" {{if eq .Data.SyncMode "user_choice"}}selected{{end}}>{{.Layout.T "admin.sync_mode_user_choice"}}</option>
+          <option value="short_poll" {{if eq .Data.SyncMode "short_poll"}}selected{{end}}>{{.Layout.T "admin.sync_mode_short_poll"}}</option>
+          <option value="long_poll" {{if eq .Data.SyncMode "long_poll"}}selected{{end}}>{{.Layout.T "admin.sync_mode_long_poll"}}</option>
+        </select>
+        <small>{{.Layout.T "admin.sync_mode_policy_note"}}</small>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.default_recycle_bin_days"}}</span>
+        <input type="number" name="default_recycle_bin_days" min="1" max="{{.Data.MaxRecycleBinDays}}" value="{{.Data.DefaultRecycleBinDays}}" required>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.max_long_poll_wait_sec"}}</span>
+        <input type="number" name="max_long_poll_wait_sec" min="1" max="30" value="{{.Data.MaxLongPollWaitSec}}" required>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.max_sync_debounce_sec"}}</span>
+        <input type="number" name="max_sync_debounce_sec" min="3" max="3600" value="{{.Data.MaxSyncDebounceSec}}" required>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.max_recycle_bin_days"}}</span>
+        <input type="number" name="max_recycle_bin_days" min="1" max="3650" value="{{.Data.MaxRecycleBinDays}}" required>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.max_vault_storage_mb"}}</span>
+        <input type="number" name="max_vault_storage_mb" min="0" value="{{.Data.MaxVaultStorageMB}}" required>
+        <small>{{.Layout.T "admin.zero_means_no_storage_limit"}}</small>
+      </label>
+      <label>
+        <span>{{.Layout.T "admin.max_upload_size_mb"}}</span>
+        <input type="number" name="max_upload_size_mb" min="1" max="{{.Data.ConfigMaxUploadSizeMB}}" value="{{.Data.MaxUploadSizeMB}}" required>
+        <small>{{.Layout.T "admin.config_hard_limit_mb" .Data.ConfigMaxUploadSizeMB}}</small>
+      </label>
+      <button class="button button--primary" type="submit">{{.Layout.T "admin.save_system_settings"}}</button>
     </form>
   </article>
   <article class="ledger-panel">

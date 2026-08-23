@@ -823,9 +823,7 @@ func (h *Handler) V2Rename(c *gin.Context) {
 			conflictPath = req.NewPath
 			return errRevisionConflict
 		}
-		// 注意：os.Rename 在数据库事务内执行。若进程在 rename 完成、commit 前崩溃，
-		// 文件系统与数据库将不一致。下方事务回滚逻辑仅覆盖事务返回 error 的情况。
-		// 崩溃一致性由 reconcile 任务保证（磁盘与数据库校验）。
+
 		oldDisk = h.fileDiskPath(oldFile)
 		newKey := filestore.VaultStorageKey(vault.ID, req.NewPath)
 		newDisk = filepath.Join(h.Cfg.Storage.DataDir, filepath.FromSlash(newKey))
