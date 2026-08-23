@@ -2,56 +2,44 @@
 
 ## 当前目标
 
-完成 PR #3 的评审修复，保持在线更新、认证与同步改动可构建、可验证且不回退 `main` 已有能力。
+为主分支和 Pull Request 配置最小、可重现的 GitHub Actions CI。
 
 ## 当前状态
 
-- `origin/main` 基线为 `c77d73e`，已同步到 PR #3 维护分支。
-- PR #3 的评审阻塞项已修复，代码提交为 `bd2a52a`。
-- 当前无已知合并阻塞，等待复审与合并决定。
+- PR #3 已合并到 `main`，合并提交为 `1dfba43`。
+- `.github/workflows/ci.yml` 已在本地配置，尚未提交或推送。
 
 ## 已完成工作
 
-- 删除合并时残留的旧 `CollabUpload`，保留带设备身份、CAS revision 与 operation ID 的新实现。
-- 恢复历史保留期策略函数、每日清理任务、系统设置表单及中英文文案。
-- 恢复 V2 rename 崩溃一致性注释，修正 Windows 目录 fsync 测试的平台判断。
-- 插件更新仅接受 GitHub HTTPS Release URL，并校验单文件上限、size 与 SHA-256 digest。
-- 插件更新在替换前失败时恢复同步与协作后台任务；新增相应回归测试。
-- 修复 update handler 测试回调的 goroutine 数据竞争。
+- 后端 Job 使用 `go.mod` 的 Go 版本，执行 `go test -race ./...` 和 `go vet ./...`。
+- 插件 Job 使用 Node.js 20，执行 `npm ci`、TypeScript 检查、测试和生产构建。
+- 两个 Job 在 `main` 推送和面向 `main` 的 Pull Request 上并行触发，仅授予 `contents: read`。
 
 ## 重要决策
 
-- 同步写入继续保持 Vault 隔离、设备授权、revision/operation ID 语义，以及数据库与磁盘状态一致性。
-- 历史清理按 Vault 加锁，并复用 `history.CleanupExpired`，不另建清理实现。
-- 插件更新文件单个上限为 20 MiB；缺失或不匹配的 Release digest/size 一律拒绝。
-- 更新失败只在旧插件实例仍存活时重启后台任务，避免新旧实例重复轮询。
+- 复用项目已有验证命令，不引入新脚本或依赖。
+- `go test -race ./...` 同时覆盖普通测试，CI 不重复执行 `go test ./...`。
+- 暂不配置发布、nightly 和独立缓存流程。
 
 ## 修改的重要文件
 
-- 合并回归：`internal/syncapi/collab.go`、`internal/cron/cleanup.go`、`internal/settingspolicy/runtime.go`
-- 管理页：`internal/webui/locale_admin.go`、`internal/webui/templates/admin_system.html`
-- 插件更新：`plugin/src/plugin-update.ts`、`plugin/src/main.ts` 及对应测试
-- 测试修正：`internal/update/atomic_marker_test.go`、`handler_trigger_test.go`
+- `.github/workflows/ci.yml`
+- `.agent/HANDOFF.md`
 
 ## 验证情况
 
-- `go test ./...` ✅
-- `go vet ./...` ✅
-- `go test -race ./...`：除 update 测试夹具竞态外其余包通过；修复后 `go test -race ./internal/update` ✅
-- Node.js 26：`npm exec tsc -- --noEmit` ✅
-- `npm test` ✅（249/249）
-- `npm run build` ✅
-- 最终插件更新定向测试 ✅（23/23）
+- `actionlint v1.7.12 .github/workflows/ci.yml` ✅
+- 本次未修改业务代码，未重复执行上一轮已通过的 Go 与插件全量测试。
+- CI 实际运行待推送后由 GitHub Actions 验证。
 
 ## 已知问题 / 风险
 
-- `PurgeExpiredHistory` / `history.CleanupExpired` 仍无独立单元测试，当前由编译、WebUI 设置测试和全量集成验证覆盖。
-- PR #3 变更面仍较大，合并前建议复核发布资产是否实际提供 GitHub `digest` 字段。
+- 仓库尚无 Release，本 CI 不包含发布产物的生成与上传。
 
 ## 剩余工作
 
-- 等待 PR #3 复审与合并决定。
+- 获得授权后提交、推送，并检查首次 Actions 运行。
 
 ## 推荐下一步
 
-优先复核 PR #3 的最终 GitHub diff 与远程检查；若发布流程尚未写入 Release asset digest，先补齐发布流水线再启用在线更新。
+推送 CI 配置后，将 `Backend` 和 `Plugin` 设为 `main` 的 required status checks。
