@@ -1,60 +1,57 @@
-# HANDOFF — oss-sync 当前工作状态
+# HANDOFF — OSS Sync 当前工作状态
 
 ## 当前目标
 
-PR#1 评审的 5 个问题 + PR#2 审阅新增的 5 个问题已全部修复。PR#2 已合并到 main。当前无进行中的任务。
+完成 PR #3 的评审修复，保持在线更新、认证与同步改动可构建、可验证且不回退 `main` 已有能力。
 
 ## 当前状态
 
-- PR#1 已 squash 合并到 main（`a8ec846`）。
-- PR#2（`fix/pr1-review-issues` → main）已合并（squash, `06a3048`），分支已删除。
-- 本地 main 已同步（fast-forward 到 `06a3048`）。
+- `origin/main` 基线为 `c77d73e`，已同步到 PR #3 维护分支。
+- PR #3 的评审阻塞项已修复，代码提交为 `bd2a52a`。
+- 当前无已知合并阻塞，等待复审与合并决定。
 
 ## 已完成工作
 
-**PR#1 评审 5 项修复**（commit `a0e50c5`）：
-1. **JWT alg 校验**（`internal/jwt/jwt.go`）：验签前解码 header，拒绝 `alg != "HS256"`。
-2. **V2Rename 注释**（`internal/syncapi/v2.go`）：说明事务内 `os.Rename` 崩溃窗口及 reconcile cron 兜底。
-3. **CollabUpload 原子写入**（`internal/syncapi/collab.go`）：temp + `os.Rename` 替代 `os.WriteFile`。
-4. **FileHistory 保留期清理**：`SystemSetting.HistoryRetentionDays`（0=不清理，上限 3650）+ 每日 03:00 `PurgeExpiredHistory` cron + `CleanupExpired`（ContentKey 去重）+ 管理页配置项 + i18n。
-5. **requestedWebLanguage**（`internal/webui/webui.go`）：解析 `Accept-Language` 替代空 stub。
-
-**PR#2 审阅 5 项修复**（commit `4992a82`，ReviewPR2b 审阅发现）：
-1. **collab 唯一临时文件**：`os.CreateTemp` 替代固定 `target+".tmp"`，避免覆盖真实同名文件；`defer os.Remove` 兜底 WriteFile 失败清理。
-2. **webui 历史写入加锁**：`webDeleteFile`/`webRestoreRecycle`/`webRestoreHistory` 获取 `synclock.Vault`，与清理 cron 串行化，防止新记录指向已删快照。
-3. **Accept-Language q 值**：解析 `q=` 权重、排除 `q=0`、选最高 q 的支持语言。
-4. **CleanupExpired 顺序**：先删快照文件、后删 DB 行；文件删除失败保留记录，下次 cron 可重试，无永久孤儿快照。
-5. **新增测试**：`internal/webui/locale_request_test.go`（13 个用例）。
+- 删除合并时残留的旧 `CollabUpload`，保留带设备身份、CAS revision 与 operation ID 的新实现。
+- 恢复历史保留期策略函数、每日清理任务、系统设置表单及中英文文案。
+- 恢复 V2 rename 崩溃一致性注释，修正 Windows 目录 fsync 测试的平台判断。
+- 插件更新仅接受 GitHub HTTPS Release URL，并校验单文件上限、size 与 SHA-256 digest。
+- 插件更新在替换前失败时恢复同步与协作后台任务；新增相应回归测试。
+- 修复 update handler 测试回调的 goroutine 数据竞争。
 
 ## 重要决策
 
-- 历史保留期是**系统级全局设置**，存于 `SystemSetting` 单例行（ID=1）。
-- 快照删除前检查 `content_key IN (...) AND created_at >= cutoff` 去重，防止误删仍被引用的快照。
-- 所有写 history 的路径（syncapi 既有 + webui 新增）均持 `synclock.Vault`；`PurgeExpiredHistory` 同锁，无竞态。
-- 仓库文件为 LF 行尾；`git config core.autocrlf=true` 在 checkout 时转 CRLF，diff 不受影响。
+- 同步写入继续保持 Vault 隔离、设备授权、revision/operation ID 语义，以及数据库与磁盘状态一致性。
+- 历史清理按 Vault 加锁，并复用 `history.CleanupExpired`，不另建清理实现。
+- 插件更新文件单个上限为 20 MiB；缺失或不匹配的 Release digest/size 一律拒绝。
+- 更新失败只在旧插件实例仍存活时重启后台任务，避免新旧实例重复轮询。
 
 ## 修改的重要文件
 
-- `internal/jwt/jwt.go`、`internal/syncapi/v2.go`、`internal/syncapi/collab.go`
-- `internal/history/history.go`、`internal/cron/cleanup.go`、`internal/cron/scheduler.go`
-- `internal/models/models.go`、`internal/settingspolicy/policy.go`、`internal/settingspolicy/runtime.go`
-- `internal/webui/admin_system.go`、`templates/admin_system.html`、`locale_admin.go`、`webui.go`、`dashboard.go`
-- 测试：`internal/webui/admin_system_test.go`、`locale_request_test.go`、`internal/server/webui_test.go`
+- 合并回归：`internal/syncapi/collab.go`、`internal/cron/cleanup.go`、`internal/settingspolicy/runtime.go`
+- 管理页：`internal/webui/locale_admin.go`、`internal/webui/templates/admin_system.html`
+- 插件更新：`plugin/src/plugin-update.ts`、`plugin/src/main.ts` 及对应测试
+- 测试修正：`internal/update/atomic_marker_test.go`、`handler_trigger_test.go`
 
 ## 验证情况
 
-- `go build ./...` ✅ · `go vet ./...` ✅ · `go test ./...` ✅（16 包全过）
-- `plugin/tsc --noEmit` ✅ · `plugin npm test` ✅ 69/69
-- 新增 `requestedWebLanguage` 测试 13/13 ✅
+- `go test ./...` ✅
+- `go vet ./...` ✅
+- `go test -race ./...`：除 update 测试夹具竞态外其余包通过；修复后 `go test -race ./internal/update` ✅
+- Node.js 26：`npm exec tsc -- --noEmit` ✅
+- `npm test` ✅（249/249）
+- `npm run build` ✅
+- 最终插件更新定向测试 ✅（23/23）
 
 ## 已知问题 / 风险
 
-- 无已知未解决问题。`PurgeExpiredHistory`/`CleanupExpired` 无独立单测（依赖现有 cron/集成测试覆盖），逻辑简单但未直接测试。
+- `PurgeExpiredHistory` / `history.CleanupExpired` 仍无独立单元测试，当前由编译、WebUI 设置测试和全量集成验证覆盖。
+- PR #3 变更面仍较大，合并前建议复核发布资产是否实际提供 GitHub `digest` 字段。
 
 ## 剩余工作
 
-- 无。如需后续增强：清理 cron 可加单元测试、每仓库级保留期（当前为全局）。
+- 等待 PR #3 复审与合并决定。
 
 ## 推荐下一步
 
-无进行中任务。后续功能开发从 main（`06a3048`）新建分支即可。
+优先复核 PR #3 的最终 GitHub diff 与远程检查；若发布流程尚未写入 Release asset digest，先补齐发布流水线再启用在线更新。
