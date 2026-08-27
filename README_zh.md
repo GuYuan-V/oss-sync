@@ -85,6 +85,29 @@ export OSS_DB_DSN='postgres://user:pass@127.0.0.1:5432/oss?sslmode=disable'
 go run ./cmd/server
 ```
 
+### Docker
+
+使用 Docker Compose 一键构建并启动 SQLite 服务环境：
+
+```bash
+OSS_ADMIN_PASSWORD='strong-pass' docker compose up -d --build
+docker compose logs -f backend
+```
+
+服务默认暴露在 `http://localhost:8080`，数据保存在 `oss-data` 命名卷。可用 `OSS_PORT=9090` 修改宿主机端口。
+
+只构建和运行后端镜像：
+
+```bash
+docker build -t oss-sync-backend .
+docker run --rm -p 8080:8080 \
+  -e OSS_ADMIN_PASSWORD='strong-pass' \
+  -v oss-data:/app/data \
+  oss-sync-backend
+```
+
+容器部署应通过重建或替换镜像升级，不使用进程内二进制自更新。删除容器不会删除命名卷；`docker compose down -v` 会删除数据，请谨慎执行。
+
 ### 构建插件
 
 ```bash

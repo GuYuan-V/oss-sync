@@ -41,3 +41,23 @@ jobs:
       - run: npm exec tsc -- --noEmit
       - run: npm test
       - run: npm run build
+
+  container:
+    name: Container
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OSS_ADMIN_PASSWORD: ci-admin-password
+      OSS_PORT: 18080
+      OSS_VERSION: 0.0.0
+      OSS_COMMIT: ci
+      OSS_BUILT_AT: unknown
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker compose config --quiet
+      - run: docker compose up --build --wait --wait-timeout 120
+      - run: curl --fail --silent --show-error http://127.0.0.1:18080/readyz
+      - if: failure()
+        run: docker compose logs backend
+      - if: always()
+        run: docker compose down --volumes

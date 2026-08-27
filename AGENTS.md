@@ -11,6 +11,7 @@
 - 保持 Vault 隔离、设备授权、单调 revision、`operation_id` 幂等和 `synclock` 并发约束；同步写路径必须同时考虑数据库、文件正文、历史快照和失败恢复。
 - 模型变更需同步检查 `internal/database/database.go` 的迁移/回填，并兼容 SQLite 与 PostgreSQL。
 - 插件只修改 `plugin/src/`；`plugin/main.js` 是忽略的构建产物，不提交。
+- `Dockerfile` 只构建后端镜像，`docker-compose.yml` 使用 SQLite 命名卷启动服务环境；容器升级通过替换镜像完成。
 - 不提交 `data/`、数据库、日志、构建产物或密钥；配置新增字段需同时检查 dev/prod YAML、环境变量覆盖和校验。
 - 优先复用已有 Handler、策略、路径校验和锁；避免顺手重构或新增依赖。
 

@@ -85,6 +85,29 @@ export OSS_DB_DSN='postgres://user:pass@127.0.0.1:5432/oss?sslmode=disable'
 go run ./cmd/server
 ```
 
+### Docker
+
+Build and start a complete SQLite-backed environment with Docker Compose:
+
+```bash
+OSS_ADMIN_PASSWORD='strong-pass' docker compose up -d --build
+docker compose logs -f backend
+```
+
+The service is available at `http://localhost:8080`, and persistent data is stored in the `oss-data` named volume. Set `OSS_PORT=9090` to change the host port.
+
+To build and run only the backend image:
+
+```bash
+docker build -t oss-sync-backend .
+docker run --rm -p 8080:8080 \
+  -e OSS_ADMIN_PASSWORD='strong-pass' \
+  -v oss-data:/app/data \
+  oss-sync-backend
+```
+
+Container deployments should be upgraded by rebuilding or replacing the image, not by mutating the running container binary. Removing the container keeps the named volume; `docker compose down -v` deletes its data and must be used with care.
+
 ### Build plugin
 
 ```bash

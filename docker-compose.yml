@@ -1,0 +1,29 @@
+services:
+  backend:
+    image: oss-sync-backend:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${OSS_VERSION:-dev}
+        COMMIT: ${OSS_COMMIT:-local}
+        BUILT_AT: ${OSS_BUILT_AT:-unknown}
+    restart: unless-stopped
+    stop_grace_period: 20s
+    ports:
+      - "${OSS_PORT:-8080}:8080"
+    environment:
+      OSS_ADMIN_USERNAME: ${OSS_ADMIN_USERNAME:-admin}
+      OSS_ADMIN_PASSWORD: "${OSS_ADMIN_PASSWORD:?set OSS_ADMIN_PASSWORD before starting}"
+    volumes:
+      - oss-data:/app/data
+    healthcheck:
+      test:
+        ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  oss-data:
