@@ -62,11 +62,10 @@ Sync uses only HTTP. Short polling `wait=0` or long polling `wait=30` per Vault.
 
 ```bash
 go run ./cmd/server
-# or with env
-OSS_ENV=prod OSS_ADMIN_PASSWORD='strong-pass' go run ./cmd/server
 ```
 
-First run with an empty DB prompts for admin password in the terminal (default user `admin`), or use `OSS_ADMIN_PASSWORD` for non-interactive deploys. Afterwards the password is not needed.
+First registered user automatically becomes admin. Afterwards use that admin account to create others.
+
 
 Listens on `http://localhost:8080` by default, data in `data/`. Health:
 
@@ -90,7 +89,7 @@ go run ./cmd/server
 Build and start a complete SQLite-backed environment with Docker Compose:
 
 ```bash
-OSS_ADMIN_PASSWORD='strong-pass' docker compose up -d --build
+docker compose up -d --build
 docker compose logs -f backend
 ```
 
@@ -101,10 +100,10 @@ To build and run only the backend image:
 ```bash
 docker build -t oss-sync-backend .
 docker run --rm -p 8080:8080 \
-  -e OSS_ADMIN_PASSWORD='strong-pass' \
   -v oss-data:/app/data \
   oss-sync-backend
 ```
+
 
 Container deployments should be upgraded by rebuilding or replacing the image, not by mutating the running container binary. Removing the container keeps the named volume; `docker compose down -v` deletes its data and must be used with care.
 
@@ -128,10 +127,10 @@ Reload Obsidian → Enable *Obsidian Sync & Share* → Fill server URL, username
 | `OSS_SERVER_HOST` / `PORT` | listen address |
 | `OSS_DB_DRIVER` / `DSN` | sqlite or postgres |
 | `OSS_STORAGE_DIR` | file storage root |
-| `OSS_ADMIN_USERNAME` / `PASSWORD` | bootstrap admin |
 | `OSS_ALLOW_ANONYMOUS_REGISTRATION` | initial register switch |
 | `OSS_DEVICE_STALE_DAYS` | stale device threshold |
 | `OSS_RECONCILE_INTERVAL_HOURS` | storage check interval |
+
 
 Vault settings (per Vault, admin can force):
 

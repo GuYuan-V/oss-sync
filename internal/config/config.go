@@ -1,4 +1,4 @@
-﻿// 配置加载
+// 配置加载
 package config
 
 import (
@@ -77,7 +77,6 @@ type UpdateConfig struct {
 // OSS_ENV 取值：dev（默认）/ prod。对应 configs/config.<env>.yaml。
 // 配置文件查找路径：configs/config.<env>.yaml（相对于工作目录）。
 // 以下字段支持环境变量覆盖：
-//   - OSS_ADMIN_USERNAME
 //   - OSS_ALLOW_ANONYMOUS_REGISTRATION
 //   - OSS_DB_DRIVER / OSS_DB_DSN
 //   - OSS_SERVER_HOST / OSS_SERVER_PORT
@@ -112,9 +111,6 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) applyEnvOverrides() error {
-	if v := os.Getenv("OSS_ADMIN_USERNAME"); v != "" {
-		c.Auth.BootstrapAdminUsername = strings.TrimSpace(v)
-	}
 	if v, ok := os.LookupEnv("OSS_ALLOW_ANONYMOUS_REGISTRATION"); ok && v != "" {
 		switch strings.ToLower(strings.TrimSpace(v)) {
 		case "true":
@@ -388,4 +384,3 @@ func configPath() (string, error) {
 	}
 	return filepath.Join("configs", fmt.Sprintf("config.%s.yaml", env)), nil
 }
-

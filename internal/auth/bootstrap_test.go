@@ -30,32 +30,22 @@ func TestEnsureBootstrapAdminFromEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bootstrap admin: %v", err)
 	}
-	if !created {
-		t.Fatal("expected a new administrator")
+	if created {
+		t.Fatal("bootstrap must be no-op after removing env preset")
 	}
-
-	user, err := auth.AuthenticateCredentials(db, "console-admin", "initial-password-123")
-	if err != nil {
-		t.Fatalf("authenticate bootstrapped admin: %v", err)
-	}
-	if user.Role != "admin" {
-		t.Fatalf("role = %q, want admin", user.Role)
-	}
-	var vaultCount int64
-	if err := db.Model(&models.Vault{}).Where("owner_id = ?", user.ID).Count(&vaultCount).Error; err != nil {
+	var adminCount int64
+	if err := db.Model(&models.User{}).Where("role = ?", "admin").Count(&adminCount).Error; err != nil {
 		t.Fatal(err)
 	}
-	if vaultCount != 0 {
-		t.Fatalf("bootstrap must not create a vault: count = %d", vaultCount)
+	if adminCount != 0 {
+		t.Fatalf("admin count = %d, want 0 (env preset removed)", adminCount)
 	}
-
-	t.Setenv("OSS_ADMIN_PASSWORD", "")
-	created, err = auth.EnsureBootstrapAdmin(db, cfg)
+	role, err := auth.ResolveRegistrationRole(db)
 	if err != nil {
-		t.Fatalf("second bootstrap: %v", err)
+		t.Fatal(err)
 	}
-	if created {
-		t.Fatal("existing administrator must not be recreated")
+	if role != "admin" {
+		t.Fatalf("first registration role = %q, want admin", role)
 	}
 }
 

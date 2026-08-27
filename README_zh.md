@@ -62,11 +62,10 @@ plugin/src        # Obsidian 插件
 
 ```bash
 go run ./cmd/server
-# 或带环境变量
-OSS_ENV=prod OSS_ADMIN_PASSWORD='strong-pass' go run ./cmd/server
 ```
 
-空库首次启动会在终端隐藏输入管理员密码（默认用户 `admin`），或使用 `OSS_ADMIN_PASSWORD` 非交互创建。之后无需重复输入。
+首个注册用户自动成为管理员，之后用该管理员创建其他账户。
+
 
 默认监听 `http://localhost:8080`，数据在 `data/`。健康检查：
 
@@ -90,7 +89,7 @@ go run ./cmd/server
 使用 Docker Compose 一键构建并启动 SQLite 服务环境：
 
 ```bash
-OSS_ADMIN_PASSWORD='strong-pass' docker compose up -d --build
+docker compose up -d --build
 docker compose logs -f backend
 ```
 
@@ -101,10 +100,10 @@ docker compose logs -f backend
 ```bash
 docker build -t oss-sync-backend .
 docker run --rm -p 8080:8080 \
-  -e OSS_ADMIN_PASSWORD='strong-pass' \
   -v oss-data:/app/data \
   oss-sync-backend
 ```
+
 
 容器部署应通过重建或替换镜像升级，不使用进程内二进制自更新。删除容器不会删除命名卷；`docker compose down -v` 会删除数据，请谨慎执行。
 
@@ -128,10 +127,10 @@ npm run build
 | `OSS_SERVER_HOST` / `PORT` | 监听地址 |
 | `OSS_DB_DRIVER` / `DSN` | sqlite 或 postgres |
 | `OSS_STORAGE_DIR` | 文件存储根 |
-| `OSS_ADMIN_USERNAME` / `PASSWORD` | 冷启动管理员 |
 | `OSS_ALLOW_ANONYMOUS_REGISTRATION` | 初始注册开关 |
 | `OSS_DEVICE_STALE_DAYS` | 设备过期阈值 |
 | `OSS_RECONCILE_INTERVAL_HOURS` | 对账周期 |
+
 
 Vault 级设置（管理员可强制）：`sync_mode`、`recycle_days`、`storage_quota`、`upload_size`。
 

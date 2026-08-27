@@ -47,7 +47,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      OSS_ADMIN_PASSWORD: ci-admin-password
       OSS_PORT: 18080
       OSS_VERSION: 0.0.0
       OSS_COMMIT: ci

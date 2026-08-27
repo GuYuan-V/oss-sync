@@ -2,48 +2,53 @@
 
 ## 当前目标
 
-修复 Linux 服务端系统指标（CPU 名称/使用率、服务器磁盘、内存）显示为 0/空的问题。
+移除环境变量预制管理员路径（`OSS_ADMIN_PASSWORD`），仅保留“首个网页注册自动成为 admin”。
 
 ## 当前状态
 
-- `main` 已同步至 `origin/main` @ `e55209b`，本地无落后。
-- 系统指标 Linux 实现已修复并通过全量回归验证。
+- `main` 已推送 `dc0e98f`（修复 Linux 系统指标）；本地在 `dc0e98f` 之上待推送 1 提交，移除预置逻辑。
+- 系统指标与管理员判定均已通过全量回归验证。
 
 ## 已完成工作
 
-- `internal/webui/system_metrics_other.go`（`!windows`）从占位实现替换为真实实现：
-  - `cpuModelName()`：解析 `/proc/cpuinfo` 首个 `model name`，无则回退 `Hardware/Processor`，否则 `CPU`。
-  - `readCPUSample()`：优先读取 `/proc/stat` 的 `cpu` 行（total = 各字段和，idle = idle+iowait），失败回退 `runtime/metrics`。
-  - `memoryUsage()`：优先解析 `/proc/meminfo` 的 `MemTotal`/`MemAvailable`（缺则 `MemFree+Buffers+Cached`），失败回退 `runtime.MemStats`。
-  - `diskUsage()`：`unix.Statfs(dataDir || "/")`，`total = Blocks*Bsize`，`used = total - Bfree*Bsize`。
-- 保留 Windows 实现不变；非 Linux（Darwin）无 `/proc` 时自动回退到原逻辑。
+- **系统指标** `internal/webui/system_metrics_other.go`（`!windows`）真实实现：`cpuModelName`→`/proc/cpuinfo`、`readCPUSample`→`/proc/stat`、`memoryUsage`→`/proc/meminfo`、`diskUsage`→`unix.Statfs`；实测 `disk 79.8GB/1081GB`、`cpu AMD Ryzen 7 7735H 3.12%`、`mem 4.7/12.5GB`。
+- **管理员判定** 移除预置路径：
+  - `internal/auth/bootstrap.go` 改为 no-op（仅判存量 admin，不读 `OSS_ADMIN_PASSWORD`）
+  - `internal/config/config.go` 移除 `OSS_ADMIN_USERNAME` 环境覆盖及注释
+  - `docker-compose.yml` 移除 `OSS_ADMIN_USERNAME`/`OSS_ADMIN_PASSWORD` 必填环境
+  - `.github/workflows/ci.yml` 移除 `OSS_ADMIN_PASSWORD`
+  - `README.md`/`README_zh.md` 更新为“首个注册即 admin”，移除 env 示例与表格项
+  - `internal/auth/bootstrap_test.go` 更新 `TestEnsureBootstrapAdminFromEnvironment` 为 no-op 预期
 
 ## 重要决策
 
-- 不引入新依赖（`golang.org/x/sys/unix` 已在 `go.mod`），拒绝 `gopsutil` 等重库；解析 `/proc` 为最小可移植方案。
-- 磁盘以 `Bfree` 计算已用（与 `df Used` 一致），而非 `Bavail`，避免高估。
-- 内存改为系统物理内存（`MemTotal-MemAvailable`），与 Windows `GlobalMemoryStatusEx` 语义对齐，替代进程堆内存。
+- 管理员唯一判定 `User.Role=="admin"` 不变，首注锁 `ResolveRegistrationRole`（`adminCount==0→admin`）为唯一入口，删除重量依赖 `gopsutil`、保留最小 `/proc` 方案。
+- 不引入新 env，保持部署简单；既有数据库不受影响，`EnsureBootstrapAdmin` 兼容签名。
 
 ## 修改的重要文件
 
 - `internal/webui/system_metrics_other.go`
+- `internal/auth/bootstrap.go`、`internal/auth/bootstrap_test.go`
+- `internal/config/config.go`
+- `docker-compose.yml`、`.github/workflows/ci.yml`
+- `README.md`、`README_zh.md`
 
 ## 验证情况
 
 - `gofmt -w` ✅
 - `go vet ./...` ✅
-- `go test ./...` ✅（22 包通过，含 `internal/webui`）
-- 手动验证（容器内）：`disk 79.8GB/1081GB`、`cpu model "AMD Ryzen 7 7735H"`、`mem 4.6/12.5GB 36.8%`、`cpu busy 10.5%` 均非零 ✅
+- `go test ./...` ✅（全量通过，`webui` 单独及 `-race` 均通过）
+- `go test ./internal/auth -run TestEnsureBootstrap` ✅（预置不再创建，首注仍为 admin）
 
 ## 已知问题 / 风险
 
-- Darwin/无 `/proc` 环境仍走回退路径，CPU 可能为 `runtime/metrics` 的 0（已验证 Linux 容器正常）。
-- 旧内核无 `MemAvailable` 时估算 `free+buffers+cached`，误差可接受。
+- 既有通过 `OSS_ADMIN_PASSWORD` 预置的实例，升级后不影响已创建 admin；空库首次启动必须走网页注册。
+- Darwin 无 `/proc` 仍回退（此前风险保留）。
 
 ## 剩余工作
 
-- 无；如需 Darwin 系统内存更精准，可后续补充 `sysctl` 实现。
+- 无
 
 ## 推荐下一步
 
-- 在真实部署（Docker `data` 卷路径）刷新 `/dashboard` 与 `/dashboard/metrics`，确认前端 `metrics.js` 渲染非零；随后发布补丁版本。
+- 验证空库 `docker compose up --build` 后首个 `/register` 是否成为 admin；随后发布补丁版本并归档 `OSS_ADMIN_PASSWORD` 文档。
