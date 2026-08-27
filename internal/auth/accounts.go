@@ -1,10 +1,11 @@
-﻿// 账户管理
+// 账户管理
 package auth
 
 import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/oss/oss-server/internal/jwt"
 	"github.com/oss/oss-server/internal/models"
 )
+
+var registrationMu sync.Mutex
 
 // ValidateAccountInput 对 API 和网页注册使用同一套账号规则。
 func ValidateAccountInput(username, password string) error {
@@ -81,6 +84,50 @@ func CreateAccount(db *gorm.DB, username, password, role string) (*models.User, 
 		return nil, err
 	}
 	return &user, nil
+}
+
+// CreateAccountForAnonymousRegistration 为匿名注册提供原子化的角色判定与创建。
+// 角色判定与账户创建在同一进程锁 + 数据库事务内完成，避免并发首注产生多个 admin。
+func CreateAccountForAnonymousRegistration(db *gorm.DB, username, password string) (*models.User, error) {
+	if err := ValidateAccountInput(username, password); err != nil {
+		return nil, err
+	}
+	username = strings.TrimSpace(username)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("生成密码哈希失败: %w", err)
+	}
+	registrationMu.Lock()
+	defer registrationMu.Unlock()
+	var user *models.User
+	err = db.Transaction(func(tx *gorm.DB) error {
+		var adminCount int64
+		if err := tx.Model(&models.User{}).Where("role = ?", "admin").Count(&adminCount).Error; err != nil {
+			return err
+		}
+		role := "user"
+		if adminCount == 0 {
+			role = "admin"
+		}
+		u := models.User{
+			Username:     username,
+			PasswordHash: string(hash),
+			Role:         role,
+			StorageQuota: 0,
+		}
+		if err := tx.Create(&u).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&models.UserSetting{UserID: u.ID}).Error; err != nil {
+			return err
+		}
+		user = &u
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 // AuthenticateCredentials 校验用户名密码，并返回当前数据库中的用户。
@@ -179,4 +226,3 @@ func updatePassword(db *gorm.DB, userID uint, newPassword string) error {
 		"token_version": gorm.Expr("token_version + 1"),
 	}).Error
 }
-

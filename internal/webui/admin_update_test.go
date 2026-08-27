@@ -47,11 +47,11 @@ func newWebUITestDB(t *testing.T) (*gorm.DB, *config.Config, string) {
 		t.Fatalf("migrate: %v", err)
 	}
 	cfg := &config.Config{
-		Server:  config.ServerConfig{Host: "127.0.0.1", Port: 8080, Mode: gin.TestMode, MaxFileSizeMB: 100},
-		Storage: config.StorageConfig{DataDir: dataDir},
+		Server:   config.ServerConfig{Host: "127.0.0.1", Port: 8080, Mode: gin.TestMode, MaxFileSizeMB: 100},
+		Storage:  config.StorageConfig{DataDir: dataDir},
 		Database: config.DatabaseConfig{Driver: "sqlite", DSN: filepath.Join(dataDir, "test.db")},
-		Auth:    config.AuthConfig{JWTSecret: "test-secret-32-bytes-long-xxxxxx", BootstrapAdminUsername: "admin"},
-		Update:  config.UpdateConfig{GitHubRepo: "fake/oss-sync"},
+		Auth:     config.AuthConfig{JWTSecret: "test-secret-32-bytes-long-xxxxxx"},
+		Update:   config.UpdateConfig{GitHubRepo: "fake/oss-sync"},
 	}
 	// ensure jwt secret in db
 	_ = auth.EnsureDatabaseJWTSecret(db, cfg)
@@ -111,7 +111,7 @@ func newWebUIHandlerWithUpdate(t *testing.T, db *gorm.DB, cfg *config.Config) (*
 	return h, mgr, svc
 }
 
-func updateLaunchHelperFn() func(string, string) error { return nil }
+func updateLaunchHelperFn() func(string, string) error         { return nil }
 func updateVerifyStagedFn() func(string, string, string) error { return nil }
 
 // NOTE: we patch via update package exported setters directly in tests above.
@@ -358,7 +358,7 @@ func TestAdminUpdate_MissingConfirm(t *testing.T) {
 func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 	tpl, err := template.New("web").Funcs(template.FuncMap{
 		"formatBytes": formatBytes,
-		"timeFmt": func(v time.Time) string { return v.Format("2006-01-02 15:04") },
+		"timeFmt":     func(v time.Time) string { return v.Format("2006-01-02 15:04") },
 	}).ParseFS(webFS, "templates/admin_system.html")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -369,17 +369,17 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 	}{
 		Layout: layoutData{CSRF: "csrf-token", Language: "zh"},
 		Data: map[string]any{
-			"RegistrationEnabled":    true,
-			"SyncMode":               "user_choice",
-			"DefaultRecycleBinDays":  30,
-			"MaxLongPollWaitSec":     20,
-			"MaxSyncDebounceSec":     60,
-			"MaxRecycleBinDays":      90,
-			"MaxVaultStorageMB":      int64(10240),
-			"MaxUploadSizeMB":        int64(50),
-			"ConfigMaxUploadSizeMB":  int64(100),
-			"DatabaseDriver":         "sqlite",
-			"DatabaseDSN":            "data/oss.db",
+			"RegistrationEnabled":   true,
+			"SyncMode":              "user_choice",
+			"DefaultRecycleBinDays": 30,
+			"MaxLongPollWaitSec":    20,
+			"MaxSyncDebounceSec":    60,
+			"MaxRecycleBinDays":     90,
+			"MaxVaultStorageMB":     int64(10240),
+			"MaxUploadSizeMB":       int64(50),
+			"ConfigMaxUploadSizeMB": int64(100),
+			"DatabaseDriver":        "sqlite",
+			"DatabaseDSN":           "data/oss.db",
 			"Update": adminUpdateStatus{
 				CurrentVersion: "1.0.0",
 				Env:            "dev",
@@ -562,4 +562,6 @@ func sha256Sum(b []byte) string {
 	return hex.EncodeToString(h[:])
 }
 func getLaunchFn() func(string, string) error { return func(string, string) error { return nil } }
-func getVerifyFn() func(string, string, string) error { return func(string, string, string) error { return nil } }
+func getVerifyFn() func(string, string, string) error {
+	return func(string, string, string) error { return nil }
+}

@@ -1,4 +1,4 @@
-﻿// 认证页面
+// 认证页面
 package webui
 
 import (
@@ -60,20 +60,16 @@ func (h *Handler) registerSubmit(c *gin.Context) {
 		h.renderAuth(c, http.StatusBadRequest, "register", view)
 		return
 	}
-	role, err := auth.ResolveRegistrationRole(h.DB)
+	// 原子化首注判定与创建，避免并发产生多个 admin（跨 web/API 入口）。
+	user, err := auth.CreateAccountForAnonymousRegistration(h.DB, username, password)
 	if err != nil {
-		view.Error = h.t(c, "err.admin_status_failed")
-		h.renderAuth(c, http.StatusInternalServerError, "register", view)
-		return
-	}
-	if _, err := auth.CreateAccount(h.DB, username, password, role); err != nil {
 		view.Error = h.t(c, "err.username_taken")
 		h.renderAuth(c, http.StatusConflict, "register", view)
 		return
 	}
 	view.Success = true
 	view.Username = username
-	if role == "admin" {
+	if user.Role == "admin" {
 		view.SuccessMessage = "已注册为首个管理员。"
 	}
 	h.renderAuth(c, http.StatusOK, "register", view)
@@ -88,4 +84,3 @@ func errorsIsNotFound(err error) bool {
 func vaultbackupPurge(tx *gorm.DB, h *Handler, vault models.Vault) (models.VaultBackup, error) {
 	return vaultbackup.PurgeWithTx(tx, h.Cfg.Storage.DataDir, vault)
 }
-

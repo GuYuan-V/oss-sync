@@ -1,4 +1,4 @@
-﻿// 服务入口
+// 服务入口
 package main
 
 import (
@@ -72,9 +72,6 @@ func main() {
 	if err := auth.EnsureRegistrationSetting(db, cfg.Auth.AllowAnonymousRegistration); err != nil {
 		log.Fatalf("初始化注册设置失败: %v", err)
 	}
-	if _, err := auth.EnsureBootstrapAdmin(db, cfg); err != nil {
-		log.Fatalf("初始化管理员失败: %v", err)
-	}
 	if _, err := reconcile.New(db, cfg).Run(true); err != nil {
 		log.Printf("[OSS] 启动存储对账失败: %v", err)
 	}
@@ -143,4 +140,3 @@ func shutdownGracefully(httpSrv *http.Server, sched *cron.Scheduler, db *gorm.DB
 		_ = sqlDB.Close()
 	}
 }
-

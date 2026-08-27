@@ -2,48 +2,46 @@
 
 ## 当前目标
 
-移除环境变量预制管理员路径（`OSS_ADMIN_PASSWORD`），仅保留“首个网页注册自动成为 admin”。
+修复审查 `dc0e98f` / `86aacf1` 的 4 项问题：首注原子化、CPU 指标重复计算、ARM 模型名、死配置清理。
 
 ## 当前状态
 
-- `main` 已推送 `dc0e98f`（修复 Linux 系统指标）；本地在 `dc0e98f` 之上待推送 1 提交，移除预置逻辑。
-- 系统指标与管理员判定均已通过全量回归验证。
+- `main` 已推送 `86aacf1`（含指标修复与预置移除）；本地在 `86aacf1` 之上待推送 1 提交，修复审查问题并通过全量回归。
+- 并发首注、`/proc` 指标与配置清理均已验证。
 
 ## 已完成工作
 
-- **系统指标** `internal/webui/system_metrics_other.go`（`!windows`）真实实现：`cpuModelName`→`/proc/cpuinfo`、`readCPUSample`→`/proc/stat`、`memoryUsage`→`/proc/meminfo`、`diskUsage`→`unix.Statfs`；实测 `disk 79.8GB/1081GB`、`cpu AMD Ryzen 7 7735H 3.12%`、`mem 4.7/12.5GB`。
-- **管理员判定** 移除预置路径：
-  - `internal/auth/bootstrap.go` 改为 no-op（仅判存量 admin，不读 `OSS_ADMIN_PASSWORD`）
-  - `internal/config/config.go` 移除 `OSS_ADMIN_USERNAME` 环境覆盖及注释
-  - `docker-compose.yml` 移除 `OSS_ADMIN_USERNAME`/`OSS_ADMIN_PASSWORD` 必填环境
-  - `.github/workflows/ci.yml` 移除 `OSS_ADMIN_PASSWORD`
-  - `README.md`/`README_zh.md` 更新为“首个注册即 admin”，移除 env 示例与表格项
-  - `internal/auth/bootstrap_test.go` 更新 `TestEnsureBootstrapAdminFromEnvironment` 为 no-op 预期
+- **高：原子注册** `internal/auth/accounts.go` 新增 `registrationMu` + `CreateAccountForAnonymousRegistration`（进程锁 + `db.Transaction` 内 `COUNT admin`→`CREATE`）；`internal/auth/handler.go` 与 `internal/webui/auth_pages.go` 匿名路径改调原子函数，移除 `Handler.registerMu` 与 `sync` 导入；`go test -run TestConcurrentFirstRegistration` 10 并发仅 1 admin。
+- **中：CPU 重复** `internal/webui/system_metrics_other.go:26` `readProcStatSample` 汇总时 `if i>=8 {break}` 跳过 `guest/guest_nice`（已计入 user/nice），修正虚拟化下偏高。
+- **中：ARM fallback** `cpuModelName` 删除 `processor` / `cpu part` 分支，仅保留 `model name` → `Hardware` → `CPU`，避免返回 `1`/`0xd03`。
+- **低：死配置清理** 删除 `internal/auth/bootstrap.go`（空实现）、`AuthConfig.BootstrapAdminUsername` 字段及 `EffectiveBootstrapAdminUsername`、`validate` 默认、`configs/config.*.yaml` 行、`cmd/server/main.go` 调用、`internal/auth/bootstrap_test.go` 两用例（精简为注册开关用例）、`server_test.go`/`admin_update_test.go` 中 `BootstrapAdminUsername` 字段；`grep BootstrapAdmin/EnsureBootstrap` 全清。
 
 ## 重要决策
 
-- 管理员唯一判定 `User.Role=="admin"` 不变，首注锁 `ResolveRegistrationRole`（`adminCount==0→admin`）为唯一入口，删除重量依赖 `gopsutil`、保留最小 `/proc` 方案。
-- 不引入新 env，保持部署简单；既有数据库不受影响，`EnsureBootstrapAdmin` 兼容签名。
+- 首注原子化采用“进程锁 + 事务内判定”兼顾单机与 SQLite 串行写，Postgres 下 `COUNT` 在事务内可见已提交 admin，满足跨入口 DB 保证；不引入分布式锁。
+- `/proc/stat` 总量取前 8 列符合 kernel 文档；ARM 仅信 `Hardware`，不猜测数值字段。
+- 死配置直接删除而非兼容保留，`net -65` 行，符合 ponytail 精简。
 
 ## 修改的重要文件
 
+- `internal/auth/accounts.go`、`internal/auth/handler.go`、`internal/webui/auth_pages.go`
 - `internal/webui/system_metrics_other.go`
-- `internal/auth/bootstrap.go`、`internal/auth/bootstrap_test.go`
-- `internal/config/config.go`
-- `docker-compose.yml`、`.github/workflows/ci.yml`
-- `README.md`、`README_zh.md`
+- `internal/auth/bootstrap.go`（删除）、`internal/auth/bootstrap_test.go`
+- `internal/config/config.go`、`configs/config.dev.yaml`、`configs/config.prod.yaml`
+- `cmd/server/main.go`、`internal/server/server_test.go`、`internal/webui/admin_update_test.go`
 
 ## 验证情况
 
-- `gofmt -w` ✅
+- `gofmt -w`（Go 文件） ✅
 - `go vet ./...` ✅
-- `go test ./...` ✅（全量通过，`webui` 单独及 `-race` 均通过）
-- `go test ./internal/auth -run TestEnsureBootstrap` ✅（预置不再创建，首注仍为 admin）
+- `go test ./... -count=1` ✅（22 包，含 `webui -race`）
+- `go test ./internal/auth -run TestConcurrentFirstRegistration` ✅（1 admin / 10 并发）
+- `grep BootstrapAdmin/EnsureBootstrap` 0 命中 ✅
 
 ## 已知问题 / 风险
 
-- 既有通过 `OSS_ADMIN_PASSWORD` 预置的实例，升级后不影响已创建 admin；空库首次启动必须走网页注册。
-- Darwin 无 `/proc` 仍回退（此前风险保留）。
+- 多实例部署下进程锁不跨进程，依赖 DB 事务串行化；SQLite 天然串行，Postgres `READ COMMITTED` 下第二事务会看到已提交 admin 而退为 user，符合预期。
+- Darwin 仍回退 `runtime` 指标。
 
 ## 剩余工作
 
@@ -51,4 +49,4 @@
 
 ## 推荐下一步
 
-- 验证空库 `docker compose up --build` 后首个 `/register` 是否成为 admin；随后发布补丁版本并归档 `OSS_ADMIN_PASSWORD` 文档。
+- 空库并发注册压测与 `docker compose up` 首注验证后发布补丁。

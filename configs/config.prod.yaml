@@ -19,7 +19,6 @@ storage:
 auth:
   jwt_secret: ""
   jwt_ttl_hours: 72
-  bootstrap_admin_username: "admin"
   allow_anonymous_registration: true # 仅作为新数据库注册开关的初始值；之后由管理面板控制
 
 sync:

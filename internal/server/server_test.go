@@ -52,7 +52,6 @@ func newTestServer(t *testing.T) (*Server, *gorm.DB, string) {
 		Auth: config.AuthConfig{
 			JWTSecret:                  "test-secret",
 			JWTTTLHours:                1,
-			BootstrapAdminUsername:     "admin",
 			AllowAnonymousRegistration: true,
 		},
 		Sync: config.SyncConfig{MaxConcurrency: 6},

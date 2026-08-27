@@ -42,6 +42,9 @@ func readProcStatSample() (cpuSample, bool) {
 		var total uint64
 		var idle uint64
 		for i, field := range fields[1:] {
+			if i >= 8 {
+				break // guest/guest_nice 已计入 user/nice，避免重复
+			}
 			val, err := strconv.ParseUint(field, 10, 64)
 			if err != nil {
 				return cpuSample{}, false
@@ -159,17 +162,16 @@ func cpuModelName() string {
 			}
 		}
 	}
-	// fallback for ARM or other architectures where "model name" may not exist
+	// ARM 等无 model name 时，回退仅看 Hardware，避免 processor/cpu part 的数值噪音。
 	if _, err := f.Seek(0, 0); err == nil {
 		scanner = bufio.NewScanner(f)
 		for scanner.Scan() {
 			line := scanner.Text()
-			lower := strings.ToLower(line)
-			if strings.HasPrefix(lower, "hardware") || strings.HasPrefix(lower, "processor") || strings.HasPrefix(lower, "cpu part") {
+			if strings.HasPrefix(strings.ToLower(line), "hardware") {
 				parts := strings.SplitN(line, ":", 2)
 				if len(parts) == 2 {
 					name := strings.TrimSpace(parts[1])
-					if name != "" && name != "0" {
+					if name != "" {
 						return name
 					}
 				}

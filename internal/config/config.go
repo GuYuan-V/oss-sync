@@ -40,9 +40,8 @@ type StorageConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret              string `yaml:"jwt_secret"`
-	JWTTTLHours            int    `yaml:"jwt_ttl_hours"`
-	BootstrapAdminUsername string `yaml:"bootstrap_admin_username"`
+	JWTSecret   string `yaml:"jwt_secret"`
+	JWTTTLHours int    `yaml:"jwt_ttl_hours"`
 	// AllowAnonymousRegistration 只用于初始化新数据库中的注册开关。
 	// 初始化后以数据库中的 SystemSetting 为准。
 	AllowAnonymousRegistration bool `yaml:"allow_anonymous_registration"`
@@ -170,9 +169,6 @@ func (c *Config) validate() error {
 	if c.Storage.DataDir == "" {
 		return fmt.Errorf("storage.data_dir 不能为空")
 	}
-	if c.Auth.BootstrapAdminUsername == "" {
-		c.Auth.BootstrapAdminUsername = "admin"
-	}
 	if c.Server.Port <= 0 || c.Server.Port > 65535 {
 		return fmt.Errorf("server.port 非法: %d", c.Server.Port)
 	}
@@ -246,15 +242,6 @@ func isValidRepoPart(p string) bool {
 	}
 	return true
 }
-
-func (c AuthConfig) EffectiveBootstrapAdminUsername() string {
-	username := strings.TrimSpace(c.BootstrapAdminUsername)
-	if username == "" {
-		return "admin"
-	}
-	return username
-}
-
 func (c SyncConfig) EffectiveDeviceStaleDays() int {
 	if c.DeviceStaleDays <= 0 {
 		return 90

@@ -11,7 +11,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -28,7 +27,6 @@ import (
 type Handler struct {
 	DB            *gorm.DB
 	Cfg           *config.Config
-	registerMu    sync.Mutex
 	loginLimit    *AttemptLimiter
 	registerLimit *AttemptLimiter
 }
@@ -84,8 +82,6 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many registration attempts; try again later"})
 		return
 	}
-	h.registerMu.Lock()
-	defer h.registerMu.Unlock()
 
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -98,16 +94,10 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	role := strings.ToLower(req.Role)
-	if role == "" {
-		role = "user"
-	}
-	if role != "admin" && role != "user" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "role 必须为 admin 或 user"})
-		return
-	}
 
 	cur := CurrentUser(c)
+	var u *models.User
+	var err error
 	if cur == nil {
 		enabled, err := RegistrationEnabled(h.DB, h.Cfg.Auth.AllowAnonymousRegistration)
 		if err != nil {
@@ -121,24 +111,33 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 			})
 			return
 		}
-		// 无管理员时第一个注册账户自动成为 admin。
-		role, err = ResolveRegistrationRole(h.DB)
+		// 原子化首注判定与创建，避免并发产生多个 admin（跨 web/API 入口）。
+		u, err = CreateAccountForAnonymousRegistration(h.DB, req.Username, req.Password)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取管理员状态失败"})
+			c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
 			return
 		}
-	} else if cur.Role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": "仅 admin 可创建其他用户，当前用户 " + cur.Username + " 无权限",
-			"code":  "not_admin",
-		})
-		return
-	}
-
-	u, err := CreateAccount(h.DB, req.Username, req.Password, role)
-	if err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
-		return
+	} else {
+		if cur.Role != "admin" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "仅 admin 可创建其他用户，当前用户 " + cur.Username + " 无权限",
+				"code":  "not_admin",
+			})
+			return
+		}
+		role := strings.ToLower(req.Role)
+		if role == "" {
+			role = "user"
+		}
+		if role != "admin" && role != "user" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "role 必须为 admin 或 user"})
+			return
+		}
+		u, err = CreateAccount(h.DB, req.Username, req.Password, role)
+		if err != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
+			return
+		}
 	}
 
 	token, expiresIn, err := IssueToken(h.Cfg, *u)
