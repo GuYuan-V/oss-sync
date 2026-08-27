@@ -2,58 +2,48 @@
 
 ## 当前目标
 
-发布 `v0.1.7-rc.1` Pre-Release，验证 Tag 触发的构建与资产发布链路；同时交付 Docker 后端镜像与 Compose 服务环境。
+修复 Linux 服务端系统指标（CPU 名称/使用率、服务器磁盘、内存）显示为 0/空的问题。
 
 ## 当前状态
 
-- Docker/Compose 与预发布支持已推送到 `main`，提交为 `83cb2f3`、`741fb54`。
-- `v0.1.7-rc.1` Tag 已推送，GitHub Pre-Release 已成功创建。
-- CI 与 Release workflow 均已完成并通过。
+- `main` 已同步至 `origin/main` @ `e55209b`，本地无落后。
+- 系统指标 Linux 实现已修复并通过全量回归验证。
 
 ## 已完成工作
 
-- `Dockerfile` 使用 Go/Alpine 多阶段构建，仅打包后端、CA 证书和生产配置，并以 UID/GID 10001 运行。
-- `docker-compose.yml` 使用项目默认 SQLite、`oss-data` 命名卷、必填管理员密码和 `/readyz` 健康检查。
-- CI 新增 `Container` Job，在 GitHub Runner 构建 Compose、等待健康状态并访问 `/readyz`。
-- Release 工作流支持 `vX.Y.Z` 和 `vX.Y.Z-rc.N`；RC Tag 自动创建 Pre-Release。
-- Release 产物中的插件 `manifest.json` 会写入 Tag 版本，避免源码版本与发布版本不一致。
-- 稳定版发布仍构建 Linux/macOS amd64/arm64、Windows amd64 服务端资产和插件三件套。
+- `internal/webui/system_metrics_other.go`（`!windows`）从占位实现替换为真实实现：
+  - `cpuModelName()`：解析 `/proc/cpuinfo` 首个 `model name`，无则回退 `Hardware/Processor`，否则 `CPU`。
+  - `readCPUSample()`：优先读取 `/proc/stat` 的 `cpu` 行（total = 各字段和，idle = idle+iowait），失败回退 `runtime/metrics`。
+  - `memoryUsage()`：优先解析 `/proc/meminfo` 的 `MemTotal`/`MemAvailable`（缺则 `MemFree+Buffers+Cached`），失败回退 `runtime.MemStats`。
+  - `diskUsage()`：`unix.Statfs(dataDir || "/")`，`total = Blocks*Bsize`，`used = total - Bfree*Bsize`。
+- 保留 Windows 实现不变；非 Linux（Darwin）无 `/proc` 时自动回退到原逻辑。
 
 ## 重要决策
 
-- 单服务环境复用 SQLite，不额外引入 PostgreSQL；外部数据库仍可通过现有 `OSS_DB_*` 覆盖。
-- 容器通过替换镜像升级，不执行容器内二进制自更新。
-- Pre-Release 用于验证发布链路；服务端更新器继续拒绝预发布版本，GitHub latest 接口也不会把 Pre-Release 当作正式更新。
-- Release 仍只接受 `main` 历史中的 Tag，并拒绝其他 Tag 格式。
+- 不引入新依赖（`golang.org/x/sys/unix` 已在 `go.mod`），拒绝 `gopsutil` 等重库；解析 `/proc` 为最小可移植方案。
+- 磁盘以 `Bfree` 计算已用（与 `df Used` 一致），而非 `Bavail`，避免高估。
+- 内存改为系统物理内存（`MemTotal-MemAvailable`），与 Windows `GlobalMemoryStatusEx` 语义对齐，替代进程堆内存。
 
 ## 修改的重要文件
 
-- `Dockerfile`、`docker-compose.yml`、`.dockerignore`
-- `.github/workflows/ci.yml`、`.github/workflows/release.yml`
-- `README.md`、`README_zh.md`、`AGENTS.md`
-- `.agent/HANDOFF.md`
+- `internal/webui/system_metrics_other.go`
 
 ## 验证情况
 
-- `actionlint v1.7.12 .github/workflows/ci.yml .github/workflows/release.yml` ✅
-- Prettier 3.6.2 检查 CI、Release、Compose YAML ✅
-- `git diff --check` ✅（仅报告仓库既有 CRLF 转换提示）
-- Release 插件 manifest 版本注入逻辑以 `0.1.7-rc.1` 校验 ✅
-- Dockerfile 等价的本地静态 Go 构建与 `/readyz` 启动检查 ✅
-- GitHub CI `33074048691` ✅：Plugin 22s、Container 55s、Backend 8m28s。
-- GitHub Release `33074798074` ✅：`v0.1.7-rc.1` Pre-Release 和八个带 SHA-256 digest 的资产。
-- 下载 Linux amd64 发布包并执行 `--version`，输出 `0.1.7-rc.1` ✅
-- 下载插件 `manifest.json`，版本为 `0.1.7-rc.1` ✅
+- `gofmt -w` ✅
+- `go vet ./...` ✅
+- `go test ./...` ✅（22 包通过，含 `internal/webui`）
+- 手动验证（容器内）：`disk 79.8GB/1081GB`、`cpu model "AMD Ryzen 7 7735H"`、`mem 4.6/12.5GB 36.8%`、`cpu busy 10.5%` 均非零 ✅
 
 ## 已知问题 / 风险
 
-- Pre-Release 不会被正式版在线更新入口发现，这是预期行为。
-- 当前 WSL 无 Docker CLI；容器链路已由 GitHub Runner 验证。
+- Darwin/无 `/proc` 环境仍走回退路径，CPU 可能为 `runtime/metrics` 的 0（已验证 Linux 容器正常）。
+- 旧内核无 `MemAvailable` 时估算 `free+buffers+cached`，误差可接受。
 
 ## 剩余工作
 
-- 正式版上线时推送稳定 Tag（例如 `v0.1.7`），再验证服务端与插件在线更新入口。
+- 无；如需 Darwin 系统内存更精准，可后续补充 `sysctl` 实现。
 
 ## 推荐下一步
 
-在隔离测试环境手动安装 `v0.1.7-rc.1` 插件与服务端资产；确认无问题后发布 `v0.1.7`。
+- 在真实部署（Docker `data` 卷路径）刷新 `/dashboard` 与 `/dashboard/metrics`，确认前端 `metrics.js` 渲染非零；随后发布补丁版本。
