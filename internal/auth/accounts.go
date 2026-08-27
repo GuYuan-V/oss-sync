@@ -37,17 +37,13 @@ func ValidateAccountInput(username, password string) error {
 	return nil
 }
 
-// ResolveRegistrationRole 在注册锁内调用：系统中还没有管理员时，
-// 第一个注册账户自动成为 admin，之后一律为 user。
-func ResolveRegistrationRole(db *gorm.DB) (string, error) {
-	var adminCount int64
-	if err := db.Model(&models.User{}).Where("role = ?", "admin").Count(&adminCount).Error; err != nil {
-		return "", err
+// IsUsernameTakenError 判断是否为用户名唯一约束冲突。
+func IsUsernameTakenError(err error) bool {
+	if err == nil {
+		return false
 	}
-	if adminCount == 0 {
-		return "admin", nil
-	}
-	return "user", nil
+	msg := err.Error()
+	return strings.Contains(msg, "UNIQUE") || strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate") || strings.Contains(msg, "Duplicate")
 }
 
 // CreateAccount 创建用户及默认用户设置。Vault 必须由用户登录后手动创建。

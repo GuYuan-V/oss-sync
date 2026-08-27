@@ -114,7 +114,11 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 		// 原子化首注判定与创建，避免并发产生多个 admin（跨 web/API 入口）。
 		u, err = CreateAccountForAnonymousRegistration(h.DB, req.Username, req.Password)
 		if err != nil {
-			c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
+			if IsUsernameTakenError(err) {
+				c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create account"})
+			}
 			return
 		}
 	} else {
@@ -135,7 +139,11 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 		}
 		u, err = CreateAccount(h.DB, req.Username, req.Password, role)
 		if err != nil {
-			c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
+			if IsUsernameTakenError(err) {
+				c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create account"})
+			}
 			return
 		}
 	}

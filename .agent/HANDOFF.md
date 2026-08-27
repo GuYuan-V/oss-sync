@@ -2,46 +2,47 @@
 
 ## 当前目标
 
-修复审查 `dc0e98f` / `86aacf1` 的 4 项问题：首注原子化、CPU 指标重复计算、ARM 模型名、死配置清理。
+修复二轮审查 4 项：并发测试常驻化、DB 故障与 409 区分、`ResolveRegistrationRole` 清理、HANDOFF 文档准确性。
 
 ## 当前状态
 
-- `main` 已推送 `86aacf1`（含指标修复与预置移除）；本地在 `86aacf1` 之上待推送 1 提交，修复审查问题并通过全量回归。
-- 并发首注、`/proc` 指标与配置清理均已验证。
+- `main` 已同步至 `origin/main @ bc48ac7`（原子注册、CPU/ARM、死配置清理）；本地 1 提交待推送，修复二轮审查并通过回归。
+- 原子注册、`/proc` 指标、错误语义均已验证。
 
 ## 已完成工作
 
-- **高：原子注册** `internal/auth/accounts.go` 新增 `registrationMu` + `CreateAccountForAnonymousRegistration`（进程锁 + `db.Transaction` 内 `COUNT admin`→`CREATE`）；`internal/auth/handler.go` 与 `internal/webui/auth_pages.go` 匿名路径改调原子函数，移除 `Handler.registerMu` 与 `sync` 导入；`go test -run TestConcurrentFirstRegistration` 10 并发仅 1 admin。
-- **中：CPU 重复** `internal/webui/system_metrics_other.go:26` `readProcStatSample` 汇总时 `if i>=8 {break}` 跳过 `guest/guest_nice`（已计入 user/nice），修正虚拟化下偏高。
-- **中：ARM fallback** `cpuModelName` 删除 `processor` / `cpu part` 分支，仅保留 `model name` → `Hardware` → `CPU`，避免返回 `1`/`0xd03`。
-- **低：死配置清理** 删除 `internal/auth/bootstrap.go`（空实现）、`AuthConfig.BootstrapAdminUsername` 字段及 `EffectiveBootstrapAdminUsername`、`validate` 默认、`configs/config.*.yaml` 行、`cmd/server/main.go` 调用、`internal/auth/bootstrap_test.go` 两用例（精简为注册开关用例）、`server_test.go`/`admin_update_test.go` 中 `BootstrapAdminUsername` 字段；`grep BootstrapAdmin/EnsureBootstrap` 全清。
+- **并发测试常驻化** 新增 `internal/auth/registration_concurrent_test.go:TestConcurrentFirstRegistration_OnlyOneAdmin`（`go test -run` 可复现，10 并发仅 1 admin，原临时文件已常驻），修正 HANDOFF 空跑描述。
+- **DB 故障区分** `internal/auth/accounts.go` 新增 `IsUsernameTakenError`（`UNIQUE`/`duplicate` 检测）；`internal/auth/handler.go` 与 `internal/webui/auth_pages.go` 匿名/管理员分支均改为 `if IsUsernameTakenError(err) → 409 else → 500`，避免 DB 故障误判 409。
+- **Resolve 清理** 删除 `internal/auth/accounts.go:ResolveRegistrationRole`（`grep` 0 调用），`auth` 包仅保留 `CreateAccount`/`CreateAccountForAnonymousRegistration`。
+- **延续一轮修复**：`registrationMu`+事务原子首注（`accounts/handler/auth_pages`）、`/proc/stat` 跳过 `guest`（`i>=8 break`）、`cpuModelName` 仅 `model name`→`Hardware`、`bootstrap.go`/`BootstrapAdminUsername`/`yaml`/`main.go`/`bootstrap_test` 精简（`net -84`）。
+- **前置** 系统指标 `system_metrics_other.go` 真实实现（`/proc/cpuinfo`、`/proc/stat`、`/proc/meminfo`、`unix.Statfs`），实测 `disk 79.8GB/1081GB`、`cpu AMD Ryzen 7 7735H`。
 
 ## 重要决策
 
-- 首注原子化采用“进程锁 + 事务内判定”兼顾单机与 SQLite 串行写，Postgres 下 `COUNT` 在事务内可见已提交 admin，满足跨入口 DB 保证；不引入分布式锁。
-- `/proc/stat` 总量取前 8 列符合 kernel 文档；ARM 仅信 `Hardware`，不猜测数值字段。
-- 死配置直接删除而非兼容保留，`net -65` 行，符合 ponytail 精简。
+- 单机以 `registrationMu` + `db.Transaction` 保证跨 `web`/`API` 原子性；SQLite 写串行天然互斥。Postgres 多实例下 `COUNT` 在 `READ COMMITTED` 无锁仍可能并发读 0，需 `SELECT … FOR UPDATE` / 咨询锁或唯一约束，当前单实例 SQLite 部署不引入分布式锁，已在 HANDOFF 风险中明示。
+- `IsUsernameTakenError` 以错误串匹配兼容 `sqlite`/`postgres`，不引入驱动特定类型。
+- `ResolveRegistrationRole` 无调用直接删除，缩减 API。
 
 ## 修改的重要文件
 
 - `internal/auth/accounts.go`、`internal/auth/handler.go`、`internal/webui/auth_pages.go`
+- `internal/auth/registration_concurrent_test.go`（新增常驻）
+- `internal/auth/bootstrap.go`（已删）、`internal/config/config.go`、`configs/config.*.yaml`、`cmd/server/main.go`
 - `internal/webui/system_metrics_other.go`
-- `internal/auth/bootstrap.go`（删除）、`internal/auth/bootstrap_test.go`
-- `internal/config/config.go`、`configs/config.dev.yaml`、`configs/config.prod.yaml`
-- `cmd/server/main.go`、`internal/server/server_test.go`、`internal/webui/admin_update_test.go`
 
 ## 验证情况
 
 - `gofmt -w`（Go 文件） ✅
 - `go vet ./...` ✅
-- `go test ./... -count=1` ✅（22 包，含 `webui -race`）
-- `go test ./internal/auth -run TestConcurrentFirstRegistration` ✅（1 admin / 10 并发）
-- `grep BootstrapAdmin/EnsureBootstrap` 0 命中 ✅
+- `go test ./... -count=1` ✅（22 包，`webui` 单独及 `-race` 均通过）
+- `go test ./internal/auth -run TestConcurrentFirstRegistration_OnlyOneAdmin -count=1 -v` ✅（常驻测试，1/10 admin）
+- `grep -rn BootstrapAdmin/EnsureBootstrap/ResolveRegistrationRole` 0 命中 ✅
+- `grep IsUsernameTakenError` 仅在 `accounts/handler/auth_pages` ✅
 
 ## 已知问题 / 风险
 
-- 多实例部署下进程锁不跨进程，依赖 DB 事务串行化；SQLite 天然串行，Postgres `READ COMMITTED` 下第二事务会看到已提交 admin 而退为 user，符合预期。
-- Darwin 仍回退 `runtime` 指标。
+- 多实例 Postgres 仍依赖进程锁，需后续加 `FOR UPDATE` 或部分唯一索引强化；单实例 SQLite 无风险。
+- Darwin 无 `/proc` 回退 `runtime`。
 
 ## 剩余工作
 
@@ -49,4 +50,4 @@
 
 ## 推荐下一步
 
-- 空库并发注册压测与 `docker compose up` 首注验证后发布补丁。
+- 空库并发注册与 `docker compose up` 首注验证后发布补丁。

@@ -63,8 +63,13 @@ func (h *Handler) registerSubmit(c *gin.Context) {
 	// 原子化首注判定与创建，避免并发产生多个 admin（跨 web/API 入口）。
 	user, err := auth.CreateAccountForAnonymousRegistration(h.DB, username, password)
 	if err != nil {
-		view.Error = h.t(c, "err.username_taken")
-		h.renderAuth(c, http.StatusConflict, "register", view)
+		if auth.IsUsernameTakenError(err) {
+			view.Error = h.t(c, "err.username_taken")
+			h.renderAuth(c, http.StatusConflict, "register", view)
+		} else {
+			view.Error = h.t(c, "err.admin_status_failed")
+			h.renderAuth(c, http.StatusInternalServerError, "register", view)
+		}
 		return
 	}
 	view.Success = true
