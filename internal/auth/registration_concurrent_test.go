@@ -51,3 +51,17 @@ func TestConcurrentFirstRegistration_OnlyOneAdmin(t *testing.T) {
 		t.Fatalf("db admin count = %d, want 1", dbAdminCount)
 	}
 }
+
+func TestIsUsernameTakenError(t *testing.T) {
+	db := newAuthTestDB(t)
+	if _, err := auth.CreateAccount(db, "duplicate-user", "password123", "user"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := auth.CreateAccount(db, "duplicate-user", "password123", "user")
+	if !auth.IsUsernameTakenError(err) {
+		t.Fatalf("duplicate username error was not recognized: %v", err)
+	}
+	if auth.IsUsernameTakenError(fmt.Errorf("database unavailable")) {
+		t.Fatal("unrelated database error was classified as username conflict")
+	}
+}

@@ -1,4 +1,4 @@
-﻿// 数据库初始化
+// 数据库初始化
 package database
 
 import (
@@ -44,7 +44,8 @@ func initSQLite(cfg *config.Config) (*gorm.DB, error) {
 		gormLogLevel = logger.Info
 	}
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(gormLogLevel),
+		Logger:         logger.Default.LogMode(gormLogLevel),
+		TranslateError: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("打开 SQLite 失败: %w", err)
@@ -58,7 +59,8 @@ func initPostgres(cfg *config.Config) (*gorm.DB, error) {
 		gormLogLevel = logger.Info
 	}
 	db, err := gorm.Open(postgres.Open(cfg.Database.DSN), &gorm.Config{
-		Logger: logger.Default.LogMode(gormLogLevel),
+		Logger:         logger.Default.LogMode(gormLogLevel),
+		TranslateError: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("连接 PostgreSQL 失败: %w", err)
@@ -300,4 +302,3 @@ func backfillVaultSettings(db *gorm.DB) error {
 	}
 	return nil
 }
-

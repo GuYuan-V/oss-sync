@@ -39,11 +39,7 @@ func ValidateAccountInput(username, password string) error {
 
 // IsUsernameTakenError 判断是否为用户名唯一约束冲突。
 func IsUsernameTakenError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "UNIQUE") || strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate") || strings.Contains(msg, "Duplicate")
+	return errors.Is(err, gorm.ErrDuplicatedKey)
 }
 
 // CreateAccount 创建用户及默认用户设置。Vault 必须由用户登录后手动创建。
