@@ -65,6 +65,11 @@ jobs:
           OSS_SKIP_PULL: 1
         run: |
           bash -n install.sh
+          no_docker_path="$(mktemp -d)"
+          ln -s "$(command -v id)" "$no_docker_path/id"
+          ln -s "$(command -v uname)" "$no_docker_path/uname"
+          if PATH="$no_docker_path" /usr/bin/bash install.sh >"$RUNNER_TEMP/install-no-docker.log" 2>&1; then exit 1; fi
+          grep -F "非交互安装请设置 OSS_INSTALL_DOCKER=1" "$RUNNER_TEMP/install-no-docker.log"
           bash install.sh
           curl --fail --silent --show-error http://127.0.0.1:18081/readyz
       - if: failure()

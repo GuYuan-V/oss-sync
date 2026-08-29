@@ -28,9 +28,15 @@ confirm_docker_install() {
     1|true|y|yes) return 0 ;;
     0|false|n|no) return 1 ;;
   esac
-  [[ -r /dev/tty ]] || fail "未检测到 Docker；非交互安装请设置 OSS_INSTALL_DOCKER=1"
-  local answer
-  read -r -p "未检测到 Docker，是否使用 Docker 官方脚本安装？[y/N] " answer </dev/tty
+  local answer=""
+  if ! { exec 3</dev/tty; } 2>/dev/null; then
+    fail "未检测到 Docker；非交互安装请设置 OSS_INSTALL_DOCKER=1"
+  fi
+  if ! read -r -p "未检测到 Docker，是否使用 Docker 官方脚本安装？[y/N] " answer <&3; then
+    exec 3<&-
+    fail "未检测到 Docker；非交互安装请设置 OSS_INSTALL_DOCKER=1"
+  fi
+  exec 3<&-
   [[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 

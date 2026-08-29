@@ -8,6 +8,7 @@
 
 - 一键安装脚本、GHCR 多架构发布、CI 冒烟检查及中英文文档已完成。
 - Docker Desktop 真实验证已通过，首次部署、重复升级和数据持久化均正常。
+- `0.1.11` Release 与公开多架构镜像已发布；`0.1.12` 修复无 Docker、无 TTY 时的安装提示。
 
 ## 已完成工作
 
@@ -20,6 +21,7 @@
   - 支持 `OSS_IMAGE`、`OSS_PORT`、`OSS_BIND_ADDRESS`、`OSS_INSTALL_DOCKER` 等覆盖。
 - `.github/workflows/release.yml` 在发布二进制和插件资产之外，通过 GHCR 发布 `linux/amd64`、`linux/arm64` 镜像；正式版同步 `latest`，RC 仅发布版本标签。
 - `.github/workflows/ci.yml` 使用本地构建镜像真实运行 `install.sh`，并检查独立端口 `/readyz`。
+- 无 Docker 且无法读取 `/dev/tty` 时明确提示设置 `OSS_INSTALL_DOCKER=1`，不再因未赋值变量中断；CI 常驻覆盖该路径。
 - `README.md` / `README_zh.md` 增加一键安装、公开访问、非交互安装、固定版本及市场安装说明。
 
 ## 重要决策
@@ -41,22 +43,22 @@
 - `bash -n install.sh` ✅
 - 非法端口失败路径 ✅
 - 无 Docker 且拒绝安装的失败路径、Docker 官方安装源可达性 ✅
+- 无 Docker 且无控制终端时输出非交互安装提示，不出现 `answer: unbound variable` ✅
 - 无特权脚本驱动测试：首次启动、重复升级、健康状态、`0.0.0.0:18081` 端口映射、数据卷及重启策略 ✅
 - CI/Release Workflow YAML 解析 ✅
 - `go test ./... -count=1` ✅
 - `go vet ./...` ✅
 - 本机 Docker Desktop 真实验证：本地构建镜像后经 `install.sh` 首次启动及重复升级均成功，容器 `healthy`、`/readyz` 正常、端口绑定 `0.0.0.0`、命名卷数据保持；测试资源已清理 ✅
-- 新增 CI 安装器容器冒烟：尚未由 GitHub Actions 执行
+- CI 安装器真实容器冒烟 ✅
 
 ## 已知问题 / 风险
 
-- GHCR `ghcr.io/helantianshen/oss-sync-server:latest` 当前匿名读取返回 `denied`；首次发布后必须将 Package Visibility 改为 Public，否则安装脚本无法拉取。
+- GHCR `0.1.11` 与 `latest` 已确认可匿名读取，并包含 `linux/amd64`、`linux/arm64`。
 - 默认公开监听存在“公网首个注册者成为管理员”的抢注窗口，这是用户明确接受的部署取舍。
 
 ## 剩余工作
 
-- 等待 CI 容器冒烟通过。
-- 发布新版本并把首次创建的 GHCR 包设为 Public。
+- 在干净 Linux VPS 上执行公开的一键安装命令做最终验收。
 
 ## 推荐下一步
 
