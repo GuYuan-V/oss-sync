@@ -36,7 +36,8 @@ type DatabaseConfig struct {
 }
 
 type StorageConfig struct {
-	DataDir string `yaml:"data_dir"`
+	DataDir        string `yaml:"data_dir"`
+	MaxTotalSizeMB int64  `yaml:"max_total_size_mb"`
 }
 
 type AuthConfig struct {
@@ -80,6 +81,7 @@ type UpdateConfig struct {
 //   - OSS_DB_DRIVER / OSS_DB_DSN
 //   - OSS_SERVER_HOST / OSS_SERVER_PORT
 //   - OSS_STORAGE_DIR
+//   - OSS_STORAGE_MAX_TOTAL_SIZE_MB
 func Load() (*Config, error) {
 	env := os.Getenv("OSS_ENV")
 	if env == "" {
@@ -140,6 +142,13 @@ func (c *Config) applyEnvOverrides() error {
 	if v := os.Getenv("OSS_STORAGE_DIR"); v != "" {
 		c.Storage.DataDir = v
 	}
+	if v := os.Getenv("OSS_STORAGE_MAX_TOTAL_SIZE_MB"); v != "" {
+		maxMB, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return fmt.Errorf("OSS_STORAGE_MAX_TOTAL_SIZE_MB 必须是整数，收到 %q", v)
+		}
+		c.Storage.MaxTotalSizeMB = maxMB
+	}
 	if v := os.Getenv("OSS_DEVICE_STALE_DAYS"); v != "" {
 		if days, err := strconv.Atoi(v); err == nil {
 			c.Sync.DeviceStaleDays = days
@@ -169,6 +178,9 @@ func (c *Config) validate() error {
 	if c.Storage.DataDir == "" {
 		return fmt.Errorf("storage.data_dir 不能为空")
 	}
+	if c.Storage.MaxTotalSizeMB < 0 || c.Storage.MaxTotalSizeMB > (1<<42)>>20 {
+		return fmt.Errorf("storage.max_total_size_mb 必须在 0..4194304 之间，收到 %d", c.Storage.MaxTotalSizeMB)
+	}
 	if c.Server.Port <= 0 || c.Server.Port > 65535 {
 		return fmt.Errorf("server.port 非法: %d", c.Server.Port)
 	}
@@ -182,6 +194,11 @@ func (c *Config) validate() error {
 		return err
 	}
 	return nil
+}
+
+// MaxTotalSizeBytes 返回整个数据目录的应用层容量上限；0 表示不限。
+func (c StorageConfig) MaxTotalSizeBytes() int64 {
+	return c.MaxTotalSizeMB << 20
 }
 
 func (c UpdateConfig) validate() error {

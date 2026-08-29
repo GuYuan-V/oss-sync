@@ -1,4 +1,4 @@
-﻿// 历史记录接口
+// 历史记录接口
 package syncapi
 
 import (
@@ -24,6 +24,7 @@ import (
 	"github.com/oss/oss-server/internal/jwt"
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/recycle"
+	"github.com/oss/oss-server/internal/storagequota"
 	"github.com/oss/oss-server/internal/vaultaccess"
 )
 
@@ -390,57 +391,59 @@ func (h *Handler) writeFileFromBytes(
 
 	var result models.File
 	prevDisk := ""
-	err := h.DB.Transaction(func(tx *gorm.DB) error {
-		current, exists, err := lockedFile(tx, vault.OwnerID, vault.ID, path)
-		if err != nil {
-			return err
-		}
-		if exists && !current.IsDeleted {
-			prevDisk = h.fileDiskPath(current)
-		}
-		backupPath := ""
-		if _, err := os.Stat(targetPath); err == nil {
-			backupPath = targetPath + ".backup-restore-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-			if err := os.Rename(targetPath, backupPath); err != nil {
+	err := storagequota.WithinLimit(h.Cfg.Storage.DataDir, h.Cfg.Storage.MaxTotalSizeBytes(), historySnapshotReserve(targetPath), func() error {
+		return h.DB.Transaction(func(tx *gorm.DB) error {
+			current, exists, err := lockedFile(tx, vault.OwnerID, vault.ID, path)
+			if err != nil {
 				return err
 			}
-		}
-		if err := os.Rename(tmpPath, targetPath); err != nil {
-			if backupPath != "" {
-				_ = os.Rename(backupPath, targetPath)
+			if exists && !current.IsDeleted {
+				prevDisk = h.fileDiskPath(current)
 			}
-			return err
-		}
-		revision, err := nextVaultRevision(tx, vault.ID)
-		if err != nil {
-			return err
-		}
-		if !exists {
-			current = models.File{UserID: vault.OwnerID, VaultID: vault.ID, Path: path}
-		}
-		current.Type = classifyFile(path)
-		current.Hash = hashBytes(content)
-		current.Size = int64(len(content))
-		current.MTime = time.Now().UnixMilli()
-		current.Revision = revision
-		current.IsDeleted = false
-		current.DeletedAt = sql.NullTime{}
-		current.StorageKey = targetKey
-		current.LastWriterClientID = actor.ClientID
-		current.LastOperationID = "restore-" + strconv.FormatInt(revision, 10)
-		if exists {
-			if err := tx.Save(&current).Error; err != nil {
+			backupPath := ""
+			if _, err := os.Stat(targetPath); err == nil {
+				backupPath = targetPath + ".backup-restore-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+				if err := os.Rename(targetPath, backupPath); err != nil {
+					return err
+				}
+			}
+			if err := os.Rename(tmpPath, targetPath); err != nil {
+				if backupPath != "" {
+					_ = os.Rename(backupPath, targetPath)
+				}
 				return err
 			}
-		} else if err := tx.Create(&current).Error; err != nil {
-			return err
-		}
-		// 快照当前正文作为恢复前版本。
-		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, actor, action, path, prevPath, prevDisk, revision); err != nil {
-			return err
-		}
-		result = current
-		return nil
+			revision, err := nextVaultRevision(tx, vault.ID)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				current = models.File{UserID: vault.OwnerID, VaultID: vault.ID, Path: path}
+			}
+			current.Type = classifyFile(path)
+			current.Hash = hashBytes(content)
+			current.Size = int64(len(content))
+			current.MTime = time.Now().UnixMilli()
+			current.Revision = revision
+			current.IsDeleted = false
+			current.DeletedAt = sql.NullTime{}
+			current.StorageKey = targetKey
+			current.LastWriterClientID = actor.ClientID
+			current.LastOperationID = "restore-" + strconv.FormatInt(revision, 10)
+			if exists {
+				if err := tx.Save(&current).Error; err != nil {
+					return err
+				}
+			} else if err := tx.Create(&current).Error; err != nil {
+				return err
+			}
+			// 快照当前正文作为恢复前版本。
+			if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, actor, action, path, prevPath, prevDisk, revision); err != nil {
+				return err
+			}
+			result = current
+			return nil
+		})
 	})
 	if err != nil {
 		if _, statErr := os.Stat(targetPath); statErr == nil {
@@ -454,6 +457,10 @@ func (h *Handler) writeFileFromBytes(
 
 // writeWriteError 统一输出写入错误。
 func (h *Handler) writeWriteError(c *gin.Context, err error) {
+	if errors.Is(err, storagequota.ErrExceeded) {
+		c.JSON(http.StatusInsufficientStorage, gin.H{"error": "project storage quota exceeded", "code": "project_storage_quota_exceeded"})
+		return
+	}
 	if errors.Is(err, errRevisionConflict) {
 		c.JSON(http.StatusConflict, gin.H{"error": "revision conflict"})
 		return
@@ -606,4 +613,3 @@ func formatHistoryTime(t time.Time) string {
 	}
 	return t.UTC().Format(time.RFC3339)
 }
-

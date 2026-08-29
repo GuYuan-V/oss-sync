@@ -1,4 +1,4 @@
-﻿// 上传处理
+// 上传处理
 package syncapi
 
 import (
@@ -22,6 +22,7 @@ import (
 	"github.com/oss/oss-server/internal/filestore"
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/oss/oss-server/internal/storagequota"
 )
 
 const fallbackMaxFileSizeMB = 100
@@ -125,29 +126,37 @@ func (h *Handler) Upload(c *gin.Context) {
 	pathLock := h.pathLock(vaultID + ":" + path)
 	pathLock.Lock()
 	defer pathLock.Unlock()
+	hash := hex.EncodeToString(hasher.Sum(nil))
 	backupPath := tmpPath + ".backup"
-	if _, err := os.Stat(targetPath); err == nil {
-		if err := os.Rename(targetPath, backupPath); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "backup target failed: " + err.Error()})
+	var saved models.File
+	err = storagequota.WithinLimit(h.Cfg.Storage.DataDir, h.Cfg.Storage.MaxTotalSizeBytes(), 0, func() error {
+		if _, err := os.Stat(targetPath); err == nil {
+			if err := os.Rename(targetPath, backupPath); err != nil {
+				return fmt.Errorf("backup target failed: %w", err)
+			}
+		}
+		if err := os.Rename(tmpPath, targetPath); err != nil {
+			if _, backupErr := os.Stat(backupPath); backupErr == nil {
+				_ = os.Rename(backupPath, targetPath)
+			}
+			return fmt.Errorf("rename failed: %w", err)
+		}
+		var saveErr error
+		saved, saveErr = h.upsertFile(u.ID, vaultID, path, classifyFile(path), hash, storageKey, mtime, written)
+		if saveErr != nil {
+			_ = os.Remove(targetPath)
+			if _, backupErr := os.Stat(backupPath); backupErr == nil {
+				_ = os.Rename(backupPath, targetPath)
+			}
+		}
+		return saveErr
+	})
+	if err != nil {
+		if errors.Is(err, storagequota.ErrExceeded) {
+			c.JSON(http.StatusInsufficientStorage, gin.H{"error": "project storage quota exceeded", "code": "project_storage_quota_exceeded"})
 			return
 		}
-	}
-	if err := os.Rename(tmpPath, targetPath); err != nil {
-		if _, backupErr := os.Stat(backupPath); backupErr == nil {
-			_ = os.Rename(backupPath, targetPath)
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "rename failed: " + err.Error()})
-		return
-	}
-
-	hash := hex.EncodeToString(hasher.Sum(nil))
-	saved, err := h.upsertFile(u.ID, vaultID, path, classifyFile(path), hash, storageKey, mtime, written)
-	if err != nil {
-		_ = os.Remove(targetPath)
-		if _, backupErr := os.Stat(backupPath); backupErr == nil {
-			_ = os.Rename(backupPath, targetPath)
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db upsert failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	_ = os.Remove(backupPath)
@@ -235,4 +244,3 @@ func closeAndRemove(file *os.File, path string) {
 	_ = file.Close()
 	_ = os.Remove(path)
 }
-

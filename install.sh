@@ -2,16 +2,38 @@
 
 set -Eeuo pipefail
 
-IMAGE="${OSS_IMAGE:-ghcr.io/helantianshen/oss-sync-server:latest}"
+IMAGE="${OSS_IMAGE:-}"
+RELEASE_BASE_URL="${OSS_RELEASE_BASE_URL:-https://github.com/helantianshen/oss-sync/releases/latest/download}"
+RELEASE_PROXY="${OSS_RELEASE_PROXY:-}"
+DEFAULT_RELEASE_PROXY="https://gh-proxy.com/"
+RELEASE_IMAGE="oss-sync-server:release"
 CONTAINER="${OSS_CONTAINER_NAME:-oss-sync}"
 VOLUME="${OSS_DATA_VOLUME:-oss-data}"
-PORT="${OSS_PORT:-8080}"
+PORT="${OSS_PORT:-}"
 BIND_ADDRESS="${OSS_BIND_ADDRESS:-0.0.0.0}"
+INSTALL_DIR="${OSS_INSTALL_DIR:-}"
+STORAGE_GB="${OSS_STORAGE_LIMIT_GB:-}"
 INSTALL_DOCKER="${OSS_INSTALL_DOCKER:-}"
 SKIP_PULL="${OSS_SKIP_PULL:-0}"
+TEMP_DIR=""
 
 info() { printf '[OSS] %s\n' "$*"; }
 fail() { printf '[OSS] 错误: %s\n' "$*" >&2; exit 1; }
+
+cleanup() {
+  [[ -z "$TEMP_DIR" ]] || rm -rf "$TEMP_DIR"
+}
+
+trap cleanup EXIT
+
+read_tty() {
+  local prompt="$1" result=""
+  if { exec 3</dev/tty; } 2>/dev/null; then
+    read -r -p "$prompt" result <&3 || true
+    exec 3<&-
+  fi
+  printf '%s' "$result"
+}
 
 run_privileged() {
   if [[ "$(id -u)" -eq 0 ]]; then
@@ -28,16 +50,117 @@ confirm_docker_install() {
     1|true|y|yes) return 0 ;;
     0|false|n|no) return 1 ;;
   esac
-  local answer=""
-  if ! { exec 3</dev/tty; } 2>/dev/null; then
-    fail "未检测到 Docker；非交互安装请设置 OSS_INSTALL_DOCKER=1"
-  fi
-  if ! read -r -p "未检测到 Docker，是否使用 Docker 官方脚本安装？[y/N] " answer <&3; then
-    exec 3<&-
-    fail "未检测到 Docker；非交互安装请设置 OSS_INSTALL_DOCKER=1"
-  fi
-  exec 3<&-
+  local answer
+  answer="$(read_tty '未检测到 Docker，是否使用 Docker 官方脚本安装？[y/N] ')"
+  [[ -n "$answer" ]] || fail "未检测到 Docker；非交互安装请设置 OSS_INSTALL_DOCKER=1"
   [[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+select_release_source() {
+  [[ -n "$IMAGE" ]] && return 0
+  if [[ -n "$RELEASE_PROXY" ]]; then
+    [[ "$RELEASE_PROXY" != "official" ]] || RELEASE_PROXY=""
+    return 0
+  fi
+  local choice custom
+  choice="$(read_tty $'请选择 OSS Sync Release 下载源：\n  1. gh-proxy.com 国内文件加速（推荐）\n  2. GitHub 官方\n  3. 自定义加速前缀\n请选择 [1]：')"
+  case "$choice" in
+    ""|1) RELEASE_PROXY="$DEFAULT_RELEASE_PROXY" ;;
+    2) RELEASE_PROXY="" ;;
+    3)
+      custom="$(read_tty '请输入文件加速前缀（例如 https://gh-proxy.com/）：')"
+      [[ -n "$custom" ]] || fail "自定义加速前缀不能为空"
+      [[ "$custom" =~ ^https?:// ]] || fail "自定义加速前缀必须以 http:// 或 https:// 开头"
+      RELEASE_PROXY="$custom"
+      ;;
+    *) fail "下载源选项无效" ;;
+  esac
+}
+
+download_release_image() {
+  command -v curl >/dev/null 2>&1 || fail "下载 Release 需要 curl"
+  command -v sha256sum >/dev/null 2>&1 || fail "校验 Release 需要 sha256sum"
+
+  local arch asset archive checksums expected download_url
+  case "$(uname -m)" in
+    x86_64|amd64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *) fail "暂不支持的系统架构：$(uname -m)" ;;
+  esac
+  asset="oss-sync-image_linux_${arch}.tar.gz"
+  TEMP_DIR="$(mktemp -d)"
+  archive="$TEMP_DIR/$asset"
+  checksums="$TEMP_DIR/checksums.txt"
+  download_url="${RELEASE_BASE_URL%/}/$asset"
+  if [[ -n "$RELEASE_PROXY" ]]; then
+    download_url="${RELEASE_PROXY%/}/$download_url"
+  fi
+
+  info "获取 GitHub 官方校验文件"
+  curl -fL --retry 3 --connect-timeout 15 "${RELEASE_BASE_URL%/}/checksums.txt" -o "$checksums" || fail "下载 checksums.txt 失败"
+  expected="$(awk -v name="$asset" '$2 == name || $2 == "*" name { print $1; exit }' "$checksums")"
+  [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || fail "checksums.txt 中缺少 $asset"
+
+  info "下载 OSS Sync Release 镜像：$download_url"
+  curl -fL --retry 3 --connect-timeout 15 "$download_url" -o "$archive" || fail "下载 OSS Sync Release 失败"
+  printf '%s  %s\n' "$expected" "$archive" | sha256sum -c - >/dev/null || fail "OSS Sync Release SHA-256 校验失败"
+  docker load -i "$archive" >/dev/null || fail "导入 OSS Sync Release 镜像失败"
+  docker image inspect "$RELEASE_IMAGE" >/dev/null 2>&1 || fail "Release 中缺少镜像 $RELEASE_IMAGE"
+  IMAGE="$RELEASE_IMAGE"
+  info "Release 校验通过并已导入 Docker"
+}
+
+select_port() {
+  [[ -n "$PORT" ]] && return 0
+  local existing="" requested="" candidate
+  existing="$(docker inspect --format '{{(index (index .HostConfig.PortBindings "8080/tcp") 0).HostPort}}' "$CONTAINER" 2>/dev/null || true)"
+  if [[ -n "$existing" && "$existing" != "<no value>" ]]; then
+    PORT="$existing"
+    return 0
+  fi
+  requested="$(read_tty '请输入映射端口（留空随机选择 10000-25565）：')"
+  if [[ -n "$requested" ]]; then
+    PORT="$requested"
+    return 0
+  fi
+  while true; do
+    candidate=$((10000 + RANDOM % 15566))
+    case "$candidate" in
+      10000|10050|10051|11211|12345|15672|18080|19000|20000|22000|25565) continue ;;
+    esac
+    PORT="$candidate"
+    info "未指定端口，随机选择：$PORT"
+    return 0
+  done
+}
+
+select_install_dir() {
+  [[ -n "$INSTALL_DIR" ]] && return 0
+  local existing="" existing_data="" requested
+  existing="$(docker inspect --format '{{index .Config.Labels "io.oss-sync.install-dir"}}' "$CONTAINER" 2>/dev/null || true)"
+  if [[ -n "$existing" && "$existing" != "<no value>" ]]; then
+    INSTALL_DIR="$existing"
+    return 0
+  fi
+  existing_data="$(docker inspect --format '{{range .Mounts}}{{if and (eq .Destination "/app/data") (eq .Type "bind")}}{{.Source}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
+  if [[ "$existing_data" == */data ]]; then
+    INSTALL_DIR="${existing_data%/data}"
+    return 0
+  fi
+  requested="$(read_tty '请输入部署路径 [/opt/oss-sync]：')"
+  INSTALL_DIR="${requested:-/opt/oss-sync}"
+}
+
+select_storage_limit() {
+  [[ -n "$STORAGE_GB" ]] && return 0
+  local existing="" requested
+  existing="$(docker inspect --format '{{index .Config.Labels "io.oss-sync.storage-limit-gb"}}' "$CONTAINER" 2>/dev/null || true)"
+  if [[ -n "$existing" && "$existing" != "<no value>" ]]; then
+    STORAGE_GB="$existing"
+    return 0
+  fi
+  requested="$(read_tty '请输入项目总存储上限 GiB（0 或留空表示不限）[0]：')"
+  STORAGE_GB="${requested:-0}"
 }
 
 install_docker() {
@@ -45,8 +168,7 @@ install_docker() {
   local installer
   installer="$(mktemp)"
   info "下载 Docker 官方安装脚本"
-  curl -fsSL https://get.docker.com -o "$installer"
-  if ! run_privileged sh "$installer"; then
+  if ! curl -fsSL https://get.docker.com -o "$installer" || ! run_privileged sh "$installer"; then
     rm -f "$installer"
     fail "Docker 安装失败"
   fi
@@ -86,7 +208,8 @@ wait_healthy() {
 }
 
 [[ "$(uname -s)" == "Linux" ]] || fail "一键安装脚本仅支持 Linux"
-[[ "$PORT" =~ ^[0-9]+$ ]] && ((PORT >= 1 && PORT <= 65535)) || fail "OSS_PORT 必须是 1-65535"
+select_port
+[[ "$PORT" =~ ^[0-9]+$ ]] && ((PORT >= 1 && PORT <= 65535)) || fail "映射端口必须是 1-65535"
 [[ "$BIND_ADDRESS" == "127.0.0.1" || "$BIND_ADDRESS" == "0.0.0.0" ]] || fail "OSS_BIND_ADDRESS 仅支持 127.0.0.1 或 0.0.0.0"
 [[ "$CONTAINER" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]+$ ]] || fail "OSS_CONTAINER_NAME 非法"
 [[ "$VOLUME" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]+$ ]] || fail "OSS_DATA_VOLUME 非法"
@@ -96,20 +219,46 @@ if ! command -v docker >/dev/null 2>&1; then
   install_docker
 fi
 start_docker
+select_release_source
+select_install_dir
+select_storage_limit
 
-info "拉取最新多架构镜像 $IMAGE"
-if [[ "$SKIP_PULL" == "1" ]]; then
+[[ "$INSTALL_DIR" == /* && "$INSTALL_DIR" != "/" ]] || fail "部署路径必须是非根目录的绝对路径"
+[[ "$INSTALL_DIR" != *$'\n'* && "$INSTALL_DIR" != *$'\r'* ]] || fail "部署路径不能包含换行"
+[[ "$STORAGE_GB" =~ ^[0-9]+$ ]] && ((STORAGE_GB <= 4096)) || fail "项目存储上限必须是 0-4096 的整数 GiB"
+STORAGE_MB=$((STORAGE_GB * 1024))
+
+if [[ -z "$IMAGE" ]]; then
+  download_release_image
+elif [[ "$SKIP_PULL" == "1" ]]; then
+  info "使用本地镜像 $IMAGE"
   docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "本地不存在镜像 $IMAGE"
 else
+  info "拉取自定义镜像 $IMAGE"
   docker pull "$IMAGE"
 fi
-docker volume create "$VOLUME" >/dev/null
+
+existing_mount_type="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Type}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
+existing_mount_source="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Name}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
+mount_args=()
+if [[ "$existing_mount_type" == "volume" && -n "$existing_mount_source" ]]; then
+  VOLUME="$existing_mount_source"
+  docker volume create "$VOLUME" >/dev/null
+  mount_args=(-v "${VOLUME}:/app/data")
+  info "检测到旧版数据卷 $VOLUME，升级时继续使用，避免迁移风险"
+else
+  mkdir -p "$INSTALL_DIR/data" 2>/dev/null || run_privileged mkdir -p "$INSTALL_DIR/data"
+  if [[ "$(stat -c '%u:%g' "$INSTALL_DIR/data")" != "10001:10001" ]]; then
+    run_privileged chown 10001:10001 "$INSTALL_DIR/data"
+  fi
+  mount_args=(-v "${INSTALL_DIR}/data:/app/data")
+fi
 
 if docker inspect "$CONTAINER-previous" >/dev/null 2>&1; then
   docker rm -f "$CONTAINER-previous" >/dev/null
 fi
 if docker inspect "$CONTAINER" >/dev/null 2>&1; then
-  info "停止现有容器，数据卷 $VOLUME 保持不变"
+  info "停止现有容器，项目数据保持不变"
   docker stop --time 20 "$CONTAINER" >/dev/null || true
   docker rename "$CONTAINER" "$CONTAINER-previous"
 fi
@@ -119,8 +268,11 @@ if ! docker run -d \
   --restart unless-stopped \
   --stop-timeout 20 \
   --label org.opencontainers.image.source=https://github.com/helantianshen/oss-sync \
+  --label "io.oss-sync.install-dir=$INSTALL_DIR" \
+  --label "io.oss-sync.storage-limit-gb=$STORAGE_GB" \
+  -e "OSS_STORAGE_MAX_TOTAL_SIZE_MB=$STORAGE_MB" \
   -p "${BIND_ADDRESS}:${PORT}:8080" \
-  -v "${VOLUME}:/app/data" \
+  "${mount_args[@]}" \
   --health-cmd 'wget -q -O /dev/null http://127.0.0.1:8080/readyz' \
   --health-interval 30s \
   --health-timeout 5s \
@@ -139,10 +291,15 @@ if ! wait_healthy; then
 fi
 
 docker rm -f "$CONTAINER-previous" >/dev/null 2>&1 || true
-info "OSS Sync 已启动，数据卷：$VOLUME"
+info "OSS Sync 已启动，部署路径：$INSTALL_DIR"
+if ((STORAGE_GB > 0)); then
+  info "项目总存储上限：${STORAGE_GB} GiB"
+else
+  info "项目总存储上限：不限"
+fi
 if [[ "$BIND_ADDRESS" == "0.0.0.0" ]]; then
   info "访问地址：http://<服务器IP>:$PORT"
 else
   info "访问地址：http://127.0.0.1:$PORT"
 fi
-info "首次注册成功的用户将成为管理员"
+info "请及时注册为管理员确保安全"

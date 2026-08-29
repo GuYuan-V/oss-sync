@@ -1,4 +1,4 @@
-﻿// 系统管理
+// 系统管理
 package webui
 
 import (
@@ -117,7 +117,7 @@ func (h *Handler) adminDataPage(c *gin.Context) {
 	if rows, err := h.backupRows(); err == nil {
 		data.Backups = rows
 	}
-	data.Metrics = readSystemMetrics(h.Cfg.Storage.DataDir)
+	data.Metrics = readSystemMetrics(h.Cfg.Storage.DataDir, h.Cfg.Storage.MaxTotalSizeBytes())
 	_ = h.DB.Model(&models.User{}).Count(&data.UserCount).Error
 	_ = h.DB.Model(&models.Vault{}).Count(&data.VaultCount).Error
 	_ = h.DB.Model(&models.ClientDevice{}).Count(&data.DeviceCount).Error
@@ -292,4 +292,3 @@ func (h *Handler) configuredMaxUploadBytes() int64 {
 	}
 	return maxMB * bytesPerMegabyte
 }
-

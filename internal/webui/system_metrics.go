@@ -1,4 +1,4 @@
-﻿// 系统指标
+// 系统指标
 package webui
 
 import (
@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/oss/oss-server/internal/models"
+	"github.com/oss/oss-server/internal/storagequota"
 )
 
 type systemMetrics struct {
@@ -19,6 +20,8 @@ type systemMetrics struct {
 	MemoryUsagePercent float64
 	DiskUsedBytes      int64
 	DiskTotalBytes     int64
+	ProjectStorageUsed int64
+	ProjectStorageMax  int64
 }
 
 type systemMetricsResponse struct {
@@ -29,6 +32,8 @@ type systemMetricsResponse struct {
 	MemoryUsagePercent float64 `json:"memory_usage_percent"`
 	DiskUsedBytes      int64   `json:"disk_used_bytes"`
 	DiskTotalBytes     int64   `json:"disk_total_bytes"`
+	ProjectStorageUsed int64   `json:"project_storage_used"`
+	ProjectStorageMax  int64   `json:"project_storage_max"`
 	VaultStorageUsed   int64   `json:"vault_storage_used"`
 	VaultStorageQuota  int64   `json:"vault_storage_quota"`
 }
@@ -44,7 +49,7 @@ var cpuSampler struct {
 	previous cpuSample
 }
 
-func readSystemMetrics(dataDir string) systemMetrics {
+func readSystemMetrics(dataDir string, projectStorageMax int64) systemMetrics {
 	current := readCPUSample()
 	cpuSampler.Lock()
 	previous := cpuSampler.previous
@@ -60,6 +65,7 @@ func readSystemMetrics(dataDir string) systemMetrics {
 	}
 	memoryUsed, memoryTotal := memoryUsage()
 	diskUsed, diskTotal := diskUsage(dataDir)
+	projectStorageUsed, _ := storagequota.Usage(dataDir)
 	return systemMetrics{
 		CPUModelName:       cpuModelName(),
 		CPUUsagePercent:    cpuUsage(previous, current),
@@ -68,12 +74,14 @@ func readSystemMetrics(dataDir string) systemMetrics {
 		MemoryUsagePercent: usagePercent(float64(memoryUsed), float64(memoryTotal)),
 		DiskUsedBytes:      diskUsed,
 		DiskTotalBytes:     diskTotal,
+		ProjectStorageUsed: projectStorageUsed,
+		ProjectStorageMax:  projectStorageMax,
 	}
 }
 
 func (h *Handler) systemMetricsPage(c *gin.Context) {
 	user := h.webUser(c)
-	metrics := readSystemMetrics(h.Cfg.Storage.DataDir)
+	metrics := readSystemMetrics(h.Cfg.Storage.DataDir, h.Cfg.Storage.MaxTotalSizeBytes())
 	response := systemMetricsResponse{
 		CPUModelName:       metrics.CPUModelName,
 		CPUUsagePercent:    metrics.CPUUsagePercent,
@@ -82,6 +90,8 @@ func (h *Handler) systemMetricsPage(c *gin.Context) {
 		MemoryUsagePercent: metrics.MemoryUsagePercent,
 		DiskUsedBytes:      metrics.DiskUsedBytes,
 		DiskTotalBytes:     metrics.DiskTotalBytes,
+		ProjectStorageUsed: metrics.ProjectStorageUsed,
+		ProjectStorageMax:  metrics.ProjectStorageMax,
 	}
 
 	if err := h.DB.Model(&models.Vault{}).Where("owner_id = ?", user.ID).
@@ -113,4 +123,3 @@ func cpuUsage(previous, current cpuSample) float64 {
 	}
 	return usagePercent(float64(total-idle), float64(total))
 }
-

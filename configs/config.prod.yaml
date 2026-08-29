@@ -15,6 +15,7 @@ database:
 
 storage:
   data_dir: "data"
+  max_total_size_mb: 0       # 整个数据目录容量上限，0 表示不限
 
 auth:
   jwt_secret: ""

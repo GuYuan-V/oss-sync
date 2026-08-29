@@ -98,6 +98,10 @@ test("network connection refusal is localized without replacing server error det
     assert.equal(localizeError(new Error("net::ERR_CONNECTION_REFUSED"), zh, "未知错误"), "无法连接到服务器");
     assert.equal(localizeError(new Error("net::ERR_CONNECTION_REFUSED"), en, "Unknown error"), "Unable to connect to the server");
     assert.equal(localizeError(new Error("服务器返回配额不足"), zh, "未知错误"), "服务器返回配额不足");
+    assert.equal(
+      localizeError({ code: "project_storage_quota_exceeded" }, (key) => key === "storage.projectQuotaExceeded" ? "项目空间已满" : key, "未知错误"),
+      "项目空间已满"
+    );
   } finally {
     await cleanup();
   }

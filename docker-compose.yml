@@ -10,6 +10,8 @@ services:
         BUILT_AT: ${OSS_BUILT_AT:-unknown}
     restart: unless-stopped
     stop_grace_period: 20s
+    environment:
+      OSS_STORAGE_MAX_TOTAL_SIZE_MB: ${OSS_STORAGE_MAX_TOTAL_SIZE_MB:-0}
     ports:
       - "${OSS_PORT:-8080}:8080"
     volumes:

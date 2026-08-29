@@ -27,6 +27,7 @@ const AUTH_CODE_KEYS: ReadonlyArray<readonly [string, TranslationKey]> = [
   ["invalid_base_revision", "collab.errorInvalidBaseRevision"],
   ["missing_operation_id", "collab.errorMissingOperationID"],
   ["invalid_operation_id", "collab.errorInvalidOperationID"],
+  ["project_storage_quota_exceeded", "storage.projectQuotaExceeded"],
 ];
 
 export function localizeError(error: unknown, t: Translator, fallback: string): string {

@@ -29,6 +29,7 @@ import (
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/recycle"
 	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/oss/oss-server/internal/storagequota"
 	"github.com/oss/oss-server/internal/synclock"
 	"github.com/oss/oss-server/internal/vaultaccess"
 )
@@ -369,98 +370,97 @@ func (h *Handler) V2Upload(c *gin.Context) {
 	var backupPath string
 	moved := false
 
-	err = h.DB.Transaction(func(tx *gorm.DB) error {
-		current, exists, err := lockedFile(tx, vault.OwnerID, vault.ID, path)
-		if err != nil {
-			return err
-		}
-		if exists && current.LastWriterClientID == clientID && current.LastOperationID == operationID {
-			result = current
-			return nil
-		}
-		currentRevision := int64(0)
-		if exists {
-			currentRevision = current.Revision
-		} else if baseRevision > 0 {
-			compacted, err := vaultCompactedRevision(tx, vault.ID)
+	err = storagequota.WithinLimit(h.Cfg.Storage.DataDir, h.Cfg.Storage.MaxTotalSizeBytes(), historySnapshotReserve(targetPath), func() error {
+		return h.DB.Transaction(func(tx *gorm.DB) error {
+			current, exists, err := lockedFile(tx, vault.OwnerID, vault.ID, path)
 			if err != nil {
 				return err
 			}
-			if baseRevision <= compacted {
-				currentRevision = baseRevision
+			if exists && current.LastWriterClientID == clientID && current.LastOperationID == operationID {
+				result = current
+				return nil
 			}
-		}
-		if currentRevision != baseRevision {
+			currentRevision := int64(0)
 			if exists {
-				conflict = current
+				currentRevision = current.Revision
+			} else if baseRevision > 0 {
+				compacted, err := vaultCompactedRevision(tx, vault.ID)
+				if err != nil {
+					return err
+				}
+				if baseRevision <= compacted {
+					currentRevision = baseRevision
+				}
 			}
-			return errRevisionConflict
-		}
-		if exists && !current.IsDeleted && current.Hash == actualHash {
+			if currentRevision != baseRevision {
+				if exists {
+					conflict = current
+				}
+				return errRevisionConflict
+			}
+			if exists && !current.IsDeleted && current.Hash == actualHash {
+				result = current
+				return nil
+			}
+
+			if err := ensureVaultQuota(tx, vaultQuotaChange{
+				VaultID: vault.ID, NewSize: written, Current: current, Exists: exists,
+				PolicyLimit: effective.VaultStorageBytes,
+			}); err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+				return err
+			}
+			if _, err := os.Stat(targetPath); err == nil {
+				backupPath = targetPath + ".backup-" + uuid.NewString()
+				if err := os.Rename(targetPath, backupPath); err != nil {
+					return err
+				}
+			}
+			if err := os.Rename(tmpPath, targetPath); err != nil {
+				if backupPath != "" {
+					_ = os.Rename(backupPath, targetPath)
+				}
+				return err
+			}
+			moved = true
+
+			revision, err := nextVaultRevision(tx, vault.ID)
+			if err != nil {
+				return err
+			}
+			now := time.Now()
+			if !exists {
+				current = models.File{UserID: vault.OwnerID, VaultID: vault.ID, Path: path}
+			}
+			current.Type = classifyFile(path)
+			current.Hash = actualHash
+			current.Size = written
+			current.MTime = clientMTime
+			current.Revision = revision
+			current.IsDeleted = false
+			current.DeletedAt = sql.NullTime{}
+			current.StorageKey = targetKey
+			current.LastWriterClientID = clientID
+			current.LastOperationID = operationID
+			current.UpdatedAt = now
+			if exists {
+				if err := tx.Save(&current).Error; err != nil {
+					return err
+				}
+			} else if err := tx.Create(&current).Error; err != nil {
+				return err
+			}
 			result = current
-			return nil
-		}
 
-		if err := ensureVaultQuota(tx, vaultQuotaChange{
-			VaultID: vault.ID, NewSize: written, Current: current, Exists: exists,
-			PolicyLimit: effective.VaultStorageBytes,
-		}); err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			return err
-		}
-		if _, err := os.Stat(targetPath); err == nil {
-			backupPath = targetPath + ".backup-" + uuid.NewString()
-			if err := os.Rename(targetPath, backupPath); err != nil {
-				return err
+			// 记录修改历史：覆盖已有正文时快照旧内容。
+			action := history.ActionCreate
+			if exists && !current.IsDeleted {
+				action = history.ActionModify
 			}
-		}
-		if err := os.Rename(tmpPath, targetPath); err != nil {
-			if backupPath != "" {
-				_ = os.Rename(backupPath, targetPath)
-			}
-			return err
-		}
-		moved = true
-
-		revision, err := nextVaultRevision(tx, vault.ID)
-		if err != nil {
-			return err
-		}
-		now := time.Now()
-		if !exists {
-			current = models.File{UserID: vault.OwnerID, VaultID: vault.ID, Path: path}
-		}
-		current.Type = classifyFile(path)
-		current.Hash = actualHash
-		current.Size = written
-		current.MTime = clientMTime
-		current.Revision = revision
-		current.IsDeleted = false
-		current.DeletedAt = sql.NullTime{}
-		current.StorageKey = targetKey
-		current.LastWriterClientID = clientID
-		current.LastOperationID = operationID
-		current.UpdatedAt = now
-		if exists {
-			if err := tx.Save(&current).Error; err != nil {
-				return err
-			}
-		} else if err := tx.Create(&current).Error; err != nil {
-			return err
-		}
-		result = current
-
-		// 记录修改历史：覆盖已有正文时快照旧内容。
-		action := history.ActionCreate
-		if exists && !current.IsDeleted {
-			action = history.ActionModify
-		}
-		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActorWithDID(c, u, did), action, path, "", backupPath, revision); err != nil {
-			return err
-		}
-		return nil
+			return history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActorWithDID(c, u, did), action, path, "", backupPath, revision)
+		})
 	})
 	if err != nil {
 		if moved {
@@ -471,6 +471,10 @@ func (h *Handler) V2Upload(c *gin.Context) {
 		}
 		if errors.Is(err, errRevisionConflict) {
 			c.JSON(http.StatusConflict, gin.H{"error": "revision conflict", "current": v2Meta(conflict)})
+			return
+		}
+		if errors.Is(err, storagequota.ErrExceeded) {
+			c.JSON(http.StatusInsufficientStorage, gin.H{"error": "project storage quota exceeded", "code": "project_storage_quota_exceeded"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1010,6 +1014,15 @@ func (h *Handler) maxUploadBytes() int64 {
 		maxMB = fallbackMaxFileSizeMB
 	}
 	return maxMB << 20
+}
+
+func historySnapshotReserve(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return 0
+	}
+	// gzip worst-case overhead is small; reserve the source size plus 1 MiB.
+	return info.Size() + 1<<20
 }
 
 func (h *Handler) fileDiskPath(file models.File) string {

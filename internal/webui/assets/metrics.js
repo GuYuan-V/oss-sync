@@ -36,6 +36,7 @@
           setMetric("memory-usage", Number(metrics.memory_usage_percent).toFixed(1) + "%");
           setMetric("memory-capacity", formatBytes(metrics.memory_used_bytes) + " / " + formatBytes(metrics.memory_total_bytes));
           setMetric("disk-storage", formatBytes(metrics.disk_used_bytes) + " / " + formatBytes(metrics.disk_total_bytes));
+          setMetric("project-storage", formatBytes(metrics.project_storage_used) + " / " + (metrics.project_storage_max ? formatBytes(metrics.project_storage_max) : "∞"));
           if (container.querySelector('[data-system-metric="vault-storage"]')) {
             var vaultStorage = formatBytes(metrics.vault_storage_used);
             if (metrics.vault_storage_quota) vaultStorage += " / " + formatBytes(metrics.vault_storage_quota);

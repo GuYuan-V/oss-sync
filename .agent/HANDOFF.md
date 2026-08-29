@@ -2,64 +2,87 @@
 
 ## 当前目标
 
-提供类似 1Panel 的 Linux 一键部署：通过一个 `curl | bash` 命令安装 Docker（需确认）、拉取最新多架构镜像并启动后端。
+完善 Linux 一键部署与发布链路：官方脚本通过可选文件加速下载 Release 容器归档，校验后导入 Docker，同时保留端口、部署路径和整个项目的数据容量设置。
 
 ## 当前状态
 
-- 一键安装脚本、GHCR 多架构发布、CI 冒烟检查及中英文文档已完成。
-- Docker Desktop 真实验证已通过，首次部署、重复升级和数据持久化均正常。
-- `0.1.11` Release 与公开多架构镜像已发布；`0.1.12` 修复无 Docker、无 TTY 时的安装提示。
+- 功能实现及本机 Docker 真实验证已完成，Release 工作流语法已校验但尚未在 GitHub Actions 实际发布运行。
+- 本轮项目总容量、后台页内更新和 Release 一键部署改动已提交并同步至 `origin/main`；未创建新 Release。
+- 已发布版本仍为 `0.1.12`；这些修改需要后续提交并发布新版本后才能被公开安装脚本使用。
 
 ## 已完成工作
 
-- 根目录新增 `install.sh`：
-  - 仅支持 Linux，校验端口、绑定地址、容器名和卷名；
-  - Docker 缺失时从 `/dev/tty` 询问，确认后使用 `https://get.docker.com` 官方脚本安装；
-  - 拉取 `ghcr.io/helantianshen/oss-sync-server:latest`，创建 `oss-data` 命名卷并启动容器；
-  - 默认绑定 `0.0.0.0:8080`，直接提供公网访问地址；
-  - 重复执行可升级，健康检查失败时恢复原容器，数据卷不删除；
-  - 支持 `OSS_IMAGE`、`OSS_PORT`、`OSS_BIND_ADDRESS`、`OSS_INSTALL_DOCKER` 等覆盖。
-- `.github/workflows/release.yml` 在发布二进制和插件资产之外，通过 GHCR 发布 `linux/amd64`、`linux/arm64` 镜像；正式版同步 `latest`，RC 仅发布版本标签。
-- `.github/workflows/ci.yml` 使用本地构建镜像真实运行 `install.sh`，并检查独立端口 `/readyz`。
-- 无 Docker 且无法读取 `/dev/tty` 时明确提示设置 `OSS_INSTALL_DOCKER=1`，不再因未赋值变量中断；CI 常驻覆盖该路径。
-- `README.md` / `README_zh.md` 增加一键安装、公开访问、非交互安装、固定版本及市场安装说明。
+- `install.sh`：
+  - 官方 `curl | bash` 地址保持不变，安装时可选内置 `gh-proxy.com` 文件加速、GitHub 官方下载或自定义文件加速前缀；
+  - 按主机架构下载 Release 中的 `oss-sync-image_linux_amd64.tar.gz` / `arm64.tar.gz`，从 GitHub 官方地址获取 `checksums.txt`，SHA-256 校验通过后执行 `docker load`；
+  - `OSS_RELEASE_PROXY=official` 支持非交互官方直连，自定义前缀可通过同名变量传入；`OSS_IMAGE` 仅作为高级 Registry 镜像覆盖保留；
+  - 支持自定义端口、绝对部署路径和项目总容量上限（GiB，`0` 不限）；
+  - 新安装使用 `<部署路径>/data` 绑定挂载，容器内继续使用 `/app/data`；
+  - 重复执行会下载最新 Release，并从现有容器复用端口、部署路径和容量标签；
+  - 检测到旧版命名卷时继续使用原卷，避免升级后出现空数据库；
+  - 仅在目录属主不符合容器 UID/GID 时请求提权；
+  - 保留健康检查、失败恢复旧容器和首次管理员安全提示。
+- 应用层项目总容量：
+  - `storage.max_total_size_mb` / `OSS_STORAGE_MAX_TOTAL_SIZE_MB` 配置整个数据目录上限；
+  - 新增 `internal/storagequota`，统计数据目录内全部常规文件并串行化扩容写入；
+  - 普通同步、V2 同步、协作上传和历史恢复在提交前检查总容量；覆盖写会为历史快照预留旧文件空间；
+  - 超限返回 HTTP 507 和稳定代码 `project_storage_quota_exceeded`；插件提供中英文提示；
+  - 管理后台数据页显示项目数据目录实际用量与部署上限，实时指标同步刷新。
+- 在线更新页：
+  - 检查和触发按钮改为纯页内按钮，不再依赖表单提交；
+  - Release URL 改为只读文本，不再打开外部页面；
+  - 保留原有 CSRF、确认、状态轮询和错误展示。
+- Release 发布：
+  - 继续发布 GHCR amd64/arm64 多架构镜像；
+  - 额外导出两个可由 `docker load` 导入的架构镜像归档，归档内统一标记为 `oss-sync-server:release`；
+  - 对服务端二进制、插件文件和容器归档等全部 Release 资产生成 `checksums.txt`；
+  - CI 一键安装冒烟测试改为走本地 Release 归档下载、校验和导入路径。
+- README、Compose 和 CI 已同步新增配置及安装器验证。
 
 ## 重要决策
 
-- 不新增独立“部署二进制”：Docker 多架构镜像已经包含对应架构的最新后端二进制，Shell 只负责宿主机探测与容器生命周期，减少一套重复发布/校验逻辑。
-- 按用户要求默认公开监听 `0.0.0.0:8080`，不增加一次性初始化令牌；首个注册用户仍会成为管理员。
-- Docker 缺失安装采用 Docker 官方 convenience script，并且只在用户明确确认后执行。
-- 容器继续使用命名卷；升级只替换容器，不删除用户数据。
+- GitHub Release 文件代理不用于 `docker pull`；发布流程先把 OCI 镜像导出为压缩归档，安装器再通过文件代理下载并执行 `docker load`。
+- 校验文件固定从 GitHub 官方 Release 地址获取，第三方代理只承载大体积镜像归档，避免代理同时替换归档和校验值。
+- 当前 SQLite 一键部署没有 PostgreSQL 等外部 Docker Hub 依赖，因此不修改全局 `/etc/docker/daemon.json`；未来引入依赖容器时可直接使用 1Panel 的 `docker.1panel.live/library/<image>:<tag>` 完整地址。
+- 项目容量采用跨发行版的应用层限制，不修改 Docker daemon、不创建 loop 文件系统，也不依赖 XFS project quota。
+- 配额统计以 `storage.data_dir` 为边界。同步临时文件会先写入该目录，再在提交前计入检查；SQLite/WAL 等内部增长仍可能造成少量瞬时超出，因此它不是文件系统硬配额。
+- 全局配额写锁是单进程上限；当前产品为单实例部署。若未来支持多实例写同一数据目录，需要升级为跨进程锁或共享配额服务。
 
 ## 修改的重要文件
 
-- `install.sh`（新增）
-- `.github/workflows/release.yml`
-- `.github/workflows/ci.yml`
+- `install.sh`
+- `internal/config/config.go`、`configs/config.*.yaml`
+- `internal/storagequota/quota.go`
+- `internal/syncapi/upload.go`、`v2.go`、`collab_upload.go`、`history.go`
+- `internal/webui/system_metrics.go`、模板、指标脚本和语言文件
+- `plugin/src/i18n.ts`、`plugin/src/localized-error.ts`
+- `.github/workflows/ci.yml`、`.github/workflows/release.yml`、`docker-compose.yml`
 - `README.md`、`README_zh.md`
 
 ## 验证情况
 
-- `bash -n install.sh` ✅
-- 非法端口失败路径 ✅
-- 无 Docker 且拒绝安装的失败路径、Docker 官方安装源可达性 ✅
-- 无 Docker 且无控制终端时输出非交互安装提示，不出现 `answer: unbound variable` ✅
-- 无特权脚本驱动测试：首次启动、重复升级、健康状态、`0.0.0.0:18081` 端口映射、数据卷及重启策略 ✅
-- CI/Release Workflow YAML 解析 ✅
-- `go test ./... -count=1` ✅
-- `go vet ./...` ✅
-- 本机 Docker Desktop 真实验证：本地构建镜像后经 `install.sh` 首次启动及重复升级均成功，容器 `healthy`、`/readyz` 正常、端口绑定 `0.0.0.0`、命名卷数据保持；测试资源已清理 ✅
-- CI 安装器真实容器冒烟 ✅
+- `bash -n install.sh`、CI/Release Workflow YAML 解析、`docker compose config --quiet` ✅
+- `go test ./... -count=1`、`go vet ./...` ✅
+- Node.js 26 临时环境：`npm ci`、`npm exec tsc -- --noEmit`、`npm test`（250 项）、`npm run build` ✅
+- Docker Desktop 真实验证 ✅：本地构建镜像，以自定义绑定目录、端口和 1 GiB 上限首次启动；重复执行升级后健康检查正常、挂载路径和容量环境变量正确、测试数据保持。
+- 新 Release 安装链路真实验证 ✅：生成 Docker 压缩归档和 `checksums.txt`，经 `file://` 下载、SHA-256 校验、`docker load` 后健康启动；截断归档后安装器在导入前以“SHA-256 校验失败”退出。
+- 当前 `gh-proxy.com` 对已发布的 0.1.12 Linux amd64 Release 资产 HEAD 请求返回完整文件长度 ✅。
+- Docker 测试容器、镜像及临时数据已清理。
 
 ## 已知问题 / 风险
 
-- GHCR `0.1.11` 与 `latest` 已确认可匿名读取，并包含 `linux/amd64`、`linux/arm64`。
-- 默认公开监听存在“公网首个注册者成为管理员”的抢注窗口，这是用户明确接受的部署取舍。
+- 应用层容量不是宿主文件系统硬配额；进程外写入、数据库/WAL 增长以及很小的元数据开销无法做到字节级绝对封顶。
+- 内置文件代理属于第三方服务，可用性可能变化；用户可随时选择 GitHub 官方或传入自定义加速前缀。
+- 已发布的 0.1.12 不含 `oss-sync-image_linux_*.tar.gz` 和 `checksums.txt`；必须发布包含新资产的下一版本后，新安装链路才能公开使用。
+- GitHub Actions 尚未实际跑过新增的跨架构镜像导出步骤，本机已验证同格式 amd64 归档，arm64 需要以首次发布结果为准。
+- 旧版 `oss-data` 命名卷不会自动迁移到新部署目录，升级时优先保证数据安全。
+- 默认公开监听仍存在首个注册者成为管理员的抢注窗口，这是用户已明确接受的部署取舍。
 
 ## 剩余工作
 
-- 在干净 Linux VPS 上执行公开的一键安装命令做最终验收。
+- 发布下一补丁版本，并检查两个镜像归档与 `checksums.txt` 均存在。
+- 在干净 Linux VPS 上使用公开 `curl | bash` 地址验证交互安装。
 
 ## 推荐下一步
 
-- CI 通过后发布一个补丁版本，在干净 Linux VPS 上执行 README 的 `curl | sudo bash` 命令做最终验收。
+- 审查本轮安装与发布改动后提交并发布补丁版本；先观察 Release 工作流成功生成资产，再在干净 amd64/arm64 Linux 环境分别验收官方脚本与国内文件加速路径。

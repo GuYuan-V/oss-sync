@@ -64,6 +64,7 @@ sync: {max_concurrency: 6}
 	t.Setenv("OSS_ALLOW_ANONYMOUS_REGISTRATION", "false")
 	t.Setenv("OSS_SERVER_PORT", "9999")
 	t.Setenv("OSS_STORAGE_DIR", "/var/data")
+	t.Setenv("OSS_STORAGE_MAX_TOTAL_SIZE_MB", "2048")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -76,6 +77,23 @@ sync: {max_concurrency: 6}
 	}
 	if cfg.Storage.DataDir != "/var/data" {
 		t.Errorf("data dir not overridden: %q", cfg.Storage.DataDir)
+	}
+	if cfg.Storage.MaxTotalSizeBytes() != 2<<30 {
+		t.Errorf("storage limit not overridden: %d", cfg.Storage.MaxTotalSizeBytes())
+	}
+}
+
+func TestLoad_InvalidStorageLimitEnv(t *testing.T) {
+	writeConfig(t, "config.prod.yaml", `
+server: {host: "0.0.0.0", port: 8080, mode: "release"}
+database: {driver: "sqlite", dsn: "data/oss.db"}
+storage: {data_dir: "data"}
+auth: {allow_anonymous_registration: true}
+`)
+	t.Setenv("OSS_ENV", "prod")
+	t.Setenv("OSS_STORAGE_MAX_TOTAL_SIZE_MB", "many")
+	if _, err := Load(); err == nil {
+		t.Error("expected invalid storage limit to fail")
 	}
 }
 

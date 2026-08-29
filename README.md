@@ -86,15 +86,17 @@ go run ./cmd/server
 
 ### Docker
 
-One-command install or upgrade on a Linux server (pulls the latest amd64/arm64 image):
+One-command install or upgrade on a Linux server:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/helantianshen/oss-sync/main/install.sh | sudo bash
 ```
 
-The script detects Docker and asks before installing it with Docker's official installer. It exposes port `8080` on all interfaces by default; open `http://<server-ip>:8080/register` to create the first account, which becomes the administrator.
+The official bootstrap script asks for the host port, GitHub Release download source, deployment path, and a total project storage limit. It can download the latest amd64/arm64 container archive through the built-in file accelerator or GitHub directly, verifies it against the official `checksums.txt`, and imports it with `docker load`. It detects Docker and offers to install it with Docker's official installer. Leave the port blank to choose one randomly from `10000-25565` while skipping common service ports. New installations keep persistent data under `/opt/oss-sync/data`; the application-wide storage limit rejects further sync writes when reached, and `0` means unlimited.
 
-Running the same command again pulls the latest image and recreates the container while preserving the `oss-data` volume. Set `OSS_INSTALL_DOCKER=1` for non-interactive Docker installation. Use `OSS_IMAGE` to pin a release, for example `ghcr.io/helantianshen/oss-sync-server:0.1.10`.
+Running the same command again downloads the latest Release and recreates the container while reusing its port, deployment path, and capacity setting. Legacy `oss-data` volumes remain in place and are not migrated automatically. Non-interactive installs can set `OSS_PORT`, `OSS_RELEASE_PROXY=official` (or a custom file-proxy prefix), `OSS_INSTALL_DIR`, `OSS_STORAGE_LIMIT_GB`, and `OSS_INSTALL_DOCKER=1`. `OSS_IMAGE` remains an advanced override for a complete registry image such as `ghcr.io/helantianshen/oss-sync-server:0.1.12`.
+
+The default SQLite installation does not pull PostgreSQL. If Docker Hub dependencies are added manually, a complete 1Panel mirror reference such as `docker.1panel.live/library/postgres:17` can be used without changing the Release download source or the Docker daemon configuration.
 
 Source development can still build through Docker Compose:
 
@@ -105,7 +107,7 @@ docker compose up -d --build
 docker compose logs -f backend
 ```
 
-The service is available at `http://localhost:8080`, and persistent data is stored in the `oss-data` named volume. Set `OSS_PORT=9090` to change the host port.
+The service is available at `http://localhost:8080`, and persistent data is stored in the `oss-data` named volume. Set `OSS_PORT=9090` to change the host port and `OSS_STORAGE_MAX_TOTAL_SIZE_MB` to apply an application-wide data-directory limit.
 
 To build and run only the backend image:
 

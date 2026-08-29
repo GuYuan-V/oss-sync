@@ -12,6 +12,7 @@ func init() {
 		"admin.cpu_cores":                        {"服务器进程可用核心", "Cores available to server"},
 		"admin.memory_usage":                     {"进程内存", "Process memory"},
 		"admin.server_storage":                   {"服务器磁盘", "Server disk"},
+		"admin.project_storage":                  {"项目存储", "Project storage"},
 		"admin.vault_storage_note":               {"全部仓库逻辑存储", "All vault logical storage"},
 		"admin.database_configuration":           {"数据库配置", "Database configuration"},
 		"admin.database_configuration_help":      {"数据库驱动和连接地址在部署配置中设置。修改后必须重启服务；切换到 PostgreSQL 不会自动迁移现有 SQLite 数据。", "Database driver and connection settings are configured at deployment. Restart after changing them; switching to PostgreSQL does not automatically migrate existing SQLite data."},

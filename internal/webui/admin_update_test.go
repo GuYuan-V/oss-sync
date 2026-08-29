@@ -402,7 +402,7 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 		`data-update-status`,
 		`name="check_id"`,
 		`name="expected_version"`,
-		`name="confirm"`,
+		`data-update-action="/dashboard/admin/system/update"`,
 		`data-update-check-btn`,
 		`data-update-trigger-btn`,
 		`aria-live="polite"`,
@@ -414,6 +414,12 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 	// when not updating, buttons should not be disabled
 	if strings.Contains(page, `data-update-check-btn" disabled`) {
 		t.Errorf("check button should not be disabled when idle")
+	}
+	if strings.Contains(page, `<form method="post" action="/dashboard/admin/system/update`) {
+		t.Error("update controls must not submit forms or navigate away from the page")
+	}
+	if !strings.Contains(page, `type="button" data-update-check-btn`) {
+		t.Error("update check must be a page-local button")
 	}
 	// now render with active updating
 	data.Data["Update"] = adminUpdateStatus{

@@ -1,4 +1,4 @@
-﻿// 概览页面
+// 概览页面
 package webui
 
 import (
@@ -46,7 +46,7 @@ func (h *Handler) overviewPage(c *gin.Context) {
 
 func (h *Handler) loadOverviewData(user *models.User) (overviewData, error) {
 	data := overviewData{CPUCores: runtime.NumCPU()}
-	metrics := readSystemMetrics(h.Cfg.Storage.DataDir)
+	metrics := readSystemMetrics(h.Cfg.Storage.DataDir, h.Cfg.Storage.MaxTotalSizeBytes())
 	data.CPUUsagePercent = metrics.CPUUsagePercent
 	data.CPUModelName = metrics.CPUModelName
 	data.MemoryBytes = metrics.MemoryUsedBytes
@@ -153,4 +153,3 @@ func usagePercent(used, total float64) float64 {
 	}
 	return used / total * 100
 }
-

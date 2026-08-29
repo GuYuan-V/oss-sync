@@ -1,4 +1,4 @@
-﻿// 协作上传
+// 协作上传
 package syncapi
 
 import (
@@ -24,6 +24,7 @@ import (
 	"github.com/oss/oss-server/internal/history"
 	"github.com/oss/oss-server/internal/models"
 	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/oss/oss-server/internal/storagequota"
 )
 
 var (
@@ -111,6 +112,10 @@ func (h *Handler) CollabUpload(c *gin.Context) {
 		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "vault storage quota exceeded"})
 		return
 	}
+	if errors.Is(err, storagequota.ErrExceeded) {
+		c.JSON(http.StatusInsufficientStorage, gin.H{"error": "project storage quota exceeded", "code": "project_storage_quota_exceeded"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -171,80 +176,82 @@ func (h *Handler) writeCollaboration(c *gin.Context, input collaborationWriteInp
 	changed := false
 	sum := sha256.Sum256(input.Content)
 	contentHash := hex.EncodeToString(sum[:])
-	err = h.DB.Transaction(func(tx *gorm.DB) error {
-		var relation models.Collaboration
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(
-			"vault_id = ? AND file_id = ? AND collaborator_id = ? AND status = ?",
-			input.Vault.ID, input.File.ID, input.User.ID, collaboration.StatusAccepted,
-		).First(&relation).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return errCollaborationForbidden
+	err = storagequota.WithinLimit(h.Cfg.Storage.DataDir, h.Cfg.Storage.MaxTotalSizeBytes(), historySnapshotReserve(targetPath), func() error {
+		return h.DB.Transaction(func(tx *gorm.DB) error {
+			var relation models.Collaboration
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where(
+				"vault_id = ? AND file_id = ? AND collaborator_id = ? AND status = ?",
+				input.Vault.ID, input.File.ID, input.User.ID, collaboration.StatusAccepted,
+			).First(&relation).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return errCollaborationForbidden
+				}
+				return fmt.Errorf("lock collaboration: %w", err)
 			}
-			return fmt.Errorf("lock collaboration: %w", err)
-		}
-		current, exists, err := lockedFile(tx, input.Vault.OwnerID, input.Vault.ID, input.File.Path)
-		if err != nil {
-			return fmt.Errorf("lock collaboration file: %w", err)
-		}
-		if !exists || current.ID != input.File.ID {
-			return gorm.ErrRecordNotFound
-		}
-		if current.IsDeleted {
-			return errCollaborationDeleted
-		}
-		if current.LastWriterClientID == input.ClientID && current.LastOperationID == input.OperationID {
+			current, exists, err := lockedFile(tx, input.Vault.OwnerID, input.Vault.ID, input.File.Path)
+			if err != nil {
+				return fmt.Errorf("lock collaboration file: %w", err)
+			}
+			if !exists || current.ID != input.File.ID {
+				return gorm.ErrRecordNotFound
+			}
+			if current.IsDeleted {
+				return errCollaborationDeleted
+			}
+			if current.LastWriterClientID == input.ClientID && current.LastOperationID == input.OperationID {
+				result = current
+				return nil
+			}
+			if current.Revision != input.BaseRevision {
+				conflict = current
+				return errRevisionConflict
+			}
+			if current.Hash == contentHash {
+				result = current
+				return nil
+			}
+			if err := ensureVaultQuota(tx, vaultQuotaChange{
+				VaultID: input.Vault.ID, NewSize: int64(len(input.Content)), Current: current,
+				Exists: true, PolicyLimit: input.PolicyLimit,
+			}); err != nil {
+				return err
+			}
+			backupPath = targetPath + ".backup-" + uuid.NewString()
+			if err := os.Rename(targetPath, backupPath); err != nil {
+				return fmt.Errorf("backup collaboration file: %w", err)
+			}
+			if err := os.Rename(tmpPath, targetPath); err != nil {
+				restoreErr := os.Rename(backupPath, targetPath)
+				backupPath = ""
+				return errors.Join(fmt.Errorf("install collaboration file: %w", err), restoreErr)
+			}
+			moved = true
+			revision, err := nextVaultRevision(tx, input.Vault.ID)
+			if err != nil {
+				return err
+			}
+			now := time.Now()
+			current.Hash = contentHash
+			current.Size = int64(len(input.Content))
+			current.MTime = now.UnixMilli()
+			current.Revision = revision
+			current.IsDeleted = false
+			current.DeletedAt = sql.NullTime{}
+			current.StorageKey = targetKey
+			current.LastWriterClientID = input.ClientID
+			current.LastOperationID = input.OperationID
+			current.UpdatedAt = now
+			if err := tx.Save(&current).Error; err != nil {
+				return fmt.Errorf("save collaboration file: %w", err)
+			}
+			if err := history.Record(tx, h.Cfg.Storage.DataDir, input.Vault.ID, h.historyActor(c, input.User),
+				history.ActionModify, current.Path, "", backupPath, revision); err != nil {
+				return fmt.Errorf("record collaboration history: %w", err)
+			}
 			result = current
+			changed = true
 			return nil
-		}
-		if current.Revision != input.BaseRevision {
-			conflict = current
-			return errRevisionConflict
-		}
-		if current.Hash == contentHash {
-			result = current
-			return nil
-		}
-		if err := ensureVaultQuota(tx, vaultQuotaChange{
-			VaultID: input.Vault.ID, NewSize: int64(len(input.Content)), Current: current,
-			Exists: true, PolicyLimit: input.PolicyLimit,
-		}); err != nil {
-			return err
-		}
-		backupPath = targetPath + ".backup-" + uuid.NewString()
-		if err := os.Rename(targetPath, backupPath); err != nil {
-			return fmt.Errorf("backup collaboration file: %w", err)
-		}
-		if err := os.Rename(tmpPath, targetPath); err != nil {
-			restoreErr := os.Rename(backupPath, targetPath)
-			backupPath = ""
-			return errors.Join(fmt.Errorf("install collaboration file: %w", err), restoreErr)
-		}
-		moved = true
-		revision, err := nextVaultRevision(tx, input.Vault.ID)
-		if err != nil {
-			return err
-		}
-		now := time.Now()
-		current.Hash = contentHash
-		current.Size = int64(len(input.Content))
-		current.MTime = now.UnixMilli()
-		current.Revision = revision
-		current.IsDeleted = false
-		current.DeletedAt = sql.NullTime{}
-		current.StorageKey = targetKey
-		current.LastWriterClientID = input.ClientID
-		current.LastOperationID = input.OperationID
-		current.UpdatedAt = now
-		if err := tx.Save(&current).Error; err != nil {
-			return fmt.Errorf("save collaboration file: %w", err)
-		}
-		if err := history.Record(tx, h.Cfg.Storage.DataDir, input.Vault.ID, h.historyActor(c, input.User),
-			history.ActionModify, current.Path, "", backupPath, revision); err != nil {
-			return fmt.Errorf("record collaboration history: %w", err)
-		}
-		result = current
-		changed = true
-		return nil
+		})
 	})
 	if err != nil && moved {
 		_ = os.Remove(targetPath)
@@ -286,4 +293,3 @@ func (h *Handler) collaborationUploadTarget(c *gin.Context, userID, fileID uint)
 	}
 	return vault, file, true
 }
-

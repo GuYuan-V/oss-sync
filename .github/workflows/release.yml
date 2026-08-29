@@ -149,6 +149,30 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Export installable container images
+        shell: bash
+        env:
+          DIST_DIR: ${{ runner.temp }}/oss-release
+          IMAGE: ${{ steps.image.outputs.image }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            docker pull --platform "linux/$arch" "$IMAGE:$VERSION"
+            docker tag "$IMAGE:$VERSION" oss-sync-server:release
+            docker save oss-sync-server:release | gzip -9 > "$DIST_DIR/oss-sync-image_linux_${arch}.tar.gz"
+            docker image rm oss-sync-server:release "$IMAGE:$VERSION"
+          done
+
+      - name: Generate release checksums
+        shell: bash
+        env:
+          DIST_DIR: ${{ runner.temp }}/oss-release
+        run: |
+          set -euo pipefail
+          cd "$DIST_DIR"
+          sha256sum * > checksums.txt
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -284,6 +284,8 @@ func templateSmokeFixture() map[string]any {
 			"MemoryUsagePercent": 0.0,
 			"DiskUsedBytes":      int64(0),
 			"DiskTotalBytes":     int64(0),
+			"ProjectStorageUsed": int64(0),
+			"ProjectStorageMax":  int64(0),
 		},
 		"Members":               empty,
 		"RecentDevices":         empty,

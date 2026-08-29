@@ -122,17 +122,14 @@
     </dl>
     <div class="server-update-body">
       <div class="server-update-actions">
-        <form method="post" action="/dashboard/admin/system/update/check" data-update-check-form>
-          <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
-          <button class="button button--primary" type="submit" data-update-check-btn {{if .Data.Update.IsUpdating}}disabled aria-disabled="true"{{end}}>{{.Layout.T "admin.check_update"}}</button>
-        </form>
-        <form method="post" action="/dashboard/admin/system/update" class="server-update-trigger" data-update-trigger-form>
-          <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+        <div data-update-check-form data-update-action="/dashboard/admin/system/update/check">
+          <button class="button button--primary" type="button" data-update-check-btn {{if .Data.Update.IsUpdating}}disabled aria-disabled="true"{{end}}>{{.Layout.T "admin.check_update"}}</button>
+        </div>
+        <div class="server-update-trigger" data-update-trigger-form data-update-action="/dashboard/admin/system/update">
           <input type="hidden" name="check_id" data-update-check-input>
           <input type="hidden" name="expected_version" data-update-version-input>
-          <input type="hidden" name="confirm" value="on">
-          <button class="button button--danger" type="submit" data-update-trigger-btn data-one-click-update style="display:none">{{.Layout.T "admin.trigger_update"}}</button>
-        </form>
+          <button class="button button--danger" type="button" data-update-trigger-btn data-one-click-update style="display:none">{{.Layout.T "admin.trigger_update"}}</button>
+        </div>
         <span class="server-update-operation" aria-live="polite"><span class="server-update-operation__label">{{.Layout.T "admin.update_operation"}}</span><strong data-update-state>{{if .Data.Update.Active}}{{.Data.Update.Active.State}}{{else}}{{.Layout.T "admin.update_idle"}}{{end}}</strong></span>
       </div>
       <div class="server-update-check-result" data-update-check-result aria-live="polite" aria-atomic="true">
@@ -227,10 +224,9 @@
   fetchStatus();
   var pollTimer = setInterval(fetchStatus, 5000);
   if(checkForm){
-    checkForm.addEventListener("submit", function(e){
-      e.preventDefault();
+    checkBtn.addEventListener("click", function(){
       if(checkBtn) { checkBtn.disabled = true; checkBtn.setAttribute("aria-busy","true"); }
-      fetch(checkForm.action, {method:"POST", headers:{"X-CSRF-Token":csrf}, credentials:"same-origin"})
+      fetch(checkForm.getAttribute("data-update-action"), {method:"POST", headers:{"X-CSRF-Token":csrf}, credentials:"same-origin"})
         .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, status:r.status, body:j}; }); })
         .then(function(res){
           var j=res.body;
@@ -240,7 +236,7 @@
             if(latestEl) latestEl.textContent = j.latest_version || "—";
             if(checkIdEl) { checkIdEl.textContent = j.check_id || "—"; checkIdEl.setAttribute("title", j.check_id || ""); }
             if(releaseEl) {
-              if(j.release_url){ releaseEl.innerHTML = '<a href="'+j.release_url+'" target="_blank" rel="noopener">查看发布页</a>'; releaseEl.setAttribute("title", j.release_url); } else { releaseEl.textContent = "—"; releaseEl.removeAttribute("title"); }
+              if(j.release_url){ releaseEl.textContent = j.release_url; releaseEl.setAttribute("title", j.release_url); } else { releaseEl.textContent = "—"; releaseEl.removeAttribute("title"); }
             }
             if(expiresEl) expiresEl.textContent = j.expires_at ? new Date(j.expires_at/1e6).toLocaleString() : "—";
             setMetaVisible(!!j.check_id);
@@ -262,12 +258,14 @@
     });
   }
   if(triggerForm){
-    triggerForm.addEventListener("submit", function(e){
-      e.preventDefault();
+    triggerBtn.addEventListener("click", function(){
       if(!window.confirm("确认更新到 " + versionInput.value.trim() + "？")) return;
       if(triggerBtn) { triggerBtn.disabled=true; triggerBtn.setAttribute("data-busy","1"); triggerBtn.setAttribute("aria-busy","true"); }
-      var fd = new FormData(triggerForm);
-      fetch(triggerForm.action, {method:"POST", body: fd, headers:{"X-CSRF-Token":csrf}, credentials:"same-origin"})
+      var fd = new FormData();
+      fd.append("check_id", checkIdInput.value);
+      fd.append("expected_version", versionInput.value);
+      fd.append("confirm", "on");
+      fetch(triggerForm.getAttribute("data-update-action"), {method:"POST", body: fd, headers:{"X-CSRF-Token":csrf}, credentials:"same-origin"})
         .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, status:r.status, body:j}; }); })
         .then(function(res){
           setNote(res.body.error || res.body.code || "");

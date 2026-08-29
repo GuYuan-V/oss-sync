@@ -14,6 +14,7 @@ database:
 
 storage:
   data_dir: "data"
+  max_total_size_mb: 0       # 整个数据目录容量上限，0 表示不限
 
 auth:
   # JWT 签名密钥会在首次启动时自动生成并保存到数据库；此字段仅保留兼容性。
