@@ -56,7 +56,21 @@ jobs:
       - run: docker compose config --quiet
       - run: docker compose up --build --wait --wait-timeout 120
       - run: curl --fail --silent --show-error http://127.0.0.1:18080/readyz
+      - name: Smoke test one-command installer
+        env:
+          OSS_IMAGE: oss-sync-backend:local
+          OSS_CONTAINER_NAME: oss-sync-install-test
+          OSS_DATA_VOLUME: oss-install-test
+          OSS_PORT: 18081
+          OSS_SKIP_PULL: 1
+        run: |
+          bash -n install.sh
+          bash install.sh
+          curl --fail --silent --show-error http://127.0.0.1:18081/readyz
       - if: failure()
         run: docker compose logs backend
       - if: always()
-        run: docker compose down --volumes
+        run: |
+          docker rm -f oss-sync-install-test 2>/dev/null || true
+          docker volume rm oss-install-test 2>/dev/null || true
+          docker compose down --volumes

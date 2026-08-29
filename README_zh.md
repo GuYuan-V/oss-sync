@@ -86,6 +86,18 @@ go run ./cmd/server
 
 ### Docker
 
+Linux 服务器一键安装或升级（自动拉取最新 amd64/arm64 镜像）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/helantianshen/oss-sync/main/install.sh | sudo bash
+```
+
+脚本会检测 Docker；未安装时先询问，确认后使用 Docker 官方脚本安装。默认在所有网络接口开放 `8080` 端口，访问 `http://<服务器IP>:8080/register` 创建首个账户，该账户会成为管理员。
+
+再次执行同一命令会拉取最新镜像并重建容器，`oss-data` 数据卷保持不变。非交互环境可设置 `OSS_INSTALL_DOCKER=1`。可用 `OSS_IMAGE` 固定镜像版本，例如 `ghcr.io/helantianshen/oss-sync-server:0.1.10`。
+
+源码开发环境仍可使用 Docker Compose 构建：
+
 使用 Docker Compose 一键构建并启动 SQLite 服务环境：
 
 ```bash
@@ -108,6 +120,8 @@ docker run --rm -p 8080:8080 \
 容器部署应通过重建或替换镜像升级，不使用进程内二进制自更新。删除容器不会删除命名卷；`docker compose down -v` 会删除数据，请谨慎执行。
 
 ### 构建插件
+
+普通用户可在 Obsidian 的社区插件市场搜索 **OSS Sync and Share** 直接安装。以下步骤仅用于源码开发：
 
 ```bash
 cd plugin

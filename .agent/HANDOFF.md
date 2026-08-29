@@ -2,54 +2,62 @@
 
 ## 当前目标
 
-收尾二轮审查：使用 GORM 原生重复键错误翻译，并同步 HANDOFF 当前状态。
+提供类似 1Panel 的 Linux 一键部署：通过一个 `curl | bash` 命令安装 Docker（需确认）、拉取最新多架构镜像并启动后端。
 
 ## 当前状态
 
-- `main` 已同步至 `origin/main @ 97d7a73`；本轮错误翻译与测试修改尚未提交。
-- 原子注册、`/proc` 指标和重复用户名错误语义均已验证。
+- 一键安装脚本、GHCR 多架构发布、CI 冒烟检查及中英文文档已完成。
+- Docker Desktop 真实验证已通过，首次部署、重复升级和数据持久化均正常。
 
 ## 已完成工作
 
-- **并发测试常驻化** 新增 `internal/auth/registration_concurrent_test.go:TestConcurrentFirstRegistration_OnlyOneAdmin`（`go test -run` 可复现，10 并发仅 1 admin，原临时文件已常驻），修正 HANDOFF 空跑描述。
-- **DB 故障区分** `internal/database/database.go` 为 SQLite/PostgreSQL 启用 GORM `TranslateError`；`IsUsernameTakenError` 使用 `errors.Is(err, gorm.ErrDuplicatedKey)`，避免字符串匹配受错误文本或语言影响；匿名/管理员入口仅将重复键返回 409，其余错误返回 500。
-- **错误分类测试** `internal/auth/registration_concurrent_test.go:TestIsUsernameTakenError` 使用真实 SQLite 唯一约束验证重复用户名，并验证普通数据库错误不会误判。
-- **Resolve 清理** 删除 `internal/auth/accounts.go:ResolveRegistrationRole`（`grep` 0 调用），`auth` 包仅保留 `CreateAccount`/`CreateAccountForAnonymousRegistration`。
-- **延续一轮修复**：`registrationMu`+事务原子首注（`accounts/handler/auth_pages`）、`/proc/stat` 跳过 `guest`（`i>=8 break`）、`cpuModelName` 仅 `model name`→`Hardware`、`bootstrap.go`/`BootstrapAdminUsername`/`yaml`/`main.go`/`bootstrap_test` 精简（`net -84`）。
-- **前置** 系统指标 `system_metrics_other.go` 真实实现（`/proc/cpuinfo`、`/proc/stat`、`/proc/meminfo`、`unix.Statfs`），实测 `disk 79.8GB/1081GB`、`cpu AMD Ryzen 7 7735H`。
+- 根目录新增 `install.sh`：
+  - 仅支持 Linux，校验端口、绑定地址、容器名和卷名；
+  - Docker 缺失时从 `/dev/tty` 询问，确认后使用 `https://get.docker.com` 官方脚本安装；
+  - 拉取 `ghcr.io/helantianshen/oss-sync-server:latest`，创建 `oss-data` 命名卷并启动容器；
+  - 默认绑定 `0.0.0.0:8080`，直接提供公网访问地址；
+  - 重复执行可升级，健康检查失败时恢复原容器，数据卷不删除；
+  - 支持 `OSS_IMAGE`、`OSS_PORT`、`OSS_BIND_ADDRESS`、`OSS_INSTALL_DOCKER` 等覆盖。
+- `.github/workflows/release.yml` 在发布二进制和插件资产之外，通过 GHCR 发布 `linux/amd64`、`linux/arm64` 镜像；正式版同步 `latest`，RC 仅发布版本标签。
+- `.github/workflows/ci.yml` 使用本地构建镜像真实运行 `install.sh`，并检查独立端口 `/readyz`。
+- `README.md` / `README_zh.md` 增加一键安装、公开访问、非交互安装、固定版本及市场安装说明。
 
 ## 重要决策
 
-- 单机以 `registrationMu` + `db.Transaction` 保证跨 `web`/`API` 原子性；SQLite 写串行天然互斥。Postgres 多实例下 `COUNT` 在 `READ COMMITTED` 无锁仍可能并发读 0，需 `SELECT … FOR UPDATE` / 咨询锁或唯一约束，当前单实例 SQLite 部署不引入分布式锁，已在 HANDOFF 风险中明示。
-- 复用 GORM 与现有驱动自带的错误翻译，不维护 SQLite/PostgreSQL 错误文本或驱动特定错误码。
-- `ResolveRegistrationRole` 无调用直接删除，缩减 API。
+- 不新增独立“部署二进制”：Docker 多架构镜像已经包含对应架构的最新后端二进制，Shell 只负责宿主机探测与容器生命周期，减少一套重复发布/校验逻辑。
+- 按用户要求默认公开监听 `0.0.0.0:8080`，不增加一次性初始化令牌；首个注册用户仍会成为管理员。
+- Docker 缺失安装采用 Docker 官方 convenience script，并且只在用户明确确认后执行。
+- 容器继续使用命名卷；升级只替换容器，不删除用户数据。
 
 ## 修改的重要文件
 
-- `internal/auth/accounts.go`、`internal/auth/handler.go`、`internal/webui/auth_pages.go`
-- `internal/auth/registration_concurrent_test.go`（新增常驻）
-- `internal/database/database.go`（SQLite/PostgreSQL 启用 `TranslateError`）
-- `internal/auth/bootstrap.go`（已删）、`internal/config/config.go`、`configs/config.*.yaml`、`cmd/server/main.go`
-- `internal/webui/system_metrics_other.go`
+- `install.sh`（新增）
+- `.github/workflows/release.yml`
+- `.github/workflows/ci.yml`
+- `README.md`、`README_zh.md`
 
 ## 验证情况
 
-- `gofmt -w`（Go 文件） ✅
+- `bash -n install.sh` ✅
+- 非法端口失败路径 ✅
+- 无 Docker 且拒绝安装的失败路径、Docker 官方安装源可达性 ✅
+- 无特权脚本驱动测试：首次启动、重复升级、健康状态、`0.0.0.0:18081` 端口映射、数据卷及重启策略 ✅
+- CI/Release Workflow YAML 解析 ✅
+- `go test ./... -count=1` ✅
 - `go vet ./...` ✅
-- `go test ./... -count=1` ✅（22 包，`webui` 单独及 `-race` 均通过）
-- `go test ./internal/auth -run TestConcurrentFirstRegistration_OnlyOneAdmin -count=1 -v` ✅（常驻测试，1/10 admin）
-- `go test ./internal/auth -run '^(TestConcurrentFirstRegistration_OnlyOneAdmin|TestIsUsernameTakenError)$' -count=1 -v` ✅
-- `grep -rn BootstrapAdmin/EnsureBootstrap/ResolveRegistrationRole` 0 命中 ✅
+- 本机 Docker Desktop 真实验证：本地构建镜像后经 `install.sh` 首次启动及重复升级均成功，容器 `healthy`、`/readyz` 正常、端口绑定 `0.0.0.0`、命名卷数据保持；测试资源已清理 ✅
+- 新增 CI 安装器容器冒烟：尚未由 GitHub Actions 执行
 
 ## 已知问题 / 风险
 
-- 多实例 Postgres 仍依赖进程锁，需后续加 `FOR UPDATE` 或部分唯一索引强化；单实例 SQLite 无风险。
-- Darwin 无 `/proc` 回退 `runtime`。
+- GHCR `ghcr.io/helantianshen/oss-sync-server:latest` 当前匿名读取返回 `denied`；首次发布后必须将 Package Visibility 改为 Public，否则安装脚本无法拉取。
+- 默认公开监听存在“公网首个注册者成为管理员”的抢注窗口，这是用户明确接受的部署取舍。
 
 ## 剩余工作
 
-- 本轮修改尚未提交；是否提交、推送由用户授权后处理。
+- 等待 CI 容器冒烟通过。
+- 发布新版本并把首次创建的 GHCR 包设为 Public。
 
 ## 推荐下一步
 
-- 用户确认后提交本轮错误翻译与 HANDOFF 修正。
+- CI 通过后发布一个补丁版本，在干净 Linux VPS 上执行 README 的 `curl | sudo bash` 命令做最终验收。

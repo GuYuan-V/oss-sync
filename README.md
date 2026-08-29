@@ -86,6 +86,18 @@ go run ./cmd/server
 
 ### Docker
 
+One-command install or upgrade on a Linux server (pulls the latest amd64/arm64 image):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/helantianshen/oss-sync/main/install.sh | sudo bash
+```
+
+The script detects Docker and asks before installing it with Docker's official installer. It exposes port `8080` on all interfaces by default; open `http://<server-ip>:8080/register` to create the first account, which becomes the administrator.
+
+Running the same command again pulls the latest image and recreates the container while preserving the `oss-data` volume. Set `OSS_INSTALL_DOCKER=1` for non-interactive Docker installation. Use `OSS_IMAGE` to pin a release, for example `ghcr.io/helantianshen/oss-sync-server:0.1.10`.
+
+Source development can still build through Docker Compose:
+
 Build and start a complete SQLite-backed environment with Docker Compose:
 
 ```bash
@@ -108,6 +120,8 @@ docker run --rm -p 8080:8080 \
 Container deployments should be upgraded by rebuilding or replacing the image, not by mutating the running container binary. Removing the container keeps the named volume; `docker compose down -v` deletes its data and must be used with care.
 
 ### Build plugin
+
+Regular users can install **OSS Sync and Share** directly from Obsidian Community Plugins. The following steps are only for source development:
 
 ```bash
 cd plugin
