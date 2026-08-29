@@ -282,8 +282,8 @@ export default class OSSPlugin extends Plugin {
     this.collabManager?.stop();
     this.serverUpdatePoller?.dispose();
     this.serverUpdatePoller = null;
-    this.app.workspace.detachLeavesOfType(SIDEBAR_VIEW_TYPE);
   }
+
 
   private registerCommands(): void {
     this.addLocalizedCommand("command.openSidebar", {

@@ -1,10 +1,10 @@
 {
   "id": "oss-sync",
   "name": "OSS Sync and Share",
-  "version": "0.1.8",
+  "version": "0.1.10",
   "minAppVersion": "1.4.0",
-  "description": "Self-hosted sync and share for Obsidian: Markdown + attachments + .obsidian config, LWW-based multi-device sync, lightweight blog publishing, and collaboration editing.",
+  "description": "Self-hosted sync and share: Markdown + attachments + vault config, LWW-based multi-device sync, lightweight blog publishing, and collaboration editing.",
   "author": "OSS Project",
-  "authorUrl": "https://github.com/helantianshen/oss-sync",
+  "authorUrl": "https://github.com/helantianshen",
   "isDesktopOnly": false
 }

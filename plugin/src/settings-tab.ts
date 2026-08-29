@@ -14,7 +14,7 @@ export class OSSSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h3", { text: this.plugin.t("settings.language.title") });
+    new Setting(containerEl).setName(this.plugin.t("settings.language.title")).setHeading();
 
     new Setting(containerEl)
       .setName(this.plugin.t("settings.language.name"))
@@ -33,7 +33,7 @@ export class OSSSettingTab extends PluginSettingTab {
           })
       );
 
-    containerEl.createEl("h3", { text: this.plugin.t("settings.server.title") });
+    new Setting(containerEl).setName(this.plugin.t("settings.server.title")).setHeading();
 
     new Setting(containerEl)
       .setName(this.plugin.t("settings.server.url"))
@@ -130,7 +130,7 @@ export class OSSSettingTab extends PluginSettingTab {
       });
     }
 
-    containerEl.createEl("h3", { text: this.plugin.t("settings.vault.title") });
+    new Setting(containerEl).setName(this.plugin.t("settings.vault.title")).setHeading();
 
     const boundVaultSetting = new Setting(containerEl)
       .setName(this.plugin.t("settings.vault.bound"))
@@ -196,7 +196,7 @@ export class OSSSettingTab extends PluginSettingTab {
         })
       );
 
-    containerEl.createEl("h3", { text: this.plugin.t("settings.devices.title") });
+    new Setting(containerEl).setName(this.plugin.t("settings.devices.title")).setHeading();
 
     let nextDeviceName = this.plugin.settings.deviceName;
     new Setting(containerEl)
@@ -291,7 +291,7 @@ export class OSSSettingTab extends PluginSettingTab {
       new Notice(this.plugin.t("notice.devicesLoadFailed", { error: this.errorMessage(error) }));
     });
 
-    containerEl.createEl("h3", { text: this.plugin.t("settings.sync.title") });
+    new Setting(containerEl).setName(this.plugin.t("settings.sync.title")).setHeading();
 
     new Setting(containerEl)
       .setName(this.plugin.t("settings.sync.interval"))
@@ -443,7 +443,7 @@ export class OSSSettingTab extends PluginSettingTab {
   }
 
   private renderUpdateSection(containerEl: HTMLElement): void {
-    containerEl.createEl("h3", { text: this.plugin.t("settings.update.title") });
+    new Setting(containerEl).setName(this.plugin.t("settings.update.title")).setHeading();
 
     new Setting(containerEl)
       .setName(this.plugin.t("settings.update.repo"))
@@ -515,8 +515,9 @@ export class OSSSettingTab extends PluginSettingTab {
   }
 
   private renderServerUpdateSection(containerEl: HTMLElement): void {
-    containerEl.createEl("h3", { text: this.plugin.t("settings.serverUpdate.title") });
+    new Setting(containerEl).setName(this.plugin.t("settings.serverUpdate.title")).setHeading();
     containerEl.createEl("p", { text: this.plugin.t("settings.serverUpdate.desc"), cls: "setting-item-description" });
+
 
     let currentVersion = this.plugin.t("common.unknown");
     let latestVersion: string | null = null;
@@ -551,13 +552,14 @@ export class OSSSettingTab extends PluginSettingTab {
     const refreshTrigger = (): void => {
       if (!triggerButton) return;
       if (candidateVersion && checkId) {
-        triggerButton.buttonEl.style.display = "";
+        triggerButton.buttonEl.show();
         triggerButton.setButtonText(`更新版本到 ${candidateVersion}`);
         triggerButton.setDisabled(isTriggering || isPolling || isChecking);
       } else {
-        triggerButton.buttonEl.style.display = "none";
+        triggerButton.buttonEl.hide();
       }
     };
+
 
     const doTrigger = async (): Promise<void> => {
       if (!checkId || !candidateVersion) return;
@@ -661,7 +663,7 @@ export class OSSSettingTab extends PluginSettingTab {
       .addButton((button) => {
         triggerButton = button;
         button.setButtonText("更新版本").setCta();
-        button.buttonEl.style.display = "none";
+        button.buttonEl.hide();
         button.onClick(doTrigger);
       });
 
