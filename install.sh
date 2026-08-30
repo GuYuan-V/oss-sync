@@ -81,7 +81,7 @@ download_release_image() {
   command -v curl >/dev/null 2>&1 || fail "下载 Release 需要 curl"
   command -v sha256sum >/dev/null 2>&1 || fail "校验 Release 需要 sha256sum"
 
-  local arch asset archive checksums expected download_url
+  local arch asset archive checksums expected checksums_url download_url
   case "$(uname -m)" in
     x86_64|amd64) arch="amd64" ;;
     aarch64|arm64) arch="arm64" ;;
@@ -91,13 +91,16 @@ download_release_image() {
   TEMP_DIR="$(mktemp -d)"
   archive="$TEMP_DIR/$asset"
   checksums="$TEMP_DIR/checksums.txt"
+  checksums_url="${RELEASE_BASE_URL%/}/checksums.txt"
   download_url="${RELEASE_BASE_URL%/}/$asset"
   if [[ -n "$RELEASE_PROXY" ]]; then
+    # ponytail: blocked networks need both files proxied; use signed checksums if the proxy trust boundary becomes unacceptable.
+    checksums_url="${RELEASE_PROXY%/}/$checksums_url"
     download_url="${RELEASE_PROXY%/}/$download_url"
   fi
 
-  info "获取 GitHub 官方校验文件"
-  curl -fL --retry 3 --connect-timeout 15 "${RELEASE_BASE_URL%/}/checksums.txt" -o "$checksums" || fail "下载 checksums.txt 失败"
+  info "获取 Release 校验文件：$checksums_url"
+  curl -fL --retry 3 --connect-timeout 15 "$checksums_url" -o "$checksums" || fail "下载 checksums.txt 失败"
   expected="$(awk -v name="$asset" '$2 == name || $2 == "*" name { print $1; exit }' "$checksums")"
   [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || fail "checksums.txt 中缺少 $asset"
 

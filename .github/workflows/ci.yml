@@ -74,11 +74,12 @@ jobs:
           [[ "$random_port" =~ ^[0-9]+$ ]] && ((random_port >= 10000 && random_port <= 25565))
           case "$random_port" in 10000|10050|10051|11211|12345|15672|18080|19000|20000|22000|25565) exit 1 ;; esac
           release_dir="$RUNNER_TEMP/oss-release"
-          mkdir -p "$release_dir"
+          proxy_dir="$release_dir/proxy/release"
+          mkdir -p "$proxy_dir"
           docker tag oss-sync-backend:local oss-sync-server:release
-          docker save oss-sync-server:release | gzip -9 > "$release_dir/oss-sync-image_linux_amd64.tar.gz"
-          (cd "$release_dir" && sha256sum oss-sync-image_linux_amd64.tar.gz > checksums.txt)
-          OSS_RELEASE_BASE_URL="file://$release_dir" OSS_RELEASE_PROXY=official bash install.sh
+          docker save oss-sync-server:release | gzip -9 > "$proxy_dir/oss-sync-image_linux_amd64.tar.gz"
+          (cd "$proxy_dir" && sha256sum oss-sync-image_linux_amd64.tar.gz > checksums.txt)
+          OSS_RELEASE_BASE_URL=release OSS_RELEASE_PROXY="file://$release_dir/proxy" bash install.sh
           curl --fail --silent --show-error http://127.0.0.1:18081/readyz
           test "$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' oss-sync-install-test | sed -n 's/^OSS_STORAGE_MAX_TOTAL_SIZE_MB=//p')" = "1024"
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Source}}{{end}}{{end}}' oss-sync-install-test)" = "$OSS_INSTALL_DIR/data"
