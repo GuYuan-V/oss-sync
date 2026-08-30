@@ -118,7 +118,7 @@
     <dl class="summary-strip server-update-summary">
       <div class="server-update-summary__current"><dt>{{.Layout.T "admin.current_version"}}</dt><dd data-update-current>{{.Data.Update.CurrentVersion}}</dd><small>{{.Data.Update.GOOS}}/{{.Data.Update.GOARCH}} · {{.Layout.T "admin.update_env"}} {{.Data.Update.Env}}</small></div>
       <div class="server-update-summary__latest"><dt>{{.Layout.T "admin.latest_version"}}</dt><dd data-update-latest>—</dd><small data-update-note>—</small></div>
-      <div class="server-update-summary__readiness"><dt>{{.Layout.T "admin.update_capability"}}</dt><dd data-update-capability>{{if .Data.Update.CapabilityOK}}{{.Layout.T "admin.capability_ok"}}{{else}}{{.Layout.T "admin.capability_not_ready"}}{{end}}</dd><small data-update-capability-detail>{{if .Data.Update.CapabilityErr}}{{.Data.Update.CapabilityErr}}{{else}}{{if .Data.Update.CapabilityOK}}—{{else}}{{.Layout.T "admin.capability_not_ready"}}{{end}}{{end}}</small></div>
+      <div class="server-update-summary__readiness"><dt>{{.Layout.T "admin.update_capability"}}</dt><dd data-update-capability>{{if .Data.Update.ExternalUpdate}}{{.Layout.T "admin.capability_managed"}}{{else if .Data.Update.CapabilityOK}}{{.Layout.T "admin.capability_ok"}}{{else}}{{.Layout.T "admin.capability_not_ready"}}{{end}}</dd><small data-update-capability-detail>{{if .Data.Update.ExternalUpdate}}{{.Layout.T "admin.update_external_required"}}{{else if .Data.Update.CapabilityErr}}{{.Data.Update.CapabilityErr}}{{else if .Data.Update.CapabilityOK}}—{{else}}{{.Layout.T "admin.capability_not_ready"}}{{end}}</small></div>
     </dl>
     <div class="server-update-body">
       <div class="server-update-actions">
@@ -161,7 +161,6 @@
   var triggerBtn = panel.querySelector("[data-update-trigger-btn]");
   var checkIdInput = panel.querySelector("[data-update-check-input]");
   var versionInput = panel.querySelector("[data-update-version-input]");
-  var confirmInput = panel.querySelector("[data-update-confirm]");
   var latestEl = panel.querySelector("[data-update-latest]");
   var checkIdEl = panel.querySelector("[data-update-check-id]");
   var releaseEl = panel.querySelector("[data-update-release]");
@@ -175,6 +174,9 @@
   var activeIdEl = panel.querySelector("[data-update-active-id]");
   var statusJsonEl = panel.querySelector("[data-update-status-json]");
   var polledEl = panel.querySelector("[data-update-polled]");
+  var updateAvailable = false;
+  var capabilityReady = {{if .Data.Update.CapabilityOK}}true{{else}}false{{end}};
+  var externalUpdate = {{if .Data.Update.ExternalUpdate}}true{{else}}false{{end}};
   function setNote(text){
     if(noteEl) noteEl.textContent = text;
     if(noteLineEl) noteLineEl.textContent = text;
@@ -196,12 +198,12 @@
     }
   }
   function syncTriggerDisabled(){
-    var needFields = !checkIdInput.value.trim() || !versionInput.value.trim();
+    var needFields = !capabilityReady || !updateAvailable || !checkIdInput.value.trim() || !versionInput.value.trim();
     if(triggerBtn) {
       var isOneClick = triggerBtn.hasAttribute("data-one-click-update");
       if(isOneClick){
         triggerBtn.style.display = needFields ? "none" : "";
-        if(!needFields) triggerBtn.textContent = "更新版本到 " + versionInput.value.trim();
+        if(!needFields) triggerBtn.textContent = "{{.Layout.T "admin.update_to_version"}}".replace("{version}", versionInput.value.trim());
       }
       triggerBtn.disabled = needFields || triggerBtn.hasAttribute("data-busy");
     }
@@ -210,29 +212,38 @@
     fetch("/dashboard/admin/system/update/status", {headers:{"X-CSRF-Token":csrf}, credentials:"same-origin"})
       .then(function(r){ return r.json(); })
       .then(function(s){
+        capabilityReady = !!s.capability_ok;
+        externalUpdate = !!s.external_update;
         if(stateEl) stateEl.textContent = (s.active && s.active.state) ? s.active.state : "{{.Layout.T "admin.update_idle"}}";
         if(activeIdEl) activeIdEl.textContent = (s.active && s.active.id) ? s.active.id : "—";
-        if(capEl) capEl.textContent = s.capability_ok ? "{{.Layout.T "admin.capability_ok"}}" : "{{.Layout.T "admin.capability_not_ready"}}";
-        if(capDetailEl) capDetailEl.textContent = s.capability_error || "—";
+        if(capEl) capEl.textContent = externalUpdate ? "{{.Layout.T "admin.capability_managed"}}" : (capabilityReady ? "{{.Layout.T "admin.capability_ok"}}" : "{{.Layout.T "admin.capability_not_ready"}}");
+        if(capDetailEl) capDetailEl.textContent = externalUpdate ? "{{.Layout.T "admin.update_external_required"}}" : (s.capability_error || "—");
         if(statusJsonEl) statusJsonEl.textContent = JSON.stringify(s, null, 2);
         if(polledEl) polledEl.textContent = new Date().toLocaleString();
         var busy = !!s.is_updating;
         setDisabled(busy);
-        if(busy) syncTriggerDisabled();
+        if(!busy) syncTriggerDisabled();
       }).catch(function(){});
   }
   fetchStatus();
   var pollTimer = setInterval(fetchStatus, 5000);
   if(checkForm){
     checkBtn.addEventListener("click", function(){
+      updateAvailable = false;
+      if(checkIdInput) checkIdInput.value = "";
+      if(versionInput) versionInput.value = "";
+      setNote("{{.Layout.T "admin.update_checking"}}");
+      syncTriggerDisabled();
       if(checkBtn) { checkBtn.disabled = true; checkBtn.setAttribute("aria-busy","true"); }
       fetch(checkForm.getAttribute("data-update-action"), {method:"POST", headers:{"X-CSRF-Token":csrf}, credentials:"same-origin"})
         .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, status:r.status, body:j}; }); })
         .then(function(res){
           var j=res.body;
           if(j.check_id){
-            if(checkIdInput) checkIdInput.value = j.check_id;
-            if(versionInput) versionInput.value = j.latest_version ? String(j.latest_version).replace(/^v/,"") : (j.candidate && j.candidate.version) || "";
+            updateAvailable = j.update_available === true;
+            var latestVersion = j.latest_version ? String(j.latest_version).replace(/^v/,"") : (j.candidate && j.candidate.version) || "";
+            if(checkIdInput) checkIdInput.value = updateAvailable ? j.check_id : "";
+            if(versionInput) versionInput.value = updateAvailable ? latestVersion : "";
             if(latestEl) latestEl.textContent = j.latest_version || "—";
             if(checkIdEl) { checkIdEl.textContent = j.check_id || "—"; checkIdEl.setAttribute("title", j.check_id || ""); }
             if(releaseEl) {
@@ -240,8 +251,9 @@
             }
             if(expiresEl) expiresEl.textContent = j.expires_at ? new Date(j.expires_at/1e6).toLocaleString() : "—";
             setMetaVisible(!!j.check_id);
-            setNote(j.update_available ? "{{.Layout.T "admin.update_available"}}" : "{{.Layout.T "admin.update_up_to_date"}}");
+            setNote(updateAvailable ? (externalUpdate ? "{{.Layout.T "admin.update_external_available"}}" : "{{.Layout.T "admin.update_available_prompt"}}").replace("{version}", latestVersion) : "{{.Layout.T "admin.update_up_to_date"}}");
           } else {
+            updateAvailable = false;
             if(latestEl) latestEl.textContent = j.latest_version || "—";
             setMetaVisible(false);
             setNote(j.note || j.error || "");
@@ -249,6 +261,7 @@
           syncTriggerDisabled();
           fetchStatus();
         }).catch(function(err){
+          updateAvailable = false;
           setMetaVisible(false);
           setNote(String(err));
         }).finally(function(){
@@ -259,7 +272,8 @@
   }
   if(triggerForm){
     triggerBtn.addEventListener("click", function(){
-      if(!window.confirm("确认更新到 " + versionInput.value.trim() + "？")) return;
+      if(!updateAvailable) return;
+      if(!window.confirm("{{.Layout.T "admin.update_confirm_prompt"}}".replace("{version}", versionInput.value.trim()))) return;
       if(triggerBtn) { triggerBtn.disabled=true; triggerBtn.setAttribute("data-busy","1"); triggerBtn.setAttribute("aria-busy","true"); }
       var fd = new FormData();
       fd.append("check_id", checkIdInput.value);
@@ -270,7 +284,8 @@
         .then(function(res){
           setNote(res.body.error || res.body.code || "");
           if(res.status===202 || res.body.ok){
-            setNote("accepted: "+ (res.body.version||""));
+            updateAvailable = false;
+            setNote("{{.Layout.T "admin.update_started"}}");
           }
           fetchStatus();
         }).catch(function(err){

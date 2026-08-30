@@ -62,9 +62,10 @@ jobs:
           OSS_DATA_VOLUME: oss-install-test
           OSS_PORT: 18081
           OSS_INSTALL_DIR: ${{ runner.temp }}/oss-install-test
+          OSS_GLOBAL_BIN_DIR: ${{ runner.temp }}/oss-bin-test
           OSS_STORAGE_LIMIT_GB: 1
         run: |
-          bash -n install.sh
+          bash -n install.sh manage.sh
           no_docker_path="$(mktemp -d)"
           ln -s "$(command -v id)" "$no_docker_path/id"
           ln -s "$(command -v uname)" "$no_docker_path/uname"
@@ -78,15 +79,27 @@ jobs:
           mkdir -p "$proxy_dir"
           docker tag oss-sync-backend:local oss-sync-server:release
           docker save oss-sync-server:release | gzip -9 > "$proxy_dir/oss-sync-image_linux_amd64.tar.gz"
-          (cd "$proxy_dir" && sha256sum oss-sync-image_linux_amd64.tar.gz > checksums.txt)
+          cp install.sh manage.sh "$proxy_dir/"
+          (cd "$proxy_dir" && sha256sum oss-sync-image_linux_amd64.tar.gz install.sh manage.sh > checksums.txt)
           OSS_RELEASE_BASE_URL=release OSS_RELEASE_PROXY="file://$release_dir/proxy" bash install.sh
           curl --fail --silent --show-error http://127.0.0.1:18081/readyz
           test "$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' oss-sync-install-test | sed -n 's/^OSS_STORAGE_MAX_TOTAL_SIZE_MB=//p')" = "1024"
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Source}}{{end}}{{end}}' oss-sync-install-test)" = "$OSS_INSTALL_DIR/data"
+          test "$(readlink -f "$OSS_GLOBAL_BIN_DIR/oss")" = "$OSS_INSTALL_DIR/manage.sh"
+          test "$(readlink -f "$OSS_GLOBAL_BIN_DIR/oss-sync")" = "$OSS_INSTALL_DIR/manage.sh"
+          "$OSS_INSTALL_DIR/manage.sh" 3 | grep -F "存储上限：1 GiB"
+          "$OSS_INSTALL_DIR/manage.sh" 1
+          curl --fail --silent --show-error http://127.0.0.1:18081/readyz
+          "$OSS_INSTALL_DIR/manage.sh" 7 2
+          test "$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' oss-sync-install-test | sed -n 's/^OSS_STORAGE_MAX_TOTAL_SIZE_MB=//p')" = "2048"
+          "$OSS_INSTALL_DIR/manage.sh" 8 18082
+          curl --fail --silent --show-error http://127.0.0.1:18082/readyz
+          test "$(docker inspect --format '{{(index (index .HostConfig.PortBindings "8080/tcp") 0).HostPort}}' oss-sync-install-test)" = "18082"
       - if: failure()
         run: docker compose logs backend
       - if: always()
         run: |
           docker rm -f oss-sync-install-test 2>/dev/null || true
           docker volume rm oss-install-test 2>/dev/null || true
+          rm -f "$OSS_GLOBAL_BIN_DIR/oss" "$OSS_GLOBAL_BIN_DIR/oss-sync"
           docker compose down --volumes

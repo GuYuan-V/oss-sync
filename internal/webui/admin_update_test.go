@@ -405,6 +405,12 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 		`data-update-action="/dashboard/admin/system/update"`,
 		`data-update-check-btn`,
 		`data-update-trigger-btn`,
+		`data-one-click-update style="display:none"`,
+		`var updateAvailable = false`,
+		`var capabilityReady = true`,
+		`var externalUpdate = false`,
+		`!capabilityReady || !updateAvailable`,
+		`updateAvailable = j.update_available === true`,
 		`aria-live="polite"`,
 	} {
 		if !strings.Contains(page, needle) {
@@ -421,27 +427,35 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 	if !strings.Contains(page, `type="button" data-update-check-btn`) {
 		t.Error("update check must be a page-local button")
 	}
-	// now render with active updating
+	// Container deployments keep update checks in the UI but update via the host command.
 	data.Data["Update"] = adminUpdateStatus{
 		CurrentVersion: "1.0.0",
-		Env:            "dev",
+		Env:            "prod",
 		GOOS:           runtime.GOOS,
 		GOARCH:         runtime.GOARCH,
-		CapabilityOK:   false,
-		CapabilityErr:  "dev version",
-		IsUpdating:     true,
-		Active:         &update.PublicOperation{ID: "op-1", State: update.StateInProgress, Version: "9.9.9"},
+		ExternalUpdate: true,
 	}
 	buf.Reset()
 	if err := tpl.ExecuteTemplate(&buf, "admin-system", data); err != nil {
-		t.Fatalf("render updating: %v", err)
+		t.Fatalf("render container deployment: %v", err)
 	}
 	page2 := buf.String()
-	if !strings.Contains(page2, `disabled`) {
-		t.Errorf("buttons should be disabled while updating")
+	if !strings.Contains(page2, `宿主机管理`) || !strings.Contains(page2, `oss-sync`) {
+		t.Errorf("container deployment should direct updates to the host command")
 	}
-	if !strings.Contains(page2, `op-1`) {
-		t.Errorf("active operation id should be rendered")
+	if !strings.Contains(page2, `var capabilityReady = false`) || !strings.Contains(page2, `var externalUpdate = true`) {
+		t.Errorf("container deployment should not expose in-process update capability")
+	}
+}
+
+func TestAdminUpdateStatus_ContainerUsesExternalManager(t *testing.T) {
+	db, cfg, _ := newWebUITestDB(t)
+	h, _, _ := newWebUIHandlerWithUpdate(t, db, cfg)
+	t.Setenv("OSS_DEPLOYMENT_MODE", "container")
+
+	status := h.buildUpdateStatus()
+	if status.CapabilityOK || !status.ExternalUpdate || status.CapabilityErr != "" {
+		t.Fatalf("unexpected container update status: %+v", status)
 	}
 }
 

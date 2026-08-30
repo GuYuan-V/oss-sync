@@ -1,4 +1,4 @@
-﻿// 管理更新
+// 管理更新
 package webui
 
 import (
@@ -18,17 +18,18 @@ import (
 
 // adminUpdateStatus 供模板与 JSON 状态接口共用。
 type adminUpdateStatus struct {
-	CurrentVersion string                  `json:"current_version"`
-	Commit         string                  `json:"commit,omitempty"`
-	BuiltAt        string                  `json:"built_at,omitempty"`
-	Env            string                  `json:"env"`
-	GOOS           string                  `json:"goos"`
-	GOARCH         string                  `json:"goarch"`
-	CapabilityOK   bool                    `json:"capability_ok"`
-	CapabilityErr  string                  `json:"capability_error,omitempty"`
-	Active         *update.PublicOperation `json:"active,omitempty"`
+	CurrentVersion string                   `json:"current_version"`
+	Commit         string                   `json:"commit,omitempty"`
+	BuiltAt        string                   `json:"built_at,omitempty"`
+	Env            string                   `json:"env"`
+	GOOS           string                   `json:"goos"`
+	GOARCH         string                   `json:"goarch"`
+	CapabilityOK   bool                     `json:"capability_ok"`
+	CapabilityErr  string                   `json:"capability_error,omitempty"`
+	ExternalUpdate bool                     `json:"external_update"`
+	Active         *update.PublicOperation  `json:"active,omitempty"`
 	History        []update.PublicOperation `json:"history"`
-	IsUpdating     bool                    `json:"is_updating"`
+	IsUpdating     bool                     `json:"is_updating"`
 }
 
 // buildUpdateStatus 返回当前版本与持久化操作状态（不含本地路径/GitHub 元数据）。
@@ -55,25 +56,17 @@ func (h *Handler) buildUpdateStatus() adminUpdateStatus {
 			s.IsUpdating = true
 		}
 	}
-	capErr := h.updateCapabilityError()
-	if capErr != "" {
-		s.CapabilityErr = capErr
-		s.CapabilityOK = false
+	if h.updater == nil {
+		s.CapabilityErr = "update service not initialized"
+	} else if err := update.CheckCurrentCapability(h.updater.ExecPath()); err != nil {
+		s.ExternalUpdate = update.IsExternalUpdateError(err)
+		if !s.ExternalUpdate {
+			s.CapabilityErr = err.Error()
+		}
 	} else {
 		s.CapabilityOK = true
 	}
 	return s
-}
-
-// updateCapabilityError 返回能力检查错误文案（为空表示可用）。
-func (h *Handler) updateCapabilityError() string {
-	if h.updater == nil {
-		return "update service not initialized"
-	}
-	if err := update.CheckCurrentCapability(h.updater.ExecPath()); err != nil {
-		return err.Error()
-	}
-	return ""
 }
 
 // adminUpdateStatusJSON 供前端轮询；GET /dashboard/admin/system/update/status
@@ -143,7 +136,7 @@ func (h *Handler) adminUpdateTrigger(c *gin.Context) {
 	// JSON body fallback for fetch()
 	if checkID == "" && strings.Contains(c.GetHeader("Content-Type"), "application/json") {
 		var j struct {
-			CheckID string `json:"check_id"`
+			CheckID  string `json:"check_id"`
 			CheckID2 string `json:"checkId"`
 		}
 		_ = c.ShouldBindJSON(&j)
@@ -199,6 +192,10 @@ func (h *Handler) adminUpdateTrigger(c *gin.Context) {
 		return
 	}
 	if err := update.CheckCurrentCapability(h.updater.ExecPath()); err != nil {
+		if update.IsExternalUpdateError(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "code": string(update.CodeExternalUpdate), "error": h.t(c, "admin.update_external_required")})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "code": "capability", "error": err.Error()})
 		return
 	}
@@ -245,4 +242,3 @@ func toPublicForWeb(op update.Operation) map[string]any {
 		"error":      op.Error,
 	}
 }
-

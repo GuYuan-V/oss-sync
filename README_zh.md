@@ -94,7 +94,9 @@ curl -fsSL https://raw.githubusercontent.com/helantianshen/oss-sync/main/install
 
 官方引导脚本会依次询问映射端口、GitHub Release 下载源、部署路径和整个项目的数据容量上限；最新 amd64/arm64 容器归档及其 `checksums.txt` 都通过所选下载源获取，完成 SHA-256 校验后通过 `docker load` 导入。未安装 Docker 时，经确认后使用 Docker 官方脚本安装。端口留空时会避开常用服务端口，从 `10000-25565` 随机选择，并在所有网络接口开放。新部署默认将持久数据保存到 `/opt/oss-sync/data`，容量为应用层总限制，`0` 表示不限。达到上限后服务端会拒绝继续写入同步数据，并在管理后台显示项目空间用量。
 
-再次执行同一命令会下载最新 Release 并重建容器，同时复用现有端口、部署路径和容量设置。旧版本创建的 `oss-data` 命名卷会继续保留，不自动迁移。非交互环境可使用 `OSS_PORT`、`OSS_RELEASE_PROXY=official`（或自定义文件加速前缀）、`OSS_INSTALL_DIR`、`OSS_STORAGE_LIMIT_GB` 和 `OSS_INSTALL_DOCKER=1`；高级场景仍可用 `OSS_IMAGE` 指定完整 Registry 镜像，例如 `ghcr.io/helantianshen/oss-sync-server:0.1.12`。
+安装完成后可运行全局命令 `oss` 或 `oss-sync` 打开管理菜单，用于更新、卸载、查看运行状态与空间用量、启停或重启服务，以及修改项目总容量和映射端口。卸载只移除容器和管理命令，项目数据默认保留。
+
+再次执行同一安装命令会下载最新 Release 并重建容器，同时复用现有端口、部署路径和容量设置。旧版本创建的 `oss-data` 命名卷会继续保留，不自动迁移。非交互环境可使用 `OSS_PORT`、`OSS_RELEASE_PROXY=official`（或自定义文件加速前缀）、`OSS_INSTALL_DIR`、`OSS_STORAGE_LIMIT_GB` 和 `OSS_INSTALL_DOCKER=1`；高级场景仍可用 `OSS_IMAGE` 指定完整 Registry 镜像，例如 `ghcr.io/helantianshen/oss-sync-server:0.1.12`。
 
 默认 SQLite 部署不会拉取 PostgreSQL。手动增加 Docker Hub 依赖时，可以直接使用 `docker.1panel.live/library/postgres:17` 这类 1Panel 完整镜像地址，无需改变 Release 下载源或修改 Docker daemon 配置。
 

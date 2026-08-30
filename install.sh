@@ -6,6 +6,7 @@ IMAGE="${OSS_IMAGE:-}"
 RELEASE_BASE_URL="${OSS_RELEASE_BASE_URL:-https://github.com/helantianshen/oss-sync/releases/latest/download}"
 RELEASE_PROXY="${OSS_RELEASE_PROXY:-}"
 DEFAULT_RELEASE_PROXY="https://gh-proxy.com/"
+MANAGEMENT_BASE_URL="${OSS_MANAGEMENT_BASE_URL:-https://raw.githubusercontent.com/helantianshen/oss-sync/main}"
 RELEASE_IMAGE="oss-sync-server:release"
 CONTAINER="${OSS_CONTAINER_NAME:-oss-sync}"
 VOLUME="${OSS_DATA_VOLUME:-oss-data}"
@@ -15,6 +16,9 @@ INSTALL_DIR="${OSS_INSTALL_DIR:-}"
 STORAGE_GB="${OSS_STORAGE_LIMIT_GB:-}"
 INSTALL_DOCKER="${OSS_INSTALL_DOCKER:-}"
 SKIP_PULL="${OSS_SKIP_PULL:-0}"
+MANAGER_SOURCE="${OSS_MANAGER_SOURCE:-}"
+INSTALLER_SOURCE="${OSS_INSTALLER_SOURCE:-}"
+GLOBAL_BIN_DIR="${OSS_GLOBAL_BIN_DIR:-/usr/local/bin}"
 TEMP_DIR=""
 
 info() { printf '[OSS] %s\n' "$*"; }
@@ -38,6 +42,8 @@ read_tty() {
 run_privileged() {
   if [[ "$(id -u)" -eq 0 ]]; then
     "$@"
+  elif "$@" 2>/dev/null; then
+    return
   elif command -v sudo >/dev/null 2>&1; then
     sudo "$@"
   else
@@ -81,7 +87,7 @@ download_release_image() {
   command -v curl >/dev/null 2>&1 || fail "下载 Release 需要 curl"
   command -v sha256sum >/dev/null 2>&1 || fail "校验 Release 需要 sha256sum"
 
-  local arch asset archive checksums expected checksums_url download_url
+  local arch asset archive checksums expected checksums_url download_url script script_url
   case "$(uname -m)" in
     x86_64|amd64) arch="amd64" ;;
     aarch64|arm64) arch="arm64" ;;
@@ -107,10 +113,81 @@ download_release_image() {
   info "下载 OSS Sync Release 镜像：$download_url"
   curl -fL --retry 3 --connect-timeout 15 "$download_url" -o "$archive" || fail "下载 OSS Sync Release 失败"
   printf '%s  %s\n' "$expected" "$archive" | sha256sum -c - >/dev/null || fail "OSS Sync Release SHA-256 校验失败"
+  for script in install.sh manage.sh; do
+    expected="$(awk -v name="$script" '$2 == name || $2 == "*" name { print $1; exit }' "$checksums")"
+    if [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]]; then
+      script_url="${RELEASE_BASE_URL%/}/$script"
+    else
+      # ponytail: one-release compatibility fallback; new releases ship checksummed management scripts.
+      script_url="${MANAGEMENT_BASE_URL%/}/$script"
+    fi
+    if [[ -n "$RELEASE_PROXY" ]]; then script_url="${RELEASE_PROXY%/}/$script_url"; fi
+    info "下载管理组件：$script_url"
+    curl -fL --retry 3 --connect-timeout 15 "$script_url" -o "$TEMP_DIR/$script" || fail "下载 $script 失败"
+    if [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]]; then
+      printf '%s  %s\n' "$expected" "$TEMP_DIR/$script" | sha256sum -c - >/dev/null || fail "$script SHA-256 校验失败"
+    fi
+  done
   docker load -i "$archive" >/dev/null || fail "导入 OSS Sync Release 镜像失败"
   docker image inspect "$RELEASE_IMAGE" >/dev/null 2>&1 || fail "Release 中缺少镜像 $RELEASE_IMAGE"
   IMAGE="$RELEASE_IMAGE"
   info "Release 校验通过并已导入 Docker"
+}
+
+install_managed_file() {
+  local source="$1" destination="$2" temp
+  if [[ "$(readlink -f "$source" 2>/dev/null || true)" == "$(readlink -f "$destination" 2>/dev/null || true)" ]]; then
+    return
+  fi
+  temp="${destination}.tmp.$$"
+  run_privileged install -m 0755 "$source" "$temp"
+  run_privileged mv -f "$temp" "$destination"
+}
+
+install_command_link() {
+  local destination="$1" current=""
+  current="$(readlink -f "$destination" 2>/dev/null || true)"
+  if [[ (-e "$destination" || -L "$destination") && "$current" != "$INSTALL_DIR/manage.sh" ]]; then
+    fail "全局命令已存在且不属于 OSS Sync：$destination"
+  fi
+  run_privileged ln -sfn "$INSTALL_DIR/manage.sh" "$destination"
+}
+
+install_management_commands() {
+  local script_dir="" local_installer="" local_manager=""
+  if [[ -n "${BASH_SOURCE[0]:-}" && -r "${BASH_SOURCE[0]}" ]]; then
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local_installer="$script_dir/install.sh"
+    local_manager="$script_dir/manage.sh"
+  fi
+  if [[ -z "$INSTALLER_SOURCE" ]]; then
+    if [[ -n "$TEMP_DIR" && -r "$TEMP_DIR/install.sh" ]]; then INSTALLER_SOURCE="$TEMP_DIR/install.sh";
+    elif [[ -r "$local_installer" ]]; then INSTALLER_SOURCE="$local_installer"; fi
+  fi
+  if [[ -z "$MANAGER_SOURCE" ]]; then
+    if [[ -n "$TEMP_DIR" && -r "$TEMP_DIR/manage.sh" ]]; then MANAGER_SOURCE="$TEMP_DIR/manage.sh";
+    elif [[ -r "$local_manager" ]]; then MANAGER_SOURCE="$local_manager"; fi
+  fi
+  if [[ -z "$INSTALLER_SOURCE" || -z "$MANAGER_SOURCE" ]]; then
+    [[ -n "$TEMP_DIR" ]] || TEMP_DIR="$(mktemp -d)"
+    command -v curl >/dev/null 2>&1 || fail "安装管理命令需要 curl"
+    if [[ -z "$INSTALLER_SOURCE" ]]; then
+      curl -fL --retry 3 --connect-timeout 15 "${MANAGEMENT_BASE_URL%/}/install.sh" -o "$TEMP_DIR/install.sh" || fail "下载 install.sh 失败"
+      INSTALLER_SOURCE="$TEMP_DIR/install.sh"
+    fi
+    if [[ -z "$MANAGER_SOURCE" ]]; then
+      curl -fL --retry 3 --connect-timeout 15 "${MANAGEMENT_BASE_URL%/}/manage.sh" -o "$TEMP_DIR/manage.sh" || fail "下载 manage.sh 失败"
+      MANAGER_SOURCE="$TEMP_DIR/manage.sh"
+    fi
+  fi
+  run_privileged mkdir -p "$INSTALL_DIR"
+  [[ "$GLOBAL_BIN_DIR" == /* && "$GLOBAL_BIN_DIR" != "/" ]] || fail "全局命令目录必须是非根目录的绝对路径"
+  [[ "$GLOBAL_BIN_DIR" != *$'\n'* && "$GLOBAL_BIN_DIR" != *$'\r'* ]] || fail "全局命令目录不能包含换行"
+  run_privileged mkdir -p "$GLOBAL_BIN_DIR"
+  install_managed_file "$INSTALLER_SOURCE" "$INSTALL_DIR/install.sh"
+  install_managed_file "$MANAGER_SOURCE" "$INSTALL_DIR/manage.sh"
+  install_command_link "$GLOBAL_BIN_DIR/oss-sync"
+  install_command_link "$GLOBAL_BIN_DIR/oss"
 }
 
 select_port() {
@@ -241,6 +318,8 @@ else
   docker pull "$IMAGE"
 fi
 
+install_management_commands
+
 existing_mount_type="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Type}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
 existing_mount_source="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Name}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
 mount_args=()
@@ -271,8 +350,12 @@ if ! docker run -d \
   --restart unless-stopped \
   --stop-timeout 20 \
   --label org.opencontainers.image.source=https://github.com/helantianshen/oss-sync \
+  --label io.oss-sync.managed=true \
   --label "io.oss-sync.install-dir=$INSTALL_DIR" \
   --label "io.oss-sync.storage-limit-gb=$STORAGE_GB" \
+  --label "io.oss-sync.global-bin-dir=$GLOBAL_BIN_DIR" \
+  --label "io.oss-sync.release-base-url=$RELEASE_BASE_URL" \
+  --label "io.oss-sync.release-proxy=${RELEASE_PROXY:-official}" \
   -e "OSS_STORAGE_MAX_TOTAL_SIZE_MB=$STORAGE_MB" \
   -p "${BIND_ADDRESS}:${PORT}:8080" \
   "${mount_args[@]}" \
@@ -306,3 +389,4 @@ else
   info "访问地址：http://127.0.0.1:$PORT"
 fi
 info "请及时注册为管理员确保安全"
+info "管理命令已安装：oss 或 oss-sync"

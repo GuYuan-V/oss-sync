@@ -170,6 +170,7 @@ jobs:
           DIST_DIR: ${{ runner.temp }}/oss-release
         run: |
           set -euo pipefail
+          cp install.sh manage.sh "$DIST_DIR/"
           cd "$DIST_DIR"
           sha256sum * > checksums.txt
 

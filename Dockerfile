@@ -37,6 +37,7 @@ COPY --from=build --chmod=755 /out/oss-server /app/oss-server
 COPY configs /app/configs
 
 ENV OSS_ENV=prod \
+    OSS_DEPLOYMENT_MODE=container \
     OSS_SERVER_HOST=0.0.0.0 \
     OSS_SERVER_PORT=8080 \
     OSS_STORAGE_DIR=/app/data \

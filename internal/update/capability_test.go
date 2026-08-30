@@ -55,6 +55,15 @@ func TestCheckCapability_DevelopmentVersionRejected(t *testing.T) {
 	}
 }
 
+func TestCheckCapability_ContainerRequiresExternalUpdate(t *testing.T) {
+	withVersion(t, "1.2.3")
+	t.Setenv("OSS_DEPLOYMENT_MODE", "container")
+	err := CheckCapability(regularFile(t), runtime.GOOS, runtime.GOARCH)
+	if err == nil || !IsExternalUpdateError(err) {
+		t.Fatalf("expected external update error, got %v", err)
+	}
+}
+
 func TestCheckCapability_UnsupportedPlatform(t *testing.T) {
 	withVersion(t, "1.2.3")
 	exe := regularFile(t)

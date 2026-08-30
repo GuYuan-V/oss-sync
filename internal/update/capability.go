@@ -1,4 +1,4 @@
-﻿// 更新能力检测
+// 更新能力检测
 package update
 
 import (
@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/oss/oss-server/internal/version"
 )
@@ -14,6 +15,13 @@ import (
 // 依次检查：开发版本、受支持平台、可执行文件形态（常规文件、非软链）、
 // 可执行文件所在目录可写。任一不满足即返回带稳定 Code 的 UpdateError。
 func CheckCapability(execPath string, goos, goarch string) error {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("OSS_DEPLOYMENT_MODE")), "container") {
+		return newUpdateError(
+			CodeExternalUpdate,
+			"container deployment must be updated with the host oss command",
+			ErrExternalUpdate,
+		)
+	}
 	if version.IsDevelopmentVersion(version.Version) {
 		return newUpdateError(
 			CodeDevelopmentVersion,
@@ -64,4 +72,3 @@ func CheckCapability(execPath string, goos, goarch string) error {
 func CheckCurrentCapability(execPath string) error {
 	return CheckCapability(execPath, runtime.GOOS, runtime.GOARCH)
 }
-

@@ -138,10 +138,10 @@ func (h *Handler) status(c *gin.Context) {
 // 成功后异步触发关闭回调（仅 helper 启动成功后）。
 func (h *Handler) trigger(c *gin.Context) {
 	var req struct {
-		CheckID         string `json:"check_id"`
-		CheckID2        string `json:"checkId"`
-		Version         string `json:"version"`
-		ExpectedVersion string `json:"expected_version"`
+		CheckID          string `json:"check_id"`
+		CheckID2         string `json:"checkId"`
+		Version          string `json:"version"`
+		ExpectedVersion  string `json:"expected_version"`
 		ExpectedVersion2 string `json:"expectedVersion"`
 	}
 	// 兼容两种命名
@@ -221,7 +221,12 @@ func (h *Handler) trigger(c *gin.Context) {
 		if errors.Is(err, ErrUnsupportedPlatform) {
 			code = http.StatusBadRequest
 		}
-		c.JSON(code, gin.H{"ok": false, "code": http.StatusText(code), "error": msg})
+		responseCode := http.StatusText(code)
+		if errors.Is(err, ErrExternalUpdate) {
+			code = http.StatusBadRequest
+			responseCode = string(CodeExternalUpdate)
+		}
+		c.JSON(code, gin.H{"ok": false, "code": responseCode, "error": msg})
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{

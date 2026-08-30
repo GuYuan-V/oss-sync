@@ -2,14 +2,12 @@
 
 ## 当前目标
 
-维护已发布的 `0.1.13` 一键部署：所选文件加速源同时下载 Release 校验文件和容器归档，避免 `checksums.txt` 固定直连 GitHub 超时。
+完善服务端更新交互，并为一键部署增加 `oss` / `oss-sync` 全局管理命令。
 
 ## 当前状态
 
-- 加速源修复已由提交 `9f9af43` 同步至 `origin/main`，版本标签 `0.1.13` 已发布。
-- Release 工作流和主分支 CI 均通过，公开 Release 包含 amd64/arm64 镜像归档与 `checksums.txt`。
-- 已使用公开官方脚本和 `gh-proxy.com` 完成真实安装，运行中的服务端版本确认是 `0.1.13`。
-- 后续重复 CI 暴露的 WebUI 零秒测试会话和 race 默认超时已修正，本地与远端全量验证均通过。
+- 新需求已在本地实现，尚未提交、推送或发布。
+- 更新页、容器更新边界、管理脚本、Release 资产和 CI 冒烟流程已同步；Go、Shell、Workflow 与真实 Docker 冒烟均通过。
 
 ## 已完成工作
 
@@ -32,11 +30,22 @@
 - 在线更新页：
   - 检查和触发按钮改为纯页内按钮，不再依赖表单提交；
   - Release URL 改为只读文本，不再打开外部页面；
+  - 检查期间显示提示，仅当接口明确返回有新版本时才显示确认更新按钮；
+  - 新版本、确认重启和更新已开始均提供中英文提示；已是最新版或检查失败时清空候选并隐藏确认按钮；
+  - Docker 镜像通过 `OSS_DEPLOYMENT_MODE=container` 明确标记为宿主机管理；后台仍可检查新版本，但不会尝试改写容器内 `/app/oss-server`，也不显示确认更新按钮；发现新版本后提示在服务器运行 `oss` / `oss-sync` 并选择 1 更新；
+  - 容器内触发更新时返回稳定代码 `external_update_required`，页面不再展示 `/app` 不可写的底层权限错误；
   - 保留原有 CSRF、确认、状态轮询和错误展示。
+- 全局管理命令：
+  - 安装完成后写入部署目录中的 `install.sh`、`manage.sh`，并安装 `/usr/local/bin/oss` 与 `/usr/local/bin/oss-sync` 两个入口；
+  - 管理菜单支持更新、保留数据卸载、状态/版本/端口/空间查看、启动、停止、重启、修改项目容量和修改端口；菜单编号为 `0-8`；
+  - 更新、容量和端口调整复用原安装器的容器重建、健康检查与失败恢复，不维护第二套 Docker 创建参数；
+  - 非交互数字选项成功后明确返回状态码 0；`OSS_GLOBAL_BIN_DIR` 可覆盖命令目录用于无特权测试，默认仍为 `/usr/local/bin`；
+  - 全局命令若已被其他程序占用会停止安装，不覆盖无关文件。
 - Release 发布：
   - 继续发布 GHCR amd64/arm64 多架构镜像；
   - 额外导出两个可由 `docker load` 导入的架构镜像归档，归档内统一标记为 `oss-sync-server:release`；
   - 对服务端二进制、插件文件和容器归档等全部 Release 资产生成 `checksums.txt`；
+  - 新 Release 同时发布 `install.sh`、`manage.sh` 并纳入 `checksums.txt`；安装器兼容当前尚无管理资产的 `0.1.13`，过渡期回退官方源码地址；
   - CI 一键安装冒烟测试通过仅存在于代理路径的本地 Release 资产执行下载、校验和导入，防止校验文件重新绕过代理。
   - `0.1.13` 已公开发布，两个架构镜像归档、服务端/插件资产和 `checksums.txt` 均已生成。
 - README、Compose 和 CI 已同步新增配置及安装器验证。
@@ -52,10 +61,13 @@
 - 项目容量采用跨发行版的应用层限制，不修改 Docker daemon、不创建 loop 文件系统，也不依赖 XFS project quota。
 - 配额统计以 `storage.data_dir` 为边界。同步临时文件会先写入该目录，再在提交前计入检查；SQLite/WAL 等内部增长仍可能造成少量瞬时超出，因此它不是文件系统硬配额。
 - 全局配额写锁是单进程上限；当前产品为单实例部署。若未来支持多实例写同一数据目录，需要升级为跨进程锁或共享配额服务。
+- 修改端口和容量时使用当前本地镜像重建容器；“更新”选项才下载最新 Release。卸载不删除绑定目录或旧命名卷。
+- 容器镜像是不可变部署单元，更新由宿主机管理脚本替换镜像和容器；不向容器内 `/app` 授予写权限。原生二进制部署继续使用进程内更新能力。
 
 ## 修改的重要文件
 
 - `install.sh`
+- `manage.sh`
 - `internal/config/config.go`、`configs/config.*.yaml`
 - `internal/storagequota/quota.go`
 - `internal/syncapi/upload.go`、`v2.go`、`collab_upload.go`、`history.go`
@@ -63,6 +75,8 @@
 - `plugin/src/i18n.ts`、`plugin/src/localized-error.ts`
 - `.github/workflows/ci.yml`、`.github/workflows/release.yml`、`docker-compose.yml`
 - `internal/webui/admin_update_test.go`
+- `internal/update/capability.go`、`internal/update/errors.go`、`internal/update/handler.go`
+- `Dockerfile`
 - `README.md`、`README_zh.md`
 
 ## 验证情况
@@ -80,6 +94,13 @@
 - 公网安装 ✅：从官方 `raw.githubusercontent.com/.../install.sh` 启动，通过 `gh-proxy.com` 下载 947 B 校验文件和 12.3 MiB amd64 归档，SHA-256、导入、健康检查及 `--version=0.1.13` 均通过。
 - CI 稳定性本地验证 ✅：`TestAdminUpdate_SuccessfulCheckAndTrigger` 在 race 下连续 20 次通过；`go test -race -p 1 -timeout 15m ./...` 与 `go vet ./...` 通过。
 - 最新主分支 CI `33292980542` ✅：Backend、Plugin、Container 及一键安装冒烟测试全部通过。
+- 本轮 `go test ./... -count=1`、更新页定向测试、`go vet ./...` ✅。
+- 容器更新边界定向测试 `go test ./internal/update ./internal/webui -count=1` ✅；全量 `go test ./... -count=1` 与 `go vet ./...` ✅。
+- 真实 Docker 镜像构建与运行检查 ✅：镜像以 `10001:10001` 运行，包含 `OSS_DEPLOYMENT_MODE=container`，且 `/app` 保持不可写；测试镜像与临时 Docker 配置已清理。
+- 本轮 `bash -n install.sh manage.sh`、CI/Release Workflow YAML 解析 ✅。
+- 使用导出的假 Docker 函数执行 `manage.sh 3` ✅：容器发现、健康状态、版本、端口、数据路径/用量和容量上限输出符合预期。
+- 真实 Docker 冒烟 ✅：经隔离文件代理下载镜像、`install.sh`、`manage.sh` 并完成 SHA-256 校验；默认 `/usr/local/bin/oss`、`oss-sync` 可用；状态、更新、容量 1→2 GiB、端口切换、停止、启动、重启、退出和保留数据卸载全部通过。
+- 冒烟测试的专用容器、镜像、全局命令和临时目录均已清理，无遗留资源。
 - Docker 测试容器、镜像及临时数据已清理。
 
 ## 已知问题 / 风险
@@ -89,11 +110,13 @@
 - 校验文件与归档使用同一第三方代理时，SHA-256 只保证两者一致；它不能替代发布签名。
 - 旧版 `oss-data` 命名卷不会自动迁移到新部署目录，升级时优先保证数据安全。
 - 默认公开监听仍存在首个注册者成为管理员的抢注窗口，这是用户已明确接受的部署取舍。
+- `0.1.13` 不包含新增管理脚本资产；新功能需发布下一版本后才能通过完整 Release 链路使用。
+- `0.1.13` 仍会在容器更新页显示 `/app` 不可写的原始错误；容器宿主机管理提示需随下一版本镜像发布后生效。
 
 ## 剩余工作
 
-- 在干净 Linux VPS 上使用公开 `curl | bash` 地址验证交互安装。
+- 获得用户授权后再提交、推送并发布下一版本。
 
 ## 推荐下一步
 
-- 让原测试机重新执行官方脚本并选择选项 1；若使用其他文件代理则选择选项 3，选择选项 2 仍要求服务器可直连 GitHub。
+- 提交并发布包含 `install.sh`、`manage.sh` 与校验文件的新版本，再用公开 Release 链路复验。

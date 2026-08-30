@@ -1,4 +1,4 @@
-﻿// 更新错误
+// 更新错误
 package update
 
 import (
@@ -15,6 +15,7 @@ const (
 	CodeNotRegularFile      ErrorCode = "not_regular_file"
 	CodeSymlinkNotAllowed   ErrorCode = "symlink_not_allowed"
 	CodeUnwritableDirectory ErrorCode = "unwritable_directory"
+	CodeExternalUpdate      ErrorCode = "external_update_required"
 	CodeInvalidVersion      ErrorCode = "invalid_version"
 	CodeInvalidRepo         ErrorCode = "invalid_repo"
 	CodeInvalidAsset        ErrorCode = "invalid_asset"
@@ -59,6 +60,7 @@ var (
 	ErrNotRegularFile      = &UpdateError{Code: CodeNotRegularFile, Message: "executable is not a regular file"}
 	ErrSymlinkNotAllowed   = &UpdateError{Code: CodeSymlinkNotAllowed, Message: "executable must not be a symlink"}
 	ErrUnwritableDirectory = &UpdateError{Code: CodeUnwritableDirectory, Message: "executable directory is not writable"}
+	ErrExternalUpdate      = &UpdateError{Code: CodeExternalUpdate, Message: "deployment must be updated externally"}
 	ErrInvalidVersion      = &UpdateError{Code: CodeInvalidVersion, Message: "invalid version"}
 	ErrInvalidRepo         = &UpdateError{Code: CodeInvalidRepo, Message: "invalid github repo"}
 	ErrInvalidAsset        = &UpdateError{Code: CodeInvalidAsset, Message: "invalid asset"}
@@ -77,3 +79,7 @@ func IsUnsupportedPlatformError(err error) bool {
 	return errors.Is(err, ErrUnsupportedPlatform)
 }
 
+// IsExternalUpdateError 判断当前部署是否必须由外部管理器更新。
+func IsExternalUpdateError(err error) bool {
+	return errors.Is(err, ErrExternalUpdate)
+}
