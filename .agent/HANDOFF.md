@@ -9,7 +9,7 @@
 - 加速源修复已由提交 `9f9af43` 同步至 `origin/main`，版本标签 `0.1.13` 已发布。
 - Release 工作流和主分支 CI 均通过，公开 Release 包含 amd64/arm64 镜像归档与 `checksums.txt`。
 - 已使用公开官方脚本和 `gh-proxy.com` 完成真实安装，运行中的服务端版本确认是 `0.1.13`。
-- 后续重复 CI 暴露的 WebUI 零秒测试会话和 race 默认超时已做最小修正，本地全量验证通过，等待远端 CI 复验。
+- 后续重复 CI 暴露的 WebUI 零秒测试会话和 race 默认超时已修正，本地与远端全量验证均通过。
 
 ## 已完成工作
 
@@ -79,6 +79,7 @@
 - 主分支 CI ✅：Backend `go test -race ./...` / `go vet ./...`、Plugin 全套检查、Container 及一键安装冒烟测试全部通过。
 - 公网安装 ✅：从官方 `raw.githubusercontent.com/.../install.sh` 启动，通过 `gh-proxy.com` 下载 947 B 校验文件和 12.3 MiB amd64 归档，SHA-256、导入、健康检查及 `--version=0.1.13` 均通过。
 - CI 稳定性本地验证 ✅：`TestAdminUpdate_SuccessfulCheckAndTrigger` 在 race 下连续 20 次通过；`go test -race -p 1 -timeout 15m ./...` 与 `go vet ./...` 通过。
+- 最新主分支 CI `33292980542` ✅：Backend、Plugin、Container 及一键安装冒烟测试全部通过。
 - Docker 测试容器、镜像及临时数据已清理。
 
 ## 已知问题 / 风险
@@ -92,7 +93,6 @@
 ## 剩余工作
 
 - 在干净 Linux VPS 上使用公开 `curl | bash` 地址验证交互安装。
-- 等待 CI 稳定性修复提交的远端工作流复验。
 
 ## 推荐下一步
 
