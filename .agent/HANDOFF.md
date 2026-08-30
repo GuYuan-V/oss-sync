@@ -9,6 +9,7 @@
 - 加速源修复已由提交 `9f9af43` 同步至 `origin/main`，版本标签 `0.1.13` 已发布。
 - Release 工作流和主分支 CI 均通过，公开 Release 包含 amd64/arm64 镜像归档与 `checksums.txt`。
 - 已使用公开官方脚本和 `gh-proxy.com` 完成真实安装，运行中的服务端版本确认是 `0.1.13`。
+- 后续重复 CI 暴露的 WebUI 零秒测试会话和 race 默认超时已做最小修正，本地全量验证通过，等待远端 CI 复验。
 
 ## 已完成工作
 
@@ -39,6 +40,9 @@
   - CI 一键安装冒烟测试通过仅存在于代理路径的本地 Release 资产执行下载、校验和导入，防止校验文件重新绕过代理。
   - `0.1.13` 已公开发布，两个架构镜像归档、服务端/插件资产和 `checksums.txt` 均已生成。
 - README、Compose 和 CI 已同步新增配置及安装器验证。
+- CI 稳定性：
+  - WebUI 测试配置显式设置 1 小时 JWT 有效期，避免零秒测试会话跨秒后被重定向登录；
+  - 后端 race 测试串行执行包并将单包超时设为 15 分钟，适配包含 bcrypt 的慢速 GitHub runner。
 
 ## 重要决策
 
@@ -58,6 +62,7 @@
 - `internal/webui/system_metrics.go`、模板、指标脚本和语言文件
 - `plugin/src/i18n.ts`、`plugin/src/localized-error.ts`
 - `.github/workflows/ci.yml`、`.github/workflows/release.yml`、`docker-compose.yml`
+- `internal/webui/admin_update_test.go`
 - `README.md`、`README_zh.md`
 
 ## 验证情况
@@ -73,6 +78,7 @@
 - Release `0.1.13` 工作流 ✅：多架构 GHCR、两个镜像归档、全部资产校验文件和 GitHub Release 发布成功。
 - 主分支 CI ✅：Backend `go test -race ./...` / `go vet ./...`、Plugin 全套检查、Container 及一键安装冒烟测试全部通过。
 - 公网安装 ✅：从官方 `raw.githubusercontent.com/.../install.sh` 启动，通过 `gh-proxy.com` 下载 947 B 校验文件和 12.3 MiB amd64 归档，SHA-256、导入、健康检查及 `--version=0.1.13` 均通过。
+- CI 稳定性本地验证 ✅：`TestAdminUpdate_SuccessfulCheckAndTrigger` 在 race 下连续 20 次通过；`go test -race -p 1 -timeout 15m ./...` 与 `go vet ./...` 通过。
 - Docker 测试容器、镜像及临时数据已清理。
 
 ## 已知问题 / 风险
@@ -86,6 +92,7 @@
 ## 剩余工作
 
 - 在干净 Linux VPS 上使用公开 `curl | bash` 地址验证交互安装。
+- 等待 CI 稳定性修复提交的远端工作流复验。
 
 ## 推荐下一步
 

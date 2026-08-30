@@ -50,7 +50,7 @@ func newWebUITestDB(t *testing.T) (*gorm.DB, *config.Config, string) {
 		Server:   config.ServerConfig{Host: "127.0.0.1", Port: 8080, Mode: gin.TestMode, MaxFileSizeMB: 100},
 		Storage:  config.StorageConfig{DataDir: dataDir},
 		Database: config.DatabaseConfig{Driver: "sqlite", DSN: filepath.Join(dataDir, "test.db")},
-		Auth:     config.AuthConfig{JWTSecret: "test-secret-32-bytes-long-xxxxxx"},
+		Auth:     config.AuthConfig{JWTSecret: "test-secret-32-bytes-long-xxxxxx", JWTTTLHours: 1},
 		Update:   config.UpdateConfig{GitHubRepo: "fake/oss-sync"},
 	}
 	// ensure jwt secret in db
