@@ -143,6 +143,8 @@ func (h *Handler) trigger(c *gin.Context) {
 		Version          string `json:"version"`
 		ExpectedVersion  string `json:"expected_version"`
 		ExpectedVersion2 string `json:"expectedVersion"`
+		DownloadSource   string `json:"download_source"`
+		DownloadProxy    string `json:"download_proxy"`
 	}
 	// 兼容两种命名
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -204,7 +206,7 @@ func (h *Handler) trigger(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Minute)
 	defer cancel()
-	op, err := h.svc.StartHelperUpdate(ctx, req.CheckID)
+	op, err := h.svc.StartHelperUpdate(ctx, req.CheckID, req.DownloadSource, req.DownloadProxy)
 	if err != nil {
 		code := http.StatusBadGateway
 		msg := err.Error()
@@ -214,7 +216,7 @@ func (h *Handler) trigger(c *gin.Context) {
 			code = http.StatusGone
 		} else if errors.Is(err, ErrAlreadyInProgress) {
 			code = http.StatusConflict
-		} else if errors.Is(err, ErrInvalidVersion) || errors.Is(err, ErrInvalidAsset) || errors.Is(err, ErrInvalidSize) {
+		} else if errors.Is(err, ErrInvalidVersion) || errors.Is(err, ErrInvalidAsset) || errors.Is(err, ErrInvalidSize) || errors.Is(err, ErrInvalidURL) {
 			code = http.StatusBadRequest
 		}
 		// typed unsupported platform also maps to 400

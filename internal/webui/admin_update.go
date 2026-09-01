@@ -160,6 +160,8 @@ func (h *Handler) adminUpdateTrigger(c *gin.Context) {
 			expected = strings.TrimSpace(c.Query("version"))
 		}
 	}
+	downloadSource := strings.TrimSpace(c.PostForm("download_source"))
+	customProxy := strings.TrimSpace(c.PostForm("download_proxy"))
 	confirm := strings.TrimSpace(c.PostForm("confirm"))
 	if confirm == "" {
 		confirm = strings.TrimSpace(c.PostForm("_confirm"))
@@ -201,7 +203,7 @@ func (h *Handler) adminUpdateTrigger(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Minute)
 	defer cancel()
-	op, err := h.updateSvc.StartHelperUpdate(ctx, checkID)
+	op, err := h.updateSvc.StartHelperUpdate(ctx, checkID, downloadSource, customProxy)
 	if err != nil {
 		code := http.StatusBadGateway
 		msg := err.Error()
@@ -211,7 +213,7 @@ func (h *Handler) adminUpdateTrigger(c *gin.Context) {
 			code = http.StatusGone
 		} else if errors.Is(err, update.ErrAlreadyInProgress) {
 			code = http.StatusConflict
-		} else if errors.Is(err, update.ErrInvalidVersion) || errors.Is(err, update.ErrInvalidAsset) || errors.Is(err, update.ErrInvalidSize) {
+		} else if errors.Is(err, update.ErrInvalidVersion) || errors.Is(err, update.ErrInvalidAsset) || errors.Is(err, update.ErrInvalidSize) || errors.Is(err, update.ErrInvalidURL) {
 			code = http.StatusBadRequest
 		}
 		if errors.Is(err, update.ErrUnsupportedPlatform) {

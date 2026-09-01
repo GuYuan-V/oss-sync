@@ -1,4 +1,4 @@
-﻿// 更新服务
+// 更新服务
 package update
 
 import (
@@ -51,7 +51,7 @@ func (s *Service) triggerShutdown() {
 
 // StartHelperUpdate validates the checked candidate, downloads the exact asset,
 // stages it and hands off to helper. Shutdown is signaled only after helper launch success.
-func (s *Service) StartHelperUpdate(ctx context.Context, checkID string) (*Operation, error) {
+func (s *Service) StartHelperUpdate(ctx context.Context, checkID, downloadSource, customProxy string) (*Operation, error) {
 	if s.mgr == nil {
 		return nil, fmt.Errorf("manager is nil")
 	}
@@ -72,6 +72,10 @@ func (s *Service) StartHelperUpdate(ctx context.Context, checkID string) (*Opera
 	if err := CheckHandoffCapability(s.up.exe); err != nil {
 		return nil, err
 	}
+	downloadURL, err := resolveDownloadURL(cand.AssetURL, downloadSource, customProxy)
+	if err != nil {
+		return nil, err
+	}
 	// Download exact candidate asset to temp dir.
 	tmpDir, err := os.MkdirTemp(filepath.Dir(s.up.exe), ".oss-download-*")
 	if err != nil {
@@ -82,7 +86,7 @@ func (s *Service) StartHelperUpdate(ctx context.Context, checkID string) (*Opera
 	asset := Asset{
 		ID:                 cand.AssetID,
 		Name:               cand.AssetName,
-		BrowserDownloadURL: cand.AssetURL,
+		BrowserDownloadURL: downloadURL,
 		Size:               cand.Size,
 		Digest:             cand.Digest,
 	}
@@ -184,4 +188,3 @@ func (s *Service) Check(ctx context.Context) (*CheckInfo, error) {
 		ExpiresAt:       cc.ExpiresAt,
 	}, nil
 }
-

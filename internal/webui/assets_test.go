@@ -61,6 +61,8 @@ func TestServerUpdateAssets_whenLoaded_respectCSPAndHideConfirmUntilAvailable(t 
 		"triggerForm.hidden = hidden;",
 		`setNote(msg("checking"))`,
 		`window.confirm(msg("confirm")`,
+		`body.append("download_source", sourceSelect.value)`,
+		`body.append("download_proxy", customProxyInput.value.trim())`,
 	} {
 		if !strings.Contains(js, want) {
 			t.Errorf("app JS missing server update contract %q", want)

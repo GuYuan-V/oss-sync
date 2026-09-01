@@ -376,6 +376,9 @@
     var activeIdEl = panel.querySelector("[data-update-active-id]");
     var statusJSONEl = panel.querySelector("[data-update-status-json]");
     var polledEl = panel.querySelector("[data-update-polled]");
+    var sourceSelect = panel.querySelector("[data-update-download-source]");
+    var customProxyLabel = panel.querySelector("[data-update-custom-proxy]");
+    var customProxyInput = panel.querySelector("[data-update-custom-proxy-input]");
     var updateAvailable = false;
     var capabilityReady = panel.getAttribute("data-capability-ready") === "true";
     var externalUpdate = panel.getAttribute("data-external-update") === "true";
@@ -404,6 +407,13 @@
       if (!hidden) triggerBtn.textContent = msg("to-version").replace("{version}", versionInput.value.trim());
     }
 
+    function syncDownloadSource() {
+      if (!sourceSelect || !customProxyLabel || !customProxyInput) return;
+      var custom = sourceSelect.value === "custom";
+      customProxyLabel.hidden = !custom;
+      customProxyInput.required = custom;
+    }
+
     function fetchStatus() {
       fetch("/dashboard/admin/system/update/status", { headers: { "X-CSRF-Token": csrf }, credentials: "same-origin" })
         .then(function (response) { return response.json(); })
@@ -422,6 +432,8 @@
     }
 
     syncTrigger();
+    syncDownloadSource();
+    if (sourceSelect) sourceSelect.addEventListener("change", syncDownloadSource);
     fetchStatus();
     window.setInterval(fetchStatus, 5000);
 
@@ -472,6 +484,7 @@
     });
 
     triggerBtn.addEventListener("click", function () {
+      if (customProxyInput && customProxyInput.required && !customProxyInput.reportValidity()) return;
       if (!updateAvailable || !window.confirm(msg("confirm").replace("{version}", versionInput.value.trim()))) return;
       triggerBtn.setAttribute("data-busy", "1");
       triggerBtn.setAttribute("aria-busy", "true");
@@ -480,6 +493,8 @@
       body.append("check_id", checkIdInput.value);
       body.append("expected_version", versionInput.value);
       body.append("confirm", "on");
+      if (sourceSelect) body.append("download_source", sourceSelect.value);
+      if (sourceSelect && sourceSelect.value === "custom" && customProxyInput) body.append("download_proxy", customProxyInput.value.trim());
 
       fetch(triggerForm.getAttribute("data-update-action"), { method: "POST", body: body, headers: { "X-CSRF-Token": csrf }, credentials: "same-origin" })
         .then(function (response) { return response.json().then(function (result) { return { status: response.status, body: result }; }); })

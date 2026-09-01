@@ -409,6 +409,11 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 		`data-capability-ready="true"`,
 		`data-external-update="false"`,
 		`data-msg-checking="正在检查新版本，请稍候…"`,
+		`data-update-download-source`,
+		`value="proxy" selected`,
+		`value="official"`,
+		`value="custom"`,
+		`data-update-custom-proxy hidden`,
 		`aria-live="polite"`,
 	} {
 		if !strings.Contains(page, needle) {
@@ -446,6 +451,9 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 	}
 	if !strings.Contains(page2, `data-capability-ready="false"`) || !strings.Contains(page2, `data-external-update="true"`) {
 		t.Errorf("container deployment should not expose in-process update capability")
+	}
+	if strings.Contains(page2, `data-update-download-source`) {
+		t.Errorf("container deployment must choose its download source through the host management command")
 	}
 }
 

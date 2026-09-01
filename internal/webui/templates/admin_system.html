@@ -121,6 +121,23 @@
       <div class="server-update-summary__readiness"><dt>{{.Layout.T "admin.update_capability"}}</dt><dd data-update-capability>{{if .Data.Update.ExternalUpdate}}{{.Layout.T "admin.capability_managed"}}{{else if .Data.Update.CapabilityOK}}{{.Layout.T "admin.capability_ok"}}{{else}}{{.Layout.T "admin.capability_not_ready"}}{{end}}</dd><small data-update-capability-detail>{{if .Data.Update.ExternalUpdate}}{{.Layout.T "admin.update_external_required"}}{{else if .Data.Update.CapabilityErr}}{{.Data.Update.CapabilityErr}}{{else if .Data.Update.CapabilityOK}}—{{else}}{{.Layout.T "admin.capability_not_ready"}}{{end}}</small></div>
     </dl>
     <div class="server-update-body">
+      {{if .Data.Update.CapabilityOK}}
+      <div class="server-update-source">
+        <label>
+          <span>{{.Layout.T "admin.update_download_source"}}</span>
+          <select data-update-download-source>
+            <option value="proxy" selected>{{.Layout.T "admin.update_source_proxy"}}</option>
+            <option value="official">{{.Layout.T "admin.update_source_official"}}</option>
+            <option value="custom">{{.Layout.T "admin.update_source_custom"}}</option>
+          </select>
+          <small>{{.Layout.T "admin.update_download_source_help"}}</small>
+        </label>
+        <label data-update-custom-proxy hidden>
+          <span>{{.Layout.T "admin.update_custom_proxy"}}</span>
+          <input type="url" inputmode="url" pattern="https://.*" placeholder="https://example.com/" data-update-custom-proxy-input>
+        </label>
+      </div>
+      {{end}}
       <div class="server-update-actions">
         <div data-update-check-form data-update-action="/dashboard/admin/system/update/check">
           <button class="button button--primary" type="button" data-update-check-btn {{if .Data.Update.IsUpdating}}disabled aria-disabled="true"{{end}}>{{.Layout.T "admin.check_update"}}</button>

@@ -57,8 +57,6 @@ func digestOfService(t *testing.T, b []byte) string {
 	return digestOfBytes(b)
 }
 
-
-
 func TestService_StartHelperUpdate_SuccessSignalsShutdown(t *testing.T) {
 	mgr, up, cfg, exePath := newServiceTestManager(t)
 	// create checked candidate
@@ -77,7 +75,7 @@ func TestService_StartHelperUpdate_SuccessSignalsShutdown(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	op, err := svc.StartHelperUpdate(ctx, cand)
+	op, err := svc.StartHelperUpdate(ctx, cand, "", "")
 	if err != nil {
 		t.Fatalf("StartHelperUpdate: %v", err)
 	}
@@ -110,7 +108,7 @@ func TestService_StartHelperUpdate_HelperLaunchFailureNoShutdown(t *testing.T) {
 	defer func() { verifyStagedFileFn = origVerify }()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err := svc.StartHelperUpdate(ctx, cand)
+	_, err := svc.StartHelperUpdate(ctx, cand, "", "")
 	if err == nil {
 		t.Fatal("expected helper launch failure")
 	}
@@ -125,7 +123,7 @@ func TestService_StartHelperUpdate_UsesManagerCheckedCandidate(t *testing.T) {
 	svc := NewService(mgr, up, cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_, err := svc.StartHelperUpdate(ctx, "nonexistent")
+	_, err := svc.StartHelperUpdate(ctx, "nonexistent", "", "")
 	if err == nil {
 		t.Fatal("expected check_not_found")
 	}
@@ -138,7 +136,7 @@ func TestService_StartHelperUpdate_UsesManagerCheckedCandidate(t *testing.T) {
 	// Use a new manager with ttl 1ms
 	cc, _ := mgr2.IssueChecked(*mustNewCandidateForService(t, "9.9.10"), 1*time.Millisecond)
 	time.Sleep(5 * time.Millisecond)
-	_, err = svc.StartHelperUpdate(ctx, cc.ID)
+	_, err = svc.StartHelperUpdate(ctx, cc.ID, "", "")
 	if err == nil {
 		t.Fatal("expected expired")
 	}
