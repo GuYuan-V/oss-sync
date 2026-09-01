@@ -2,11 +2,11 @@
 
 ## 当前目标
 
-维护已发布的 `0.1.15` 一键部署、全局管理命令和容器更新流程。
+维护已发布的 `0.1.16` 一键部署、全局管理命令和容器更新流程。
 
 ## 当前状态
 
-- `0.1.15` 已公开发布；网页更新下载源选择已完成并通过本地与 Docker 验证，尚未发布新版本。
+- `0.1.16` 已公开发布；网页更新下载源选择已包含在该版本中，并通过本地与 Docker 验证。
 - 原生二进制网页更新可选择 `gh-proxy.com`、GitHub 官方或自定义 HTTPS 加速前缀；全量 Go、WebUI 和 JavaScript 检查通过。
 
 ## 已完成工作
@@ -49,7 +49,7 @@
   - 对服务端二进制、插件文件和容器归档等全部 Release 资产生成 `checksums.txt`；
   - 新 Release 同时发布 `install.sh`、`manage.sh` 并纳入 `checksums.txt`；安装器兼容当前尚无管理资产的 `0.1.13`，过渡期回退官方源码地址；
   - CI 一键安装冒烟测试通过仅存在于代理路径的本地 Release 资产执行下载、校验和导入，防止校验文件重新绕过代理。
-  - `0.1.14` 已公开发布：包含 GHCR amd64/arm64 多架构镜像、两个架构镜像归档、服务端/插件资产、`install.sh`、`manage.sh` 和覆盖全部资产的 `checksums.txt`。
+  - `0.1.16` 已公开发布：包含网页更新下载源选择、GHCR amd64/arm64 多架构镜像、两个架构镜像归档、服务端/插件资产、`install.sh`、`manage.sh` 和覆盖全部资产的 `checksums.txt`。
 - README、Compose 和 CI 已同步新增配置及安装器验证。
 - CI 稳定性：
   - WebUI 测试配置显式设置 1 小时 JWT 有效期，避免零秒测试会话跨秒后被重定向登录；
@@ -113,6 +113,7 @@
 - 网页下载源选择：`go test ./internal/update ./internal/webui -count=1`、`go test ./... -count=1`、`go vet ./...`、`node --check internal/webui/assets/app.js` ✅；模板无 CSP 禁止的内联脚本或样式 ✅。
 - 网页下载源 Docker 验证 ✅：实际登录容器后台后，容器部署正确显示“宿主机管理”且不提供无效的容器内更新；以可写原生模式启动的隔离容器正确显示 `gh-proxy.com`、GitHub 官方和自定义 HTTPS 三个下载源，默认项、条件输入框、CSP 与静态资源版本均正确。
 - Docker 内运行 `go test ./internal/update -run TestResolveDownloadURL -count=1` ✅，官方、内置代理、自定义代理和无效地址后端解析路径通过。
+- Release `0.1.16` 工作流 `33518389958` ✅：服务端与插件资产、多架构 GHCR、两个离线镜像归档、`checksums.txt` 和公开 GitHub Release 均发布成功；13 个资产状态均为 uploaded。
 
 ## 已知问题 / 风险
 
@@ -126,8 +127,8 @@
 
 ## 剩余工作
 
-- 发布包含网页更新下载源选择的新版本。
+- 无必须的未完成工作。
 
 ## 推荐下一步
 
-- 发布网页更新下载源选择；在 GitHub API 额度可用的环境中再补一次真实 Release 下载端到端验证。
+- 在 GitHub API 额度可用的环境中补一次 `0.1.16` 真实 Release 下载端到端验证。
