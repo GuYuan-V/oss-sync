@@ -6,8 +6,8 @@
 
 ## 当前状态
 
-- `0.1.14` 已提交、推送并公开发布。
-- 更新页、容器更新边界、管理脚本、Release 资产和 CI 冒烟流程已同步；本地验证、主分支 CI、Release 工作流与公网 Docker 安装均通过。
+- `0.1.14` 已公开发布；更新页 CSP 修复已在本地完成，尚未提交、推送或发布。
+- 更新按钮状态与提示改由现有外部 `app.js` 驱动，确认按钮在未发现新版本或容器部署时保持隐藏；全量 Go 检查通过。
 
 ## 已完成工作
 
@@ -32,6 +32,7 @@
   - Release URL 改为只读文本，不再打开外部页面；
   - 检查期间显示提示，仅当接口明确返回有新版本时才显示确认更新按钮；
   - 新版本、确认重启和更新已开始均提供中英文提示；已是最新版或检查失败时清空候选并隐藏确认按钮；
+  - 修复 `script-src 'self'` / `style-src 'self'` CSP 拦截内联更新脚本和样式的问题：逻辑迁入已有 `app.js`，模板通过 `data-*` 提供本地化文案，并用 `hidden` 控制确认按钮；
   - Docker 镜像通过 `OSS_DEPLOYMENT_MODE=container` 明确标记为宿主机管理；后台仍可检查新版本，但不会尝试改写容器内 `/app/oss-server`，也不显示确认更新按钮；发现新版本后提示在服务器运行 `oss` / `oss-sync` 并选择 1 更新；
   - 容器内触发更新时返回稳定代码 `external_update_required`，页面不再展示 `/app` 不可写的底层权限错误；
   - 保留原有 CSRF、确认、状态轮询和错误展示。
@@ -75,6 +76,7 @@
 - `plugin/src/i18n.ts`、`plugin/src/localized-error.ts`
 - `.github/workflows/ci.yml`、`.github/workflows/release.yml`、`docker-compose.yml`
 - `internal/webui/admin_update_test.go`
+- `internal/webui/assets/app.js`、`internal/webui/assets/console.css`、`internal/webui/templates/layout.html`
 - `internal/update/capability.go`、`internal/update/errors.go`、`internal/update/handler.go`
 - `Dockerfile`
 - `README.md`、`README_zh.md`
@@ -104,6 +106,7 @@
 - Docker 测试容器、镜像及临时数据已清理。
 - Release `0.1.14` 工作流 `33317586142` ✅；主分支 CI `33317582647` ✅，Backend race/vet、Plugin 和 Container/一键安装冒烟全部通过。
 - `0.1.14` 公网安装 ✅：官方 `curl | bash` 入口经 `gh-proxy.com` 下载校验文件、amd64 镜像归档、`install.sh` 和 `manage.sh`，SHA-256 校验、`docker load`、健康检查、版本 `0.1.14`、全局 `oss` 状态输出、容器部署标记及保留数据卸载均通过；隔离测试资源已清理。
+- 更新页 CSP 修复：`node --check internal/webui/assets/app.js`、`go test ./internal/webui -count=1`、`go test ./... -count=1`、`go vet ./...` ✅。
 
 ## 已知问题 / 风险
 
@@ -112,11 +115,12 @@
 - 校验文件与归档使用同一第三方代理时，SHA-256 只保证两者一致；它不能替代发布签名。
 - 旧版 `oss-data` 命名卷不会自动迁移到新部署目录，升级时优先保证数据安全。
 - 默认公开监听仍存在首个注册者成为管理员的抢注窗口，这是用户已明确接受的部署取舍。
+- 已发布的 `0.1.14` 更新页内联交互会被 CSP 拦截；本地修复需发布新镜像后生效。
 
 ## 剩余工作
 
-- 当前任务无剩余必要工作。
+- 获得用户授权后提交、推送并发布更新页 CSP 修复。
 
 ## 推荐下一步
 
-- 观察真实用户从旧版升级到 `0.1.14` 的反馈；若第三方代理可用性变化，切换到官方源或自定义加速前缀。
+- 提交并发布更新页 CSP 修复，再验证浏览器中检查提示以及确认按钮的条件显示。

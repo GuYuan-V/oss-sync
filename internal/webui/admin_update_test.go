@@ -405,12 +405,10 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 		`data-update-action="/dashboard/admin/system/update"`,
 		`data-update-check-btn`,
 		`data-update-trigger-btn`,
-		`data-one-click-update style="display:none"`,
-		`var updateAvailable = false`,
-		`var capabilityReady = true`,
-		`var externalUpdate = false`,
-		`!capabilityReady || !updateAvailable`,
-		`updateAvailable = j.update_available === true`,
+		`data-update-trigger-form data-update-action="/dashboard/admin/system/update" hidden`,
+		`data-capability-ready="true"`,
+		`data-external-update="false"`,
+		`data-msg-checking="正在检查新版本，请稍候…"`,
 		`aria-live="polite"`,
 	} {
 		if !strings.Contains(page, needle) {
@@ -426,6 +424,9 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 	}
 	if !strings.Contains(page, `type="button" data-update-check-btn`) {
 		t.Error("update check must be a page-local button")
+	}
+	if strings.Contains(page, `<script`) || strings.Contains(page, `style=`) {
+		t.Error("update panel must not rely on inline script or style blocked by CSP")
 	}
 	// Container deployments keep update checks in the UI but update via the host command.
 	data.Data["Update"] = adminUpdateStatus{
@@ -443,7 +444,7 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 	if !strings.Contains(page2, `宿主机管理`) || !strings.Contains(page2, `oss-sync`) {
 		t.Errorf("container deployment should direct updates to the host command")
 	}
-	if !strings.Contains(page2, `var capabilityReady = false`) || !strings.Contains(page2, `var externalUpdate = true`) {
+	if !strings.Contains(page2, `data-capability-ready="false"`) || !strings.Contains(page2, `data-external-update="true"`) {
 		t.Errorf("container deployment should not expose in-process update capability")
 	}
 }

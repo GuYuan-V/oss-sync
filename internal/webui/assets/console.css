@@ -1390,6 +1390,7 @@ body.body--console .console {
 .server-update-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .server-update-actions form { margin: 0; }
 .server-update-trigger { display: inline-flex; margin: 0; }
+.server-update-trigger[hidden] { display: none; }
 .server-update-operation { display: inline-flex; gap: 8px; align-items: baseline; margin-left: auto; color: var(--muted); font: 11px/1.2 "IBM Plex Mono", "Cascadia Mono", monospace; white-space: nowrap; }
 .server-update-operation strong { color: var(--ink); font: 700 13px/1.2 "Aptos", "Segoe UI", sans-serif; }
 .server-update-check-result { display: grid; gap: 10px; }

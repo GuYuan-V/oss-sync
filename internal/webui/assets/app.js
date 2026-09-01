@@ -10,6 +10,7 @@
     initCollaborationSelection();
     initThemeSettingGroups();
     initPapertrailPreview();
+    initServerUpdate();
     initModals();
   });
 
@@ -347,6 +348,156 @@
     }
 
     refresh();
+  }
+
+  function initServerUpdate() {
+    var panel = document.querySelector("[data-update-panel]");
+    if (!panel) return;
+
+    var csrf = panel.getAttribute("data-csrf") || "";
+    var checkForm = panel.querySelector("[data-update-check-form]");
+    var triggerForm = panel.querySelector("[data-update-trigger-form]");
+    var checkBtn = panel.querySelector("[data-update-check-btn]");
+    var triggerBtn = panel.querySelector("[data-update-trigger-btn]");
+    var checkIdInput = panel.querySelector("[data-update-check-input]");
+    var versionInput = panel.querySelector("[data-update-version-input]");
+    if (!checkForm || !triggerForm || !checkBtn || !triggerBtn || !checkIdInput || !versionInput) return;
+
+    var latestEl = panel.querySelector("[data-update-latest]");
+    var checkIdEl = panel.querySelector("[data-update-check-id]");
+    var releaseEl = panel.querySelector("[data-update-release]");
+    var expiresEl = panel.querySelector("[data-update-expires]");
+    var metaEl = panel.querySelector("[data-update-meta]");
+    var noteEl = panel.querySelector("[data-update-note]");
+    var noteLineEl = panel.querySelector("[data-update-note-line]");
+    var stateEl = panel.querySelector("[data-update-state]");
+    var capEl = panel.querySelector("[data-update-capability]");
+    var capDetailEl = panel.querySelector("[data-update-capability-detail]");
+    var activeIdEl = panel.querySelector("[data-update-active-id]");
+    var statusJSONEl = panel.querySelector("[data-update-status-json]");
+    var polledEl = panel.querySelector("[data-update-polled]");
+    var updateAvailable = false;
+    var capabilityReady = panel.getAttribute("data-capability-ready") === "true";
+    var externalUpdate = panel.getAttribute("data-external-update") === "true";
+    var msg = function (key) { return panel.getAttribute("data-msg-" + key) || ""; };
+
+    function setNote(text) {
+      if (noteEl) noteEl.textContent = text;
+      if (noteLineEl) noteLineEl.textContent = text;
+    }
+
+    function setMetaVisible(visible) {
+      if (metaEl) metaEl.classList.toggle("is-visible", visible);
+    }
+
+    function setDisabled(disabled) {
+      checkBtn.disabled = disabled;
+      triggerBtn.disabled = disabled;
+      checkBtn.toggleAttribute("aria-disabled", disabled);
+      triggerBtn.toggleAttribute("aria-disabled", disabled);
+    }
+
+    function syncTrigger() {
+      var hidden = !capabilityReady || !updateAvailable || !checkIdInput.value.trim() || !versionInput.value.trim();
+      triggerForm.hidden = hidden;
+      triggerBtn.disabled = hidden || triggerBtn.hasAttribute("data-busy");
+      if (!hidden) triggerBtn.textContent = msg("to-version").replace("{version}", versionInput.value.trim());
+    }
+
+    function fetchStatus() {
+      fetch("/dashboard/admin/system/update/status", { headers: { "X-CSRF-Token": csrf }, credentials: "same-origin" })
+        .then(function (response) { return response.json(); })
+        .then(function (status) {
+          capabilityReady = status.capability_ok === true;
+          externalUpdate = status.external_update === true;
+          if (stateEl) stateEl.textContent = status.active && status.active.state ? status.active.state : msg("idle");
+          if (activeIdEl) activeIdEl.textContent = status.active && status.active.id ? status.active.id : "—";
+          if (capEl) capEl.textContent = externalUpdate ? msg("capability-managed") : (capabilityReady ? msg("capability-ok") : msg("capability-not-ready"));
+          if (capDetailEl) capDetailEl.textContent = externalUpdate ? msg("external-required") : (status.capability_error || "—");
+          if (statusJSONEl) statusJSONEl.textContent = JSON.stringify(status, null, 2);
+          if (polledEl) polledEl.textContent = new Date().toLocaleString();
+          setDisabled(status.is_updating === true);
+          if (!status.is_updating) syncTrigger();
+        }).catch(function () {});
+    }
+
+    syncTrigger();
+    fetchStatus();
+    window.setInterval(fetchStatus, 5000);
+
+    checkBtn.addEventListener("click", function () {
+      updateAvailable = false;
+      checkIdInput.value = "";
+      versionInput.value = "";
+      setNote(msg("checking"));
+      setMetaVisible(false);
+      syncTrigger();
+      checkBtn.disabled = true;
+      checkBtn.setAttribute("aria-busy", "true");
+
+      fetch(checkForm.getAttribute("data-update-action"), { method: "POST", headers: { "X-CSRF-Token": csrf }, credentials: "same-origin" })
+        .then(function (response) { return response.json(); })
+        .then(function (result) {
+          if (!result.check_id) {
+            if (latestEl) latestEl.textContent = result.latest_version || "—";
+            setNote(result.note || result.error || "");
+            return;
+          }
+
+          updateAvailable = result.update_available === true;
+          var latestVersion = result.latest_version ? String(result.latest_version).replace(/^v/, "") : (result.candidate && result.candidate.version) || "";
+          checkIdInput.value = updateAvailable ? result.check_id : "";
+          versionInput.value = updateAvailable ? latestVersion : "";
+          if (latestEl) latestEl.textContent = result.latest_version || "—";
+          if (checkIdEl) {
+            checkIdEl.textContent = result.check_id;
+            checkIdEl.setAttribute("title", result.check_id);
+          }
+          if (releaseEl) {
+            releaseEl.textContent = result.release_url || "—";
+            if (result.release_url) releaseEl.setAttribute("title", result.release_url);
+            else releaseEl.removeAttribute("title");
+          }
+          if (expiresEl) expiresEl.textContent = result.expires_at ? new Date(result.expires_at / 1e6).toLocaleString() : "—";
+          setMetaVisible(true);
+          setNote(updateAvailable ? msg(externalUpdate ? "external-available" : "available").replace("{version}", latestVersion) : msg("up-to-date"));
+        }).catch(function (error) {
+          setNote(String(error));
+        }).finally(function () {
+          checkBtn.disabled = false;
+          checkBtn.removeAttribute("aria-busy");
+          syncTrigger();
+          fetchStatus();
+        });
+    });
+
+    triggerBtn.addEventListener("click", function () {
+      if (!updateAvailable || !window.confirm(msg("confirm").replace("{version}", versionInput.value.trim()))) return;
+      triggerBtn.setAttribute("data-busy", "1");
+      triggerBtn.setAttribute("aria-busy", "true");
+      triggerBtn.disabled = true;
+      var body = new FormData();
+      body.append("check_id", checkIdInput.value);
+      body.append("expected_version", versionInput.value);
+      body.append("confirm", "on");
+
+      fetch(triggerForm.getAttribute("data-update-action"), { method: "POST", body: body, headers: { "X-CSRF-Token": csrf }, credentials: "same-origin" })
+        .then(function (response) { return response.json().then(function (result) { return { status: response.status, body: result }; }); })
+        .then(function (result) {
+          setNote(result.body.error || result.body.code || "");
+          if (result.status === 202 || result.body.ok) {
+            updateAvailable = false;
+            setNote(msg("started"));
+          }
+        }).catch(function (error) {
+          setNote(String(error));
+        }).finally(function () {
+          triggerBtn.removeAttribute("data-busy");
+          triggerBtn.removeAttribute("aria-busy");
+          syncTrigger();
+          fetchStatus();
+        });
+    });
   }
 
   function initModals() {

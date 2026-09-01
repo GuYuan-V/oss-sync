@@ -42,6 +42,35 @@ func TestConsoleCSS_whenLoaded_usesSharedButtonTokens(t *testing.T) {
 	}
 }
 
+func TestServerUpdateAssets_whenLoaded_respectCSPAndHideConfirmUntilAvailable(t *testing.T) {
+	t.Parallel()
+
+	jsRaw, err := webFS.ReadFile("assets/app.js")
+	if err != nil {
+		t.Fatalf("read app JS: %v", err)
+	}
+	cssRaw, err := webFS.ReadFile("assets/console.css")
+	if err != nil {
+		t.Fatalf("read console CSS: %v", err)
+	}
+
+	js := string(jsRaw)
+	for _, want := range []string{
+		"initServerUpdate();",
+		"!capabilityReady || !updateAvailable",
+		"triggerForm.hidden = hidden;",
+		`setNote(msg("checking"))`,
+		`window.confirm(msg("confirm")`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Errorf("app JS missing server update contract %q", want)
+		}
+	}
+	if !strings.Contains(string(cssRaw), ".server-update-trigger[hidden] { display: none; }") {
+		t.Error("console CSS must keep the update confirmation hidden")
+	}
+}
+
 func TestConsoleCSS_whenLoaded_setsMarkdownPreviewWrappingForTextNotCode(t *testing.T) {
 	t.Parallel()
 
