@@ -70,7 +70,7 @@ func createTestUserWithHash(t *testing.T, db *gorm.DB, username, role string) *m
 
 func issueWebSession(t *testing.T, cfg *config.Config, user *models.User) (sessionCookie *http.Cookie, csrfToken string) {
 	t.Helper()
-	token, _, err := auth.IssueToken(cfg, *user)
+	token, _, err := auth.IssueWebToken(cfg, *user)
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
 	}
