@@ -63,13 +63,13 @@ confirm_docker_install() {
 }
 
 select_release_source() {
-  if [[ "$RELEASE_PROXY" == "official" ]]; then
-    RELEASE_PROXY=""
-  fi
-  [[ -n "$IMAGE" ]] && return 0
   if [[ -n "$RELEASE_PROXY" ]]; then
+    if [[ "$RELEASE_PROXY" == "official" ]]; then
+      RELEASE_PROXY=""
+    fi
     return 0
   fi
+  [[ -n "$IMAGE" ]] && return 0
   local choice custom
   choice="$(read_tty $'请选择 OSS Sync Release 更新源：\n  1. gh-proxy.com 加速地址（推荐）\n  2. GitHub 官方地址\n  3. 自定义 HTTPS 地址前缀\n请选择 [1]：')"
   case "$choice" in
