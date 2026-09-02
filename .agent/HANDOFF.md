@@ -120,6 +120,7 @@
 - 本轮统一来源链路验证 ✅：`go test ./... -count=1`、`go vet ./...`、`go build -o server.exe ./cmd/server`、`npm exec tsc -- --noEmit`、`npm test`（250 项）、`npm run build` 全部通过。
 - 真实网络验证 ✅：当前环境直连 GitHub API 返回 403，而通过 `gh-proxy.com` 检查公开 Release 成功返回最新版本 `0.1.16`；管理后台自定义来源请求正确携带 `download_source` 与 `download_proxy`。
 - 插件构建依赖安全修复 ✅：`esbuild` 从 `0.20.2` 升级至 `0.28.2`，消除 `GHSA-67mh-4wv8-2f99`；全新 `npm ci` 可重现，`npm audit` 为 0，TypeScript 检查、250 项测试和生产构建通过。
+- 一键安装 CI 夹具兼容修复 ✅：本地 Release 资产改用 `file://` 基地址，管理脚本更新显式选择 `official`，不再把测试目录误作自定义代理；生产环境的 HTTPS 自定义源校验保持不变。
 
 ## 已知问题 / 风险
 
