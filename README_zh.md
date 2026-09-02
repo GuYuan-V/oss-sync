@@ -146,6 +146,8 @@ npm run build
 | `OSS_DB_DRIVER` / `DSN` | sqlite 或 postgres |
 | `OSS_STORAGE_DIR` | 文件存储根 |
 | `OSS_ALLOW_ANONYMOUS_REGISTRATION` | 初始注册开关 |
+| `OSS_WEB_SESSION_TTL_HOURS` | 网页控制台会话有效小时数，默认 `24` |
+| `OSS_DEVICE_JWT_TTL_HOURS` | 插件设备令牌有效小时数，默认 `720`（30 天） |
 | `OSS_DEVICE_STALE_DAYS` | 设备过期阈值 |
 | `OSS_RECONCILE_INTERVAL_HOURS` | 对账周期 |
 | `OSS_UPDATE_DOWNLOAD_SOURCE` | 服务端更新源：`official`、`proxy` 或 `custom` |
@@ -184,7 +186,7 @@ npm run build
 
 - 密码 bcrypt 存储，永不落日志。
 - JWT 为 HS256，密钥按部署随机生成并落库。
-- 网页会话为 HttpOnly Secure SameSite Cookie + CSRF，插件为 Bearer JWT，互不混用。
+- 网页会话使用 24 小时有效的 HttpOnly Secure SameSite Cookie + CSRF；插件使用 30 天有效的设备绑定 Bearer JWT。插件令牌过期后会从本地移除并提示重新登录。
 - 所有变更接口校验已批准设备 + 仓库授权。
 
 ## 许可证

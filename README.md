@@ -146,6 +146,8 @@ Reload Obsidian → Enable *Obsidian Sync & Share* → Fill server URL, username
 | `OSS_DB_DRIVER` / `DSN` | sqlite or postgres |
 | `OSS_STORAGE_DIR` | file storage root |
 | `OSS_ALLOW_ANONYMOUS_REGISTRATION` | initial register switch |
+| `OSS_WEB_SESSION_TTL_HOURS` | web console session lifetime in hours; default `24` |
+| `OSS_DEVICE_JWT_TTL_HOURS` | plugin device token lifetime in hours; default `720` (30 days) |
 | `OSS_DEVICE_STALE_DAYS` | stale device threshold |
 | `OSS_RECONCILE_INTERVAL_HOURS` | storage check interval |
 | `OSS_UPDATE_DOWNLOAD_SOURCE` | server update source: `official`, `proxy`, or `custom` |
@@ -187,7 +189,7 @@ Project conventions: Go with `gofumpt` + `golangci-lint`, TypeScript strict, `uv
 
 - Passwords are bcrypt-hashed, never logged.
 - JWT is HS256 with per-deployment random secret.
-- Sessions: web uses HttpOnly Secure SameSite cookies + CSRF; plugin uses Bearer JWT; they do not mix.
+- Sessions: web uses 24-hour HttpOnly Secure SameSite cookies + CSRF; plugin uses a 30-day device-bound Bearer JWT. Expired plugin tokens are removed locally and require a new login.
 - All mutating web requests require CSRF; all sync/collab requests require approved device + vault authorization.
 
 ## License
