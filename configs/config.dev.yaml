@@ -20,6 +20,8 @@ auth:
   # JWT 签名密钥会在首次启动时自动生成并保存到数据库；此字段仅保留兼容性。
   jwt_secret: ""
   jwt_ttl_hours: 72
+  web_session_ttl_hours: 24
+  device_jwt_ttl_hours: 720
   allow_anonymous_registration: true # 仅作为新数据库注册开关的初始值；之后由管理面板控制
 
 sync:
