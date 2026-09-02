@@ -63,9 +63,11 @@ confirm_docker_install() {
 }
 
 select_release_source() {
+  if [[ "$RELEASE_PROXY" == "official" ]]; then
+    RELEASE_PROXY=""
+  fi
   [[ -n "$IMAGE" ]] && return 0
   if [[ -n "$RELEASE_PROXY" ]]; then
-    [[ "$RELEASE_PROXY" != "official" ]] || RELEASE_PROXY=""
     return 0
   fi
   local choice custom
