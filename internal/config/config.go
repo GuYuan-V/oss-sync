@@ -42,8 +42,10 @@ type StorageConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret   string `yaml:"jwt_secret"`
-	JWTTTLHours int    `yaml:"jwt_ttl_hours"`
+	JWTSecret          string `yaml:"jwt_secret"`
+	JWTTTLHours        int    `yaml:"jwt_ttl_hours"`
+	WebSessionTTLHours int    `yaml:"web_session_ttl_hours"`
+	DeviceJWTTTLHours  int    `yaml:"device_jwt_ttl_hours"`
 	// AllowAnonymousRegistration 只用于初始化新数据库中的注册开关。
 	// 初始化后以数据库中的 SystemSetting 为准。
 	AllowAnonymousRegistration bool `yaml:"allow_anonymous_registration"`
@@ -87,6 +89,7 @@ type UpdateConfig struct {
 //   - OSS_SERVER_HOST / OSS_SERVER_PORT
 //   - OSS_STORAGE_DIR
 //   - OSS_STORAGE_MAX_TOTAL_SIZE_MB
+//   - OSS_WEB_SESSION_TTL_HOURS / OSS_DEVICE_JWT_TTL_HOURS
 //   - OSS_UPDATE_GITHUB_REPO
 //   - OSS_UPDATE_DOWNLOAD_SOURCE / OSS_UPDATE_DOWNLOAD_PROXY
 func Load() (*Config, error) {
@@ -156,6 +159,20 @@ func (c *Config) applyEnvOverrides() error {
 		}
 		c.Storage.MaxTotalSizeMB = maxMB
 	}
+	if v := os.Getenv("OSS_WEB_SESSION_TTL_HOURS"); v != "" {
+		hours, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("OSS_WEB_SESSION_TTL_HOURS 必须是整数，收到 %q", v)
+		}
+		c.Auth.WebSessionTTLHours = hours
+	}
+	if v := os.Getenv("OSS_DEVICE_JWT_TTL_HOURS"); v != "" {
+		hours, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("OSS_DEVICE_JWT_TTL_HOURS 必须是整数，收到 %q", v)
+		}
+		c.Auth.DeviceJWTTTLHours = hours
+	}
 	if v := os.Getenv("OSS_DEVICE_STALE_DAYS"); v != "" {
 		if days, err := strconv.Atoi(v); err == nil {
 			c.Sync.DeviceStaleDays = days
@@ -202,6 +219,9 @@ func (c *Config) validate() error {
 		c.Sync.TempFileMaxAgeHours < 0 ||
 		c.Sync.OrphanFileGraceHours < 0 {
 		return fmt.Errorf("sync maintenance intervals cannot be negative")
+	}
+	if err := c.Auth.validate(); err != nil {
+		return err
 	}
 	if err := c.Update.validate(); err != nil {
 		return err
