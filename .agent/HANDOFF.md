@@ -2,13 +2,14 @@
 
 ## 当前目标
 
-维护已发布的 `0.1.16` 一键部署、全局管理命令和容器更新流程，并完成服务端版本检查与文件下载的统一来源选择。
+维护已发布的 `0.1.16` 部署与更新流程，完成更新源统一，并拆分网页与插件的认证会话有效期。
 
 ## 当前状态
 
 - `0.1.16` 已公开发布；网页更新下载源选择已包含在该版本中，并通过本地与 Docker 验证。
 - 原生二进制网页更新和全局 `oss` 更新均可选择 `gh-proxy.com`、GitHub 官方或自定义 HTTPS 加速前缀；版本检查与文件下载使用同一来源，全量 Go、WebUI、插件和脚本检查通过。
 - 本轮来源统一改动仍在工作区中，尚未提交或发布新版本。
+- 网页会话默认 24 小时，插件设备令牌默认 30 天；插件令牌过期后会清除本地认证并提示重新登录。
 
 ## 已完成工作
 
@@ -53,8 +54,13 @@
   - `0.1.16` 已公开发布：包含网页更新下载源选择、GHCR amd64/arm64 多架构镜像、两个架构镜像归档、服务端/插件资产、`install.sh`、`manage.sh` 和覆盖全部资产的 `checksums.txt`。
 - README、Compose 和 CI 已同步新增配置及安装器验证。
 - CI 稳定性：
-  - WebUI 测试配置显式设置 1 小时 JWT 有效期，避免零秒测试会话跨秒后被重定向登录；
+  - WebUI 测试通过独立网页会话有效期签发 Cookie，避免零秒测试会话跨秒后被重定向登录；
   - 后端 race 测试串行执行包并将单包超时设为 15 分钟，适配包含 bcrypt 的慢速 GitHub runner。
+- 认证会话：
+  - 保留普通 API `jwt_ttl_hours` 的 72 小时默认值，网页会话和插件设备令牌分别使用 `web_session_ttl_hours: 24` 与 `device_jwt_ttl_hours: 720`；旧配置缺少新字段时自动使用这两个默认值；
+  - `OSS_WEB_SESSION_TTL_HOURS` 与 `OSS_DEVICE_JWT_TTL_HOURS` 可分别覆盖网页和设备有效期；
+  - 只有真实 JWT 过期才返回稳定代码 `token_expired`，其他 401/403 不会触发插件自动登出；
+  - 插件收到过期响应后删除内存与持久 Token、停止同步和协作并提示重新登录，同时保留设备 ID 与 Vault 绑定。
 
 ## 重要决策
 
@@ -72,6 +78,8 @@
 - `install.sh`
 - `manage.sh`
 - `internal/config/config.go`、`configs/config.*.yaml`
+- `internal/config/auth_config.go`、`internal/auth/accounts.go`、`internal/auth/middleware.go`
+- `internal/webui/webui.go`、`plugin/src/api.ts`、`plugin/src/main.ts`
 - `internal/storagequota/quota.go`
 - `internal/syncapi/upload.go`、`v2.go`、`collab_upload.go`、`history.go`
 - `internal/webui/system_metrics.go`、模板、指标脚本和语言文件
@@ -121,6 +129,7 @@
 - 真实网络验证 ✅：当前环境直连 GitHub API 返回 403，而通过 `gh-proxy.com` 检查公开 Release 成功返回最新版本 `0.1.16`；管理后台自定义来源请求正确携带 `download_source` 与 `download_proxy`。
 - 插件构建依赖安全修复 ✅：`esbuild` 从 `0.20.2` 升级至 `0.28.2`，消除 `GHSA-67mh-4wv8-2f99`；全新 `npm ci` 可重现，`npm audit` 为 0，TypeScript 检查、250 项测试和生产构建通过。
 - 一键安装 CI 兼容修复 ✅：本地 Release 资产改用 `file://` 基地址，管理脚本更新显式选择 `official`；安装器会在已有镜像的本地配置操作前归一化 `official`，修改容量或端口不再被 HTTPS 校验误拒绝，生产环境的 HTTPS 自定义源要求保持不变。
+- 认证会话拆分验证 ✅：网页 Cookie/JWT 为 24 小时、插件设备 JWT 为 30 天；`go test ./... -count=1`、`go vet ./...`、服务端构建、TypeScript 检查、插件 253 项测试及生产构建全部通过。
 
 ## 已知问题 / 风险
 
