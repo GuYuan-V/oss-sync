@@ -95,7 +95,7 @@ func TestHelper_LaunchFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = u.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	_, err = u.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err == nil {
 		t.Fatal("expected launch failure")
 	}
@@ -135,7 +135,7 @@ func TestHelper_ParentWaitFailureTriggersRollback(t *testing.T) {
 	launchHelperFn = func(ep, mp string) error { launched = mp; return nil }
 	defer func() { launchHelperFn = origLaunch }()
 
-	op, err := u.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := u.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("init handoff: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestHelper_MissingStagedFileTriggersRollback(t *testing.T) {
 	var markerPath string
 	launchHelperFn = func(ep, mp string) error { markerPath = mp; return nil }
 	defer func() { launchHelperFn = origLaunch }()
-	op, err := u.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := u.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestHelper_SwapFailureTriggersRollback(t *testing.T) {
 	origLaunch := launchHelperFn
 	launchHelperFn = func(ep, mp string) error { markerPath = mp; return nil }
 	defer func() { launchHelperFn = origLaunch }()
-	op, err := u.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := u.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -274,7 +274,7 @@ func TestHelper_WrongVersionTriggersRollback(t *testing.T) {
 	origLaunch := launchHelperFn
 	launchHelperFn = func(ep, mp string) error { markerPath = mp; return nil }
 	defer func() { launchHelperFn = origLaunch }()
-	op, err := u.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := u.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -327,7 +327,7 @@ func TestHelper_ReadinessTimeoutTriggersRollback(t *testing.T) {
 	origLaunch := launchHelperFn
 	launchHelperFn = func(ep, mp string) error { markerPath = mp; return nil }
 	defer func() { launchHelperFn = origLaunch }()
-	op, err := u.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := u.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestHelper_SuccessfulHandoff(t *testing.T) {
 	origLaunch := launchHelperFn
 	launchHelperFn = func(ep, mp string) error { markerPath = mp; return nil }
 	defer func() { launchHelperFn = origLaunch }()
-	op, err := u.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath, "--custom-flag"}, exeDir)
+	op, err := u.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath, "--custom-flag"}, exeDir)
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -452,7 +452,7 @@ func TestHelper_MarkerNeverContainsTokens(t *testing.T) {
 	origLaunch := launchHelperFn
 	launchHelperFn = func(ep, mp string) error { markerPath = mp; return nil }
 	defer func() { launchHelperFn = origLaunch }()
-	_, err := u.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	_, err := u.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}

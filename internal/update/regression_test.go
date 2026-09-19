@@ -142,7 +142,7 @@ func TestRegression_HelperOwnedRollbackRelaunch(t *testing.T) {
 	t.Cleanup(func() { relaunchOldServerFn = origRelaunch })
 	cfg := &config.Config{Server: config.ServerConfig{Host: "127.0.0.1", Port: 8080}, Storage: config.StorageConfig{DataDir: mgrRoot}}
 	up, _ := NewUpdater(cfg, Options{ExecPath: exePath, Verifier: func(string, string) error { return nil }})
-	op, err := up.InitiateHelperHandoff(mgr, cc.ID, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := up.InitiateHelperHandoff(mgr, cc.ID, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("InitiateHelperHandoff: %v", err)
 	}

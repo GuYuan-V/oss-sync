@@ -95,10 +95,17 @@ func (s *Service) StartHelperUpdate(ctx context.Context, checkID, downloadSource
 	if err != nil {
 		return nil, err
 	}
+	// downloadAsset verified the release asset digest before extraction. The
+	// staged executable needs its own digest, since archives have different bytes.
+	// Capture it here so staging and the helper can detect subsequent changes.
+	binaryDigest, err := fileDigest(prepared)
+	if err != nil {
+		return nil, fmt.Errorf("hash prepared executable: %w", err)
+	}
 	readyURL := s.readyURL()
 	origArgs := os.Args
 	workDir, _ := os.Getwd()
-	op, err := s.up.InitiateHelperHandoff(s.mgr, checkID, prepared, readyURL, origArgs, workDir)
+	op, err := s.up.InitiateHelperHandoff(s.mgr, checkID, prepared, binaryDigest, readyURL, origArgs, workDir)
 	if err != nil {
 		return nil, err
 	}
