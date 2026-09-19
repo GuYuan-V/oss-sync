@@ -177,7 +177,7 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 			return
 		}
 	}
-	c.Redirect(http.StatusSeeOther, redirect+"?saved=1")
+	c.Redirect(http.StatusSeeOther, redirect+"&saved=1")
 }
 
 func (h *Handler) loadPluginSettings(pluginID, vaultID string) (serverplugin.Manifest, models.JSONMap, error) {

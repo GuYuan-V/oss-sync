@@ -11,6 +11,8 @@ func (p *executablePlugin) Close(ctx context.Context) error {
 	if ctx == nil {
 		return errors.New("executable plugin close context is nil")
 	}
+	shutdownCtx, cancel := context.WithTimeout(ctx, processShutdownTimeout)
+	defer cancel()
 	p.mu.Lock()
 	alreadyClosed := p.closed
 	if !alreadyClosed {
@@ -22,13 +24,13 @@ func (p *executablePlugin) Close(ctx context.Context) error {
 		select {
 		case <-p.waitDone:
 			return nil
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-shutdownCtx.Done():
+			_ = p.kill()
+			_ = p.stdin.Close()
+			return shutdownCtx.Err()
 		}
 	}
-	p.writeMu.Lock()
-	shutdownErr := writeProcessLine(p.stdin, []byte(`{"type":"shutdown"}`))
-	p.writeMu.Unlock()
+	shutdownErr := p.writeFrame(shutdownCtx, []byte(`{"type":"shutdown"}`))
 	if err := p.stdin.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
 		_ = p.kill()
 		return fmt.Errorf("close executable plugin stdin: %w", err)
@@ -37,8 +39,6 @@ func (p *executablePlugin) Close(ctx context.Context) error {
 		_ = p.kill()
 		return fmt.Errorf("send executable plugin shutdown: %w", shutdownErr)
 	}
-	shutdownCtx, cancel := context.WithTimeout(ctx, processShutdownTimeout)
-	defer cancel()
 	select {
 	case <-p.waitDone:
 		return nil
@@ -49,6 +49,9 @@ func (p *executablePlugin) Close(ctx context.Context) error {
 }
 
 func (p *executablePlugin) kill() error {
+	if p.cmd == nil || p.cmd.Process == nil {
+		return nil
+	}
 	err := p.cmd.Process.Kill()
 	if errors.Is(err, os.ErrProcessDone) {
 		return nil

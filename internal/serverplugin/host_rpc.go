@@ -32,19 +32,19 @@ func (m *Manager) hostCall(
 	case "host.model.delete":
 		return m.hostModelDelete(ctx, params)
 	case "host.vault.get":
-		return m.hostVaultGet(ctx, params)
+		return modelWireResult(m.hostVaultGet(ctx, params))
 	case "host.vault.create":
-		return m.hostVaultCreate(ctx, params)
+		return modelWireResult(m.hostVaultCreate(ctx, params))
 	case "host.vault.update":
-		return m.hostVaultUpdate(ctx, params)
+		return modelWireResult(m.hostVaultUpdate(ctx, params))
 	case "host.vault.delete":
 		return m.hostVaultDelete(ctx, params)
 	case "host.file.get":
 		return m.hostFileGet(ctx, params)
 	case "host.share.create":
-		return m.hostShareCreate(ctx, params)
+		return modelWireResult(m.hostShareCreate(ctx, params))
 	case "host.share.update":
-		return m.hostShareUpdate(ctx, params)
+		return modelWireResult(m.hostShareUpdate(ctx, params))
 	case "host.share.delete":
 		return m.hostShareDelete(ctx, params)
 	case "host.blog.get":
@@ -206,22 +206,28 @@ func (m *Manager) hostModelList(ctx context.Context, params map[string]json.RawM
 	switch name {
 	case "users":
 		rows := make([]models.User, 0)
-		return rows, query.Find(&rows).Error
+		err := query.Find(&rows).Error
+		return modelWireResult(rows, err)
 	case "vaults":
 		rows := make([]models.Vault, 0)
-		return rows, query.Find(&rows).Error
+		err := query.Find(&rows).Error
+		return modelWireResult(rows, err)
 	case "files":
 		rows := make([]models.File, 0)
-		return rows, query.Find(&rows).Error
+		err := query.Find(&rows).Error
+		return modelWireResult(rows, err)
 	case "shares":
 		rows := make([]models.Share, 0)
-		return rows, query.Find(&rows).Error
+		err := query.Find(&rows).Error
+		return modelWireResult(rows, err)
 	case "collaborations":
 		rows := make([]models.Collaboration, 0)
-		return rows, query.Find(&rows).Error
+		err := query.Find(&rows).Error
+		return modelWireResult(rows, err)
 	case "devices":
 		rows := make([]models.ClientDevice, 0)
-		return rows, query.Find(&rows).Error
+		err := query.Find(&rows).Error
+		return modelWireResult(rows, err)
 	default:
 		return nil, fmt.Errorf("unsupported host model %q", name)
 	}

@@ -119,7 +119,7 @@ An executable plugin can register its own host extensions in the `ready` frame. 
 }
 ```
 
-Hooks are arbitrary names. `filter` callbacks return a replacement JSON value; `action` callbacks run for their side effects. Routes support exact paths and `/*` prefixes, and can require public, user, or admin authentication. Middleware can run before or after any host request. Admin pages appear in the administrator menu and are rendered by their callback. Tasks use the existing Cron scheduler. Migrations are applied transactionally once per plugin and migration ID. Dependencies must be enabled before the dependent plugin can start.
+Hooks are arbitrary names. `filter` callbacks return a replacement JSON value; `action` callbacks run for their side effects. Routes support exact paths and `/*` prefixes, and can require public, user, or admin authentication. Middleware can run before or after any host request. Admin pages appear in the administrator menu and are rendered by their callback. Tasks use the existing Cron scheduler. Each pending migration batch is applied in one database transaction; successful migrations are recorded once per plugin and migration ID. Dependencies must be enabled before the dependent plugin can start.
 
 ## Host SDK and services
 
@@ -131,7 +131,7 @@ The executable protocol is bidirectional. A plugin may send a `host_call` frame 
 
 The host replies with `host_response` or `host_error`. The current SDK methods include `db.query`, `db.exec`, `host.models`, `host.model.list`, `host.model.create`, `host.model.update`, `host.model.delete`, `host.vault.*`, `host.file.get`, `host.share.*`, `host.blog.*`, `host.plugin.list`, `host.settings.get`, `host.settings.set`, and `host.hook`. The Go SDK exposes these as typed `Users`, `Vaults`, `Files`, `Shares`, `Devices`, `Collaborations`, and `Blog` clients. `host.hook` lets one plugin trigger any registered action or filter by name. Core model access includes users, Vaults, files, shares, collaborations, and devices. Since executable plugins are fully trusted, `db.exec` intentionally permits plugin-owned SQL and tables. The plugin also retains normal server-account filesystem, network, environment, and process access.
 
-This is the extension model boundary: plugins can define business features, persistence, routes, filters, admin surfaces, scheduled work, and dependencies, while the host supplies authentication, lifecycle, core data, and request dispatch. Uploading an existing plugin ID performs an atomic upgrade, runs registered migrations and the `upgrade` lifecycle callback, and restores the previous enabled state.
+This is the extension model boundary: plugins can define business features, persistence, routes, filters, admin surfaces, scheduled work, and dependencies, while the host supplies authentication, lifecycle, core data, and request dispatch. Uploading an existing plugin ID runs registered migrations and the `upgrade` lifecycle callback, then restores the previous enabled state. The old package is retained until activation succeeds. On failure the host restores its previous package, metadata, runtime registrations, and tasks; restoration errors are reported. A failed migration batch is rolled back, but committed migrations and external lifecycle effects are not reversed by package restoration. Upgrade migrations and lifecycle callbacks must remain compatible with the previous plugin version.
 
 ## Routes, settings, and hooks
 
@@ -146,7 +146,7 @@ Declare host hooks in `hooks`:
 }
 ```
 
-Supported hooks are `blog.content`, `markdown.content`, `theme.render`, `admin.page`, `editor.command`, and `comment.content`. Content hooks receive host JSON and return replacement content. `editor.command` is discovered by the Obsidian plugin and registered in its command palette. `admin.page` is available at `/dashboard/admin/plugins/<id>/page/<slug>`.
+Supported hooks are `blog.content`, `markdown.content`, `theme.render`, `admin.page`, `editor.command`, and `comment.content`. Content hooks receive host JSON and return replacement content. `editor.command` is discovered from active registrations by the Obsidian plugin and registered in its command palette. The HTTP hook endpoint accepts only this hook, requires a device-bound token plus device and user access to the Vault, and requires `metadata.plugin_id` and `metadata.command_id` to identify one registered command. The host supplies the authenticated user and device identity; internal hooks cannot be invoked through this endpoint. Editor results are applied only if the document and its content still match the request snapshot. `admin.page` is available at `/dashboard/admin/plugins/<id>/page/<slug>`.
 
 The optional `settings` declaration uses the constrained host field schema (`text`, `textarea`, `url`, `choice`, and non-nested `group`). OSS Sync renders these fields in the top-level **Plugin settings** menu and stores values per Vault. Theme-linked settings remain available outside the current Vault page and automatically select an accessible matching Vault. Public routes never receive Vault settings. Plugins cannot inject settings HTML or JavaScript.
 
@@ -188,3 +188,5 @@ If an enabled plugin cannot be loaded after restart, it remains recorded with it
 WASM provides memory isolation. Executable plugins intentionally do not: they are administrator-trusted server programs. They inherit the server account's filesystem, network, database, environment, and command-execution permissions. Install only code that the administrator has reviewed. The server still validates ZIP boundaries and the declared protocol, but those checks are not a sandbox.
 
 The host capabilities are namespaced HTTP routes, Vault-scoped settings, blog/HTML content filters, theme render filters, administrator pages, and Obsidian editor commands. `comment.content` is reserved until OSS Sync has a comment entity and renderer.
+
+Host model list and typed Vault/Share RPC responses use the snake_case JSON fields declared by `pkg/ossplugin` DTOs. Database models are not the wire format.

@@ -30,7 +30,8 @@ type executablePlugin struct {
 	stdin io.WriteCloser
 
 	mu           sync.Mutex
-	writeMu      sync.Mutex
+	writeOnce    sync.Once
+	writeGate    chan struct{}
 	nextID       uint64
 	pending      map[string]chan processResult
 	closed       bool
@@ -61,6 +62,10 @@ func startExecutablePlugin(
 	entrypoint, err := manifestEntrypoint(manifest)
 	if err != nil {
 		return nil, err
+	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve executable plugin directory: %w", err)
 	}
 	commandPath := filepath.Join(dir, filepath.FromSlash(entrypoint))
 	cmd := exec.Command(commandPath, manifest.Args...)
@@ -147,12 +152,15 @@ func (p *executablePlugin) Invoke(ctx context.Context, request PluginRequest) (P
 		p.removePending(id)
 		return PluginResponse{}, fmt.Errorf("encode executable plugin frame: %w", err)
 	}
-	p.writeMu.Lock()
-	writeErr := writeProcessLine(p.stdin, frame)
-	p.writeMu.Unlock()
+	callCtx, cancel := context.WithTimeout(ctx, maxExecution)
+	defer cancel()
+	writeErr := p.writeFrame(callCtx, frame)
 	if writeErr != nil {
 		p.removePending(id)
-		p.fail(fmt.Errorf("%w: %v", ErrPluginProcessExited, writeErr))
+		if errors.Is(writeErr, context.Canceled) || errors.Is(writeErr, context.DeadlineExceeded) {
+			return PluginResponse{}, writeErr
+		}
+		p.protocolFailure(fmt.Errorf("%w: %v", ErrPluginProcessExited, writeErr))
 		p.mu.Lock()
 		processErr := p.exitErr
 		p.mu.Unlock()
@@ -162,8 +170,6 @@ func (p *executablePlugin) Invoke(ctx context.Context, request PluginRequest) (P
 		return PluginResponse{}, processErr
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, maxExecution)
-	defer cancel()
 	select {
 	case result := <-resultCh:
 		return result.response, result.err
@@ -220,4 +226,35 @@ func (p *executablePlugin) fail(err error) {
 			resultCh <- processResult{err: err}
 		}
 	})
+}
+
+// writeFrame bounds lock acquisition and OS pipe writes. A timed-out partial frame
+// cannot be reused safely, so close the pipe and terminate the unresponsive child.
+func (p *executablePlugin) writeFrame(ctx context.Context, frame []byte) error {
+	p.writeOnce.Do(func() { p.writeGate = make(chan struct{}, 1) })
+	select {
+	case p.writeGate <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.done:
+		return ErrPluginProcessClosed
+	}
+	defer func() { <-p.writeGate }()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	result := make(chan error, 1)
+	go func() { result <- writeProcessLine(p.stdin, frame) }()
+	select {
+	case err := <-result:
+		return err
+	case <-ctx.Done():
+		_ = p.kill()
+		_ = p.stdin.Close()
+		p.fail(ctx.Err())
+		return ctx.Err()
+	case <-p.done:
+		_ = p.stdin.Close()
+		return ErrPluginProcessClosed
+	}
 }

@@ -843,8 +843,8 @@ export default class OSSPlugin extends Plugin {
           this.addCommand({
             id: `oss-plugin-${plugin.plugin_id}-${command.id}`,
             name: `${plugin.name}: ${command.label}`,
-            editorCallback: (editor) => {
-              void this.runEditorPluginCommand(plugin.plugin_id, command, editor);
+            editorCallback: (editor, view) => {
+              void this.runEditorPluginCommand(plugin.plugin_id, command, editor, view);
             },
           });
         }
@@ -858,12 +858,29 @@ export default class OSSPlugin extends Plugin {
     }
   }
 
-  private async runEditorPluginCommand(pluginID: string, hook: ServerPluginHook, editor: Editor): Promise<void> {
-    const result = await this.api.runServerPluginHook("editor.command", editor.getValue(), {
-      plugin_id: pluginID,
-      command_id: hook.id ?? "",
-    });
-    editor.setValue(result.content);
+  private async runEditorPluginCommand(
+    pluginID: string, hook: ServerPluginHook, editor: Editor,
+    view?: { file: TFile | null },
+  ): Promise<void> {
+    const content = editor.getValue();
+    const file = view?.file;
+    const path = file?.path;
+    try {
+      const result = await this.api.runServerPluginHook("editor.command", content, {
+        plugin_id: pluginID,
+        command_id: hook.id ?? "",
+      });
+      // The response was computed from this document snapshot. Never replace newer edits.
+      if (editor.getValue() !== content || view?.file !== file || file?.path !== path) {
+        new Notice(this.t("notice.pluginCommandDocumentChanged"));
+        return;
+      }
+      editor.setValue(result.content);
+    } catch (error: unknown) {
+      new Notice(this.t("notice.pluginCommandFailed", {
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
   }
 
   openCollaborationConflictModal(vaultId: string, fileId: number): void {

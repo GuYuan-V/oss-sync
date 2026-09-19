@@ -90,7 +90,10 @@ func NewManager(ctx context.Context, db *gorm.DB, dataDir string) (*Manager, err
 	if db == nil {
 		return nil, errors.New("plugin manager database is nil")
 	}
-	root := filepath.Join(dataDir, "plugins")
+	root, err := filepath.Abs(filepath.Join(dataDir, "plugins"))
+	if err != nil {
+		return nil, fmt.Errorf("resolve plugin root: %w", err)
+	}
 	if err := os.MkdirAll(root, 0o750); err != nil {
 		return nil, fmt.Errorf("create plugin root: %w", err)
 	}
@@ -295,14 +298,15 @@ func (m *Manager) InstallOrReuse(ctx context.Context, reader io.ReaderAt, size i
 	return infoFromRecord(existing)
 }
 
-// Upgrade replaces an installed plugin package atomically and preserves its enabled state.
+// Upgrade replaces an installed package and restores the old runtime on failure.
+// Committed plugin migrations and external lifecycle effects must remain backward compatible.
 func (m *Manager) Upgrade(ctx context.Context, reader io.ReaderAt, size int64) (PluginInfo, error) {
 	m.lifecycleMu.Lock()
 	defer m.lifecycleMu.Unlock()
 	return m.upgrade(ctx, reader, size)
 }
 
-func (m *Manager) upgrade(ctx context.Context, reader io.ReaderAt, size int64) (PluginInfo, error) {
+func (m *Manager) upgrade(ctx context.Context, reader io.ReaderAt, size int64) (info PluginInfo, resultErr error) {
 	packageData, err := ParsePackage(reader, size)
 	if err != nil {
 		return PluginInfo{}, err
@@ -321,61 +325,90 @@ func (m *Manager) upgrade(ctx context.Context, reader io.ReaderAt, size int64) (
 		return infoFromRecord(record)
 	}
 	wasEnabled := record.Enabled
+	pluginDir := filepath.Join(m.root, record.ID)
+	var tombstone string
+	var candidate pluginInstance
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		// A canceled upload request must not prevent restoration of the old plugin.
+		recoveryCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		var recoveryErr error
+		if candidate != nil {
+			recoveryErr = errors.Join(recoveryErr, candidate.Close(recoveryCtx))
+		}
+		m.mu.Lock()
+		current := m.modules[record.ID]
+		delete(m.modules, record.ID)
+		m.removeRegistration(record.ID)
+		scheduler := m.scheduler
+		m.mu.Unlock()
+		if scheduler != nil {
+			scheduler.RemovePluginTasks(record.ID)
+		}
+		if current != nil {
+			recoveryErr = errors.Join(recoveryErr, current.Close(recoveryCtx))
+		}
+		if tombstone != "" {
+			if err := os.RemoveAll(pluginDir); err != nil {
+				resultErr = errors.Join(resultErr, recoveryErr, fmt.Errorf("remove failed upgrade: %w", err))
+				return
+			}
+			if err := os.Rename(tombstone, pluginDir); err != nil {
+				resultErr = errors.Join(resultErr, recoveryErr, fmt.Errorf("restore old package: %w", err))
+				return
+			}
+		}
+		record.Enabled = false
+		if err := m.db.WithContext(recoveryCtx).Save(&record).Error; err != nil {
+			recoveryErr = errors.Join(recoveryErr, err)
+		} else if wasEnabled {
+			recoveryErr = errors.Join(recoveryErr, m.enable(recoveryCtx, record.ID))
+		}
+		if recoveryErr != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("restore previous plugin: %w", recoveryErr))
+		}
+	}()
 	if wasEnabled {
 		if err := m.disable(ctx, record.ID); err != nil {
 			return PluginInfo{}, err
 		}
 	}
-	pluginDir := filepath.Join(m.root, record.ID)
-	tombstone, err := stagePluginDeletion(m.root, pluginDir)
+	tombstone, err = stagePluginDeletion(m.root, pluginDir)
 	if err != nil {
 		return PluginInfo{}, err
 	}
 	target, err := writePackage(m.root, packageData)
 	if err != nil {
-		_ = os.Rename(tombstone, pluginDir)
 		return PluginInfo{}, err
 	}
 	instance, err := m.openInstance(ctx, target, packageData)
 	if err != nil {
-		_ = os.RemoveAll(target)
-		_ = os.Rename(tombstone, pluginDir)
 		return PluginInfo{}, err
 	}
+	candidate = instance
 	registration := instance.Registration()
 	if err := validateRegistration(registration); err != nil {
-		_ = instance.Close(ctx)
-		_ = os.RemoveAll(target)
-		_ = os.Rename(tombstone, pluginDir)
 		return PluginInfo{}, err
 	}
 	if err := m.checkDependencies(registration.Dependencies); err != nil {
-		_ = instance.Close(ctx)
-		_ = os.RemoveAll(target)
-		_ = os.Rename(tombstone, pluginDir)
 		return PluginInfo{}, err
 	}
 	if err := m.applyMigrations(ctx, record.ID, registration.Migrations); err != nil {
-		_ = instance.Close(ctx)
-		_ = os.RemoveAll(target)
-		_ = os.Rename(tombstone, pluginDir)
 		return PluginInfo{}, err
 	}
 	if err := invokeInstanceLifecycle(ctx, instance, registration.Lifecycle.Upgrade, "upgrade"); err != nil {
-		_ = instance.Close(ctx)
-		_ = os.RemoveAll(target)
-		_ = os.Rename(tombstone, pluginDir)
 		return PluginInfo{}, err
 	}
 	if err := instance.Close(ctx); err != nil {
-		_ = os.RemoveAll(target)
-		_ = os.Rename(tombstone, pluginDir)
 		return PluginInfo{}, err
 	}
+	candidate = nil
 	manifestJSON, err := manifestJSON(packageData.Manifest)
 	if err != nil {
-		_ = os.RemoveAll(target)
-		_ = os.Rename(tombstone, pluginDir)
 		return PluginInfo{}, err
 	}
 	updates := map[string]any{
@@ -387,11 +420,6 @@ func (m *Manager) upgrade(ctx context.Context, reader io.ReaderAt, size int64) (
 		"payload_size": packageData.PayloadSize, "last_error": "",
 	}
 	if err := m.db.Model(&models.ServerPlugin{}).Where("id = ?", record.ID).Updates(updates).Error; err != nil {
-		_ = os.RemoveAll(target)
-		_ = os.Rename(tombstone, pluginDir)
-		return PluginInfo{}, err
-	}
-	if err := os.RemoveAll(tombstone); err != nil {
 		return PluginInfo{}, err
 	}
 	if wasEnabled {
@@ -399,7 +427,15 @@ func (m *Manager) upgrade(ctx context.Context, reader io.ReaderAt, size int64) (
 			return PluginInfo{}, err
 		}
 	}
-	return m.info(record.ID)
+	info, err = m.info(record.ID)
+	if err != nil {
+		return PluginInfo{}, err
+	}
+	committed = true
+	if err := os.RemoveAll(tombstone); err != nil {
+		return info, fmt.Errorf("upgrade succeeded but old package cleanup failed: %w", err)
+	}
+	return info, nil
 }
 
 func (m *Manager) info(id string) (PluginInfo, error) {

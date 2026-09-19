@@ -13,6 +13,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/auth"
 	"github.com/helantianshen/oss-sync/internal/blog"
 	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
 	"github.com/helantianshen/oss-sync/internal/models"
 	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
@@ -28,15 +29,75 @@ func (m *Manager) RegisterRoutes(r *gin.Engine, cfg *config.Config) {
 }
 
 func (m *Manager) applyHookHTTP(c *gin.Context) {
+	if c.Param("hook") != "editor.command" {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	user, ok := auth.RequireUser(c)
+	if !ok {
+		return
+	}
+	did, ok := auth.RequireDeviceID(c, c.GetHeader(deviceauth.ClientIDHeader))
+	if !ok {
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, MaxRequestBytes)
 	var payload blog.PluginHookPayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid plugin hook payload"})
 		return
 	}
-	content, err := m.ApplyHook(c.Request.Context(), c.Param("hook"), payload)
+	if _, _, err := vaultaccess.Resolve(m.db, user.ID, payload.VaultID); err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if err := deviceauth.CheckVaultAccess(m.db, user.ID, string(did), payload.VaultID); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "device is not authorized for vault"})
+		return
+	}
+	pluginID, _ := payload.Metadata["plugin_id"].(string)
+	commandID, _ := payload.Metadata["command_id"].(string)
+	registration, ok := m.RegistrationFor(pluginID)
+	if !ok || commandID == "" {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	var command *RegisteredHook
+	for _, hook := range registration.Hooks {
+		if hook.Name == "editor.command" && hook.ID == commandID {
+			command = &hook
+			break
+		}
+	}
+	if command == nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	callback := command.Callback
+	if callback == "" {
+		callback = command.Name
+	}
+	response, err := m.invokeCallback(c.Request.Context(), pluginID, callback, PluginRequest{
+		Method: "HOOK", Path: "/hooks/editor.command", Hook: "editor.command",
+		User: &PluginUser{ID: user.ID, Username: user.Username, Role: user.Role},
+		Payload: map[string]any{
+			"vault_id": payload.VaultID, "content": payload.Content,
+			"metadata": map[string]any{"plugin_id": pluginID, "command_id": commandID, "client_id": string(did)},
+		},
+		Settings: pluginSettings(m.db, payload.VaultID, pluginID),
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "plugin hook failed"})
 		return
+	}
+	content := payload.Content
+	if command.Kind != "action" {
+		body, err := decodePluginBody(response)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "plugin response failed"})
+			return
+		}
+		content = string(body)
 	}
 	c.JSON(http.StatusOK, gin.H{"content": content})
 }
@@ -54,11 +115,19 @@ func (m *Manager) capabilities(c *gin.Context) {
 	}
 	result := make([]capability, 0, len(records))
 	for _, record := range records {
-		manifest, err := ParseManifest([]byte(record.ManifestJSON))
-		if err != nil || len(manifest.Hooks) == 0 {
+		registration, ok := m.RegistrationFor(record.ID)
+		if !ok {
 			continue
 		}
-		result = append(result, capability{PluginID: manifest.ID, Name: manifest.Name, Hooks: manifest.Hooks})
+		hooks := make([]HookSpec, 0)
+		for _, hook := range registration.Hooks {
+			if hook.Name == "editor.command" && hook.ID != "" && hook.Label != "" {
+				hooks = append(hooks, HookSpec{Name: hook.Name, ID: hook.ID, Label: hook.Label})
+			}
+		}
+		if len(hooks) > 0 {
+			result = append(result, capability{PluginID: record.ID, Name: record.Name, Hooks: hooks})
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"plugins": result})
 }

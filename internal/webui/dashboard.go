@@ -868,12 +868,6 @@ func (h *Handler) vaultSettingsPage(c *gin.Context) {
 		return
 	}
 	d.Themes = themes
-	for _, theme := range themes {
-		if theme.Name == d.ThemeName {
-			d.ThemeSupportsPublicBlog = theme.SupportsPublicBlog
-			break
-		}
-	}
 	var setting models.VaultSetting
 	if err := h.DB.Where("vault_id = ?", vault.ID).First(&setting).Error; err == nil {
 		if setting.ThemeName != "" {
@@ -884,8 +878,11 @@ func (h *Handler) vaultSettingsPage(c *gin.Context) {
 		d.CustomHeader = setting.CustomHeader
 		d.CustomFooter = setting.CustomFooter
 	}
-	if d.ThemeName == "default" {
-		d.ThemeSupportsPublicBlog = blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, d.ThemeName)
+	for _, theme := range themes {
+		if theme.Name == d.ThemeName {
+			d.ThemeSupportsPublicBlog = theme.SupportsPublicBlog
+			break
+		}
 	}
 	if !d.ThemeSupportsPublicBlog {
 		d.IsPublicBlog = false

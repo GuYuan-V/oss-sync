@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -28,7 +31,7 @@ func TestPluginManagerRunsExecutablePluginThroughLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db.AutoMigrate(&models.ServerPlugin{}); err != nil {
+	if err := db.AutoMigrate(&models.ServerPlugin{}, &models.ServerPluginMigration{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -44,7 +47,6 @@ func TestPluginManagerRunsExecutablePluginThroughLifecycle(t *testing.T) {
 		APIVersion:  CurrentAPIVersion,
 		Runtime:     RuntimeExecutable,
 		Entrypoints: map[string]string{"any": "plugin.exe"},
-		Args:        []string{"-test.run=^TestExecutablePluginProcessChild$"},
 		Routes:      []RouteSpec{{Method: http.MethodGet, Path: "/hello", Public: true}},
 		Hooks:       []HookSpec{{Name: "blog.content"}},
 	}
@@ -54,7 +56,7 @@ func TestPluginManagerRunsExecutablePluginThroughLifecycle(t *testing.T) {
 	}
 	archiveBytes := makePackageArchive(t, map[string][]byte{
 		"manifest.json": manifestBytes,
-		"plugin.exe":    readTestBinary(t),
+		"plugin.exe":    buildExamplePlugin(t),
 	})
 	info, err := manager.Install(t.Context(), bytes.NewReader(archiveBytes), int64(len(archiveBytes)))
 	if err != nil {
@@ -73,7 +75,7 @@ func TestPluginManagerRunsExecutablePluginThroughLifecycle(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/plugins/executable-world/hello", nil)
 	record := httptest.NewRecorder()
 	router.ServeHTTP(record, request)
-	if record.Code != http.StatusOK || record.Body.String() != "/hello" {
+	if record.Code != http.StatusOK || record.Body.String() != "hello from SDK" {
 		t.Fatalf("executable route response = %d %q", record.Code, record.Body.String())
 	}
 	dynamicRequest := httptest.NewRequest(http.MethodGet, "/dynamic-hello", nil)
@@ -115,4 +117,20 @@ func TestPluginManagerRunsExecutablePluginThroughLifecycle(t *testing.T) {
 	if err := restarted.Delete(manifest.ID); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
+}
+
+// Package the real SDK example instead of the entire test runner: race-instrumented
+// test binaries can exceed the production package limit as regression coverage grows.
+func buildExamplePlugin(t *testing.T) []byte {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "plugin.exe")
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", binary, "../../examples/server-plugin-echo")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build SDK example: %v\n%s", err, output)
+	}
+	content, err := os.ReadFile(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return content
 }

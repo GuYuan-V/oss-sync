@@ -20,7 +20,7 @@ func (m *Manager) Enable(ctx context.Context, id string) error {
 	return m.enable(ctx, id)
 }
 
-func (m *Manager) enable(ctx context.Context, id string) error {
+func (m *Manager) enable(ctx context.Context, id string) (resultErr error) {
 	record, err := m.record(id)
 	if err != nil {
 		return err
@@ -55,39 +55,45 @@ func (m *Manager) enable(ctx context.Context, id string) error {
 	if err != nil {
 		return m.enableError(id, err)
 	}
+	defer func() {
+		if resultErr == nil {
+			return
+		}
+		m.mu.Lock()
+		delete(m.modules, id)
+		m.removeRegistration(id)
+		scheduler := m.scheduler
+		m.mu.Unlock()
+		if scheduler != nil {
+			scheduler.RemovePluginTasks(id)
+		}
+		closeCtx, cancel := context.WithTimeout(context.Background(), processShutdownTimeout)
+		defer cancel()
+		resultErr = errors.Join(resultErr, instance.Close(closeCtx),
+			m.db.Model(&models.ServerPlugin{}).Where("id = ?", id).Update("enabled", false).Error)
+	}()
 	registration := instance.Registration()
 	if err := validateRegistration(registration); err != nil {
-		return errors.Join(m.enableError(id, err), instance.Close(ctx))
+		return m.enableError(id, err)
 	}
 	if err := m.checkDependencies(registration.Dependencies); err != nil {
-		return errors.Join(m.enableError(id, err), instance.Close(ctx))
+		return m.enableError(id, err)
 	}
 	if err := m.applyMigrations(ctx, id, registration.Migrations); err != nil {
-		return errors.Join(m.enableError(id, err), instance.Close(ctx))
+		return m.enableError(id, err)
 	}
 	if err := m.db.Model(&models.ServerPlugin{}).Where("id = ?", id).
 		Updates(map[string]any{"enabled": true, "last_error": ""}).Error; err != nil {
-		return errors.Join(fmt.Errorf("enable plugin: %w", err), instance.Close(ctx))
+		return fmt.Errorf("enable plugin: %w", err)
 	}
 	m.mu.Lock()
 	m.modules[id] = instance
 	m.setRegistration(id, registration)
 	m.mu.Unlock()
 	if err := m.registerPluginTasks(id, registration); err != nil {
-		m.mu.Lock()
-		delete(m.modules, id)
-		m.removeRegistration(id)
-		m.mu.Unlock()
-		_ = instance.Close(ctx)
 		return m.enableError(id, err)
 	}
 	if err := invokeInstanceLifecycle(ctx, instance, registration.Lifecycle.Activate, "activate"); err != nil {
-		m.mu.Lock()
-		delete(m.modules, id)
-		m.removeRegistration(id)
-		m.mu.Unlock()
-		_ = instance.Close(ctx)
-		_ = m.db.Model(&models.ServerPlugin{}).Where("id = ?", id).Update("enabled", false).Error
 		return m.enableError(id, err)
 	}
 	return nil
@@ -116,22 +122,17 @@ func (m *Manager) disable(ctx context.Context, id string) error {
 	if scheduler != nil {
 		scheduler.RemovePluginTasks(id)
 	}
+	var lifecycleErr error
 	if instance != nil {
-		if err := invokeInstanceLifecycle(ctx, instance, instance.Registration().Lifecycle.Deactivate, "deactivate"); err != nil {
-			return fmt.Errorf("deactivate plugin %s: %w", id, err)
-		}
+		lifecycleErr = invokeInstanceLifecycle(ctx, instance, instance.Registration().Lifecycle.Deactivate, "deactivate")
 	}
-	if err := m.db.Model(&models.ServerPlugin{}).Where("id = ?", id).
-		Updates(map[string]any{"enabled": false, "last_error": ""}).Error; err != nil {
-		return fmt.Errorf("disable plugin: %w", err)
+	dbErr := m.db.Model(&models.ServerPlugin{}).Where("id = ?", id).
+		Updates(map[string]any{"enabled": false, "last_error": ""}).Error
+	var closeErr error
+	if instance != nil {
+		closeErr = instance.Close(ctx)
 	}
-	if instance == nil {
-		return nil
-	}
-	if err := instance.Close(ctx); err != nil {
-		return fmt.Errorf("close disabled plugin %s: %w", record.ID, err)
-	}
-	return nil
+	return errors.Join(lifecycleErr, dbErr, closeErr)
 }
 
 func (m *Manager) Delete(id string) error {
@@ -289,30 +290,33 @@ func restorePluginError(err error) error {
 	return fmt.Errorf("restore plugin files after failed delete: %w", err)
 }
 
+// Apply the pending migration batch in one transaction on both SQLite and PostgreSQL.
+// Later lifecycle hooks can have external effects; migrations must remain backward compatible.
 func (m *Manager) applyMigrations(ctx context.Context, pluginID string, migrations []RegisteredMigration) error {
-	for _, migration := range migrations {
-		var applied models.ServerPluginMigration
-		result := m.db.WithContext(ctx).
-			Where("plugin_id = ? AND id = ?", pluginID, migration.ID).
-			First(&applied)
-		if result.Error == nil {
-			continue
-		}
-		if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("load plugin migration %s: %w", migration.ID, result.Error)
-		}
-		if err := m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if len(migrations) == 0 {
+		return nil
+	}
+	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, migration := range migrations {
+			var applied models.ServerPluginMigration
+			err := tx.Where("plugin_id = ? AND id = ?", pluginID, migration.ID).First(&applied).Error
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("load plugin migration %s: %w", migration.ID, err)
+			}
 			for _, statement := range migration.Statements {
 				if err := tx.Exec(statement).Error; err != nil {
 					return fmt.Errorf("execute plugin migration %s: %w", migration.ID, err)
 				}
 			}
-			return tx.Create(&models.ServerPluginMigration{PluginID: pluginID, ID: migration.ID}).Error
-		}); err != nil {
-			return err
+			if err := tx.Create(&models.ServerPluginMigration{PluginID: pluginID, ID: migration.ID}).Error; err != nil {
+				return err
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func (m *Manager) checkDependencies(dependencies []RegisteredDependency) error {

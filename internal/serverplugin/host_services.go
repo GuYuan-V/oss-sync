@@ -14,6 +14,7 @@ import (
 
 	"github.com/helantianshen/oss-sync/internal/filestore"
 	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/shares"
 )
 
 func (m *Manager) hostVaultGet(ctx context.Context, params map[string]json.RawMessage) (models.Vault, error) {
@@ -131,11 +132,19 @@ func (m *Manager) hostShareCreate(ctx context.Context, params map[string]json.Ra
 	if err := json.Unmarshal(inputRaw, &input); err != nil {
 		return models.Share{}, err
 	}
-	share := models.Share{ShareID: uuid.NewString()[:12], VaultID: input.VaultID, TargetPath: input.TargetPath, IsFolder: input.IsFolder, AllowCopy: input.AllowCopy}
-	if err := m.db.WithContext(ctx).Create(&share).Error; err != nil {
+	db := m.db.WithContext(ctx)
+	var vault models.Vault
+	if err := db.First(&vault, "id = ?", input.VaultID).Error; err != nil {
 		return models.Share{}, err
 	}
-	return share, nil
+	handler := &shares.Handler{DB: db}
+	id, err := handler.CreateWeb(vault.OwnerID, vault.ID, input.TargetPath, input.IsFolder, input.AllowCopy)
+	if err != nil {
+		return models.Share{}, err
+	}
+	var share models.Share
+	err = db.First(&share, "share_id = ?", id).Error
+	return share, err
 }
 
 func (m *Manager) hostShareUpdate(ctx context.Context, params map[string]json.RawMessage) (models.Share, error) {

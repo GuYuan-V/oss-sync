@@ -40,6 +40,22 @@ func Path(dataDir, fileName string) (string, error) {
 	return filepath.Join(Root(dataDir), fileName), nil
 }
 
+// ExistingPath resolves pre-upgrade archives as well as archives in the data directory.
+func ExistingPath(dataDir, fileName string) (string, error) {
+	path, err := Path(dataDir, fileName)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		return path, err
+	}
+	legacy := filepath.Join(filepath.FromSlash(rootDirName), fileName)
+	if _, err := os.Stat(legacy); err != nil {
+		return "", err
+	}
+	return legacy, nil
+}
+
 func Create(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup, error) {
 	var setting models.VaultSetting
 	if err := db.Where("vault_id = ?", vault.ID).First(&setting).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

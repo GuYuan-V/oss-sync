@@ -5,6 +5,8 @@ export type TranslationParams = Readonly<Record<string, string | number>>;
 const ZH = {
   "common.unknownError": "未知错误",
   "notice.pluginCapabilitiesFailed": "插件能力加载失败：{error}",
+  "notice.pluginCommandDocumentChanged": "文档已发生变化，未应用服务端命令结果。请重新执行命令。",
+  "notice.pluginCommandFailed": "服务端命令执行失败：{error}",
   "common.cancel": "取消",
   "common.save": "保存",
   "common.close": "关闭",
@@ -387,6 +389,8 @@ export type TranslationKey = keyof typeof ZH;
 const EN: Record<TranslationKey, string> = {
   "common.unknownError": "Unknown error",
   "notice.pluginCapabilitiesFailed": "Failed to load plugin capabilities: {error}",
+  "notice.pluginCommandDocumentChanged": "The document changed. The server command result was not applied. Please run the command again.",
+  "notice.pluginCommandFailed": "Server command failed: {error}",
   "common.cancel": "Cancel",
   "common.save": "Save",
   "common.close": "Close",

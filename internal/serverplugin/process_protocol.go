@@ -115,9 +115,7 @@ func (p *executablePlugin) handleHostCall(frame processFrame) error {
 	if err != nil {
 		return fmt.Errorf("encode executable plugin host frame: %w", err)
 	}
-	p.writeMu.Lock()
-	defer p.writeMu.Unlock()
-	if err := writeProcessLine(p.stdin, encoded); err != nil {
+	if err := p.writeFrame(callCtx, encoded); err != nil {
 		return fmt.Errorf("write executable plugin host response: %w", err)
 	}
 	return nil

@@ -65,7 +65,7 @@ func (h *Handler) downloadBackup(c *gin.Context) {
 		c.String(http.StatusNotFound, "backup not found")
 		return
 	}
-	path, err := vaultbackup.Path(h.Cfg.Storage.DataDir, backup.FileName)
+	path, err := vaultbackup.ExistingPath(h.Cfg.Storage.DataDir, backup.FileName)
 	if err != nil {
 		c.String(http.StatusNotFound, "backup not found")
 		return
@@ -83,7 +83,11 @@ func (h *Handler) deleteBackup(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/dashboard/admin/system")
 		return
 	}
-	path, err := vaultbackup.Path(h.Cfg.Storage.DataDir, backup.FileName)
+	path, err := vaultbackup.ExistingPath(h.Cfg.Storage.DataDir, backup.FileName)
+	if err != nil && !os.IsNotExist(err) {
+		c.String(http.StatusInternalServerError, "failed to resolve backup archive")
+		return
+	}
 	if err == nil {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			c.String(http.StatusInternalServerError, "failed to delete backup archive")
