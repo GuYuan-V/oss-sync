@@ -32,7 +32,7 @@ type HandoffMarker struct {
 	BackupPath    string   `json:"backup_path"`
 	HelperPath    string   `json:"helper_path"`
 	TargetVersion string   `json:"target_version"`
-	Digest        string   `json:"digest"`
+	Digest        string   `json:"digest"` // SHA-256 of the staged executable, not the release archive.
 	ParentPID     int      `json:"parent_pid"`
 	ReadyURL      string   `json:"ready_url"`
 	OrigArgs      []string `json:"orig_args"`
@@ -433,10 +433,12 @@ func recoverActiveMarker(markerPath string) (*HandoffMarker, *Operation, error) 
 // InitiateHelperHandoff stages a candidate file, creates a durable marker, and launches the helper.
 // It performs capability checking BEFORE any mutation and verifies digest/magic/--version before handoff.
 // mgr is the durable Manager; checkID is a validated checked candidate; candidatePath is the local file
-// containing the new binary (already downloaded); readyURL is the /readyz endpoint to probe.
+// containing the new binary extracted from a verified release asset. binaryDigest is
+// the digest captured after download/extraction, not Candidate.Digest (the asset digest).
+// readyURL is the /readyz endpoint to probe.
 // origArgs and workDir capture the runtime context to relaunch.
 // Returns the active Operation or a typed capability error.
-func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidatePath string, readyURL string, origArgs []string, workDir string) (*Operation, error) {
+func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidatePath string, binaryDigest string, readyURL string, origArgs []string, workDir string) (*Operation, error) {
 	if mgr == nil {
 		return nil, errors.New("manager is nil")
 	}
@@ -445,6 +447,9 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 	}
 	if candidatePath == "" {
 		return nil, errors.New("candidatePath is empty")
+	}
+	if !isValidDigest(binaryDigest) {
+		return nil, newUpdateError(CodeInvalidAsset, "prepared executable digest missing or malformed", ErrInvalidAsset)
 	}
 	cand, err := mgr.ValidateChecked(checkID)
 	if err != nil {
@@ -475,7 +480,7 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 		}
 	}
 	// Stage files on executable filesystem and verify before handoff.
-	staged, backup, helperCopy, err := prepareStaging(candidatePath, u.exe, op.ID, cand.Version, cand.Digest)
+	staged, backup, helperCopy, err := prepareStaging(candidatePath, u.exe, op.ID, cand.Version, binaryDigest)
 	if err != nil {
 		_, _ = mgr.Transition(op.ID, StateFailed, err.Error())
 		return nil, err
@@ -501,7 +506,7 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 		BackupPath:    backup,
 		HelperPath:    helperCopy,
 		TargetVersion: cand.Version,
-		Digest:        cand.Digest,
+		Digest:        binaryDigest,
 		ParentPID:     os.Getpid(),
 		ReadyURL:      readyURL,
 		OrigArgs:      origArgs,

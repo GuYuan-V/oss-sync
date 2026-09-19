@@ -220,20 +220,28 @@ func verifyFileDigest(path, digest string) error {
 		return newUpdateError(CodeInvalidAsset, fmt.Sprintf("digest %q malformed", digest), ErrInvalidAsset)
 	}
 	hexPart := strings.TrimPrefix(digest, "sha256:")
-	f, err := os.Open(path)
+	actual, err := fileDigest(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return fmt.Errorf("计算 SHA-256 失败: %w", err)
-	}
-	got := hex.EncodeToString(h.Sum(nil))
+	got := strings.TrimPrefix(actual, "sha256:")
 	if !strings.EqualFold(got, hexPart) {
 		return newUpdateError(CodeInvalidAsset, fmt.Sprintf("sha256 mismatch: got %s want %s", got, hexPart), ErrInvalidAsset)
 	}
 	return nil
+}
+
+func fileDigest(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("计算 SHA-256 失败: %w", err)
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func isArchive(name string) bool {

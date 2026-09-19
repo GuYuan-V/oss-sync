@@ -51,7 +51,7 @@ func TestHandoff_DirectorySyncFailureAfterRename_CommittedAndResumable(t *testin
 	cfg := &config.Config{Storage: config.StorageConfig{DataDir: mgrRoot}}
 	up, _ := NewUpdater(cfg, Options{ExecPath: exePath, Verifier: func(string, string) error { return nil }})
 
-	op, err := up.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := up.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("InitiateHelperHandoff should return committed success on dir sync failure with unprovable cleanup, got err %v", err)
 	}
@@ -108,7 +108,7 @@ func TestHandoff_DirectorySyncFailureAfterRename_SuccessfulCleanup_NoResume(t *t
 	up, _ := NewUpdater(cfg, Options{ExecPath: exePath, Verifier: func(string, string) error { return nil }})
 
 	// With default removeFileFn and successful persist, cleanup should be proven and API should return failure with no resumable marker.
-	op, err := up.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := up.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err == nil {
 		// In this implementation, post-rename dir sync failure with successful cleanup returns failure.
 		// Verify no resumable marker.
@@ -167,7 +167,7 @@ func TestHandoff_MarkerRemovalFailure_KeepsCommitted(t *testing.T) {
 	cfg := &config.Config{Storage: config.StorageConfig{DataDir: mgrRoot}}
 	up, _ := NewUpdater(cfg, Options{ExecPath: exePath, Verifier: func(string, string) error { return nil }})
 
-	op, err := up.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := up.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("helper launch failure with unprovable removal should return committed success, got err %v", err)
 	}
@@ -246,7 +246,7 @@ func TestHandoff_TerminalStatePersistenceFailure_KeepsCommitted(t *testing.T) {
 	}
 	t.Cleanup(func() { atomicWriteJSONFn = origAtomic })
 
-	op, err := up.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := up.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("terminal persist failure with durable marker should return committed success, got err %v", err)
 	}
@@ -301,7 +301,7 @@ func TestHandoff_NormalStartupResumeConsistency(t *testing.T) {
 	origLaunch := launchHelperFn
 	launchHelperFn = func(string, string) error { return nil }
 	t.Cleanup(func() { launchHelperFn = origLaunch })
-	op, err := up.InitiateHelperHandoff(mgr, id, candPath, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op, err := up.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err != nil {
 		t.Fatalf("successful handoff: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestHandoff_NormalStartupResumeConsistency(t *testing.T) {
 	candPath2 := candidatePathFor(id2)
 	up2, _ := NewUpdater(cfg, Options{ExecPath: exePath, Verifier: func(string, string) error { return nil }})
 	// verifyStaged still fails -> prepareStaging will fail before marker.
-	op2, err := up2.InitiateHelperHandoff(mgr2, id2, candPath2, "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
+	op2, err := up2.InitiateHelperHandoff(mgr2, id2, candPath2, fakeDigestForFile(candPath2), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err == nil {
 		t.Fatalf("expected failure for verify failure, got op %v", op2)
 	}
