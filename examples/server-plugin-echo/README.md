@@ -1,0 +1,15 @@
+# Executable server plugin example
+
+This is the fastest starting point for a trusted server plugin: copy this directory, change the ID, remove features you do not need, then build and ZIP it. The SDK handles the process protocol.
+
+Build the Windows package from this example directory:
+
+```powershell
+cd examples/server-plugin-echo
+go build -o plugin.exe .
+Compress-Archive manifest.json,plugin.exe 中文可执行插件.zip
+```
+
+Upload `中文可执行插件.zip` from the administrator plugin page. The plugin imports `pkg/ossplugin` and registers a dynamic route, arbitrary Hook, global middleware, admin page, Cron task, migration, and lifecycle callbacks. It also demonstrates the typed host SDK with `client.Services().Models()`, handles `GET /hello` and `GET /dynamic-hello`, and prefixes `blog.content` hook content with `executable:`.
+
+To attach the plugin to a blog template or console theme, place this ZIP in that package root as `plugin.zip`. Uploading the template or theme installs, enables, and associates it automatically. Templates and themes remain presentation-only.

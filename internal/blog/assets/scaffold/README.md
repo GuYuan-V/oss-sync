@@ -5,7 +5,7 @@
 - `template.html`：页面布局，使用 Go `html/template` 语法。
 - `style.css`：主题样式，使用 CSS custom properties 定义颜色。
 - `theme.js`：页面脚本，提供主题切换与交互。
-- `settings.json`：可选的模板专属设置声明，由仓库“主题设置”页面动态生成表单。
+- 不要添加 `settings.json`：模板只负责样式，功能设置必须由 `plugin.zip` 提供。
 
 可用模板字段：
 
@@ -25,4 +25,4 @@
 
 主题名仅允许字母、数字、连字符和下划线。修改文件后刷新公开页面即可生效。
 
-`settings.json` 支持 `text`、`textarea`、`url` 和可重复的 `group` 字段。保存值会写入仓库的 `.ThemeConfigJS`；完整字段格式和示例见管理后台“模板管理 → 模板指南”。
+如果需要设置项，请创建服务端插件，在插件的 `registration.Settings` 中声明字段，再把插件包放到模板根目录并命名为 `plugin.zip`。

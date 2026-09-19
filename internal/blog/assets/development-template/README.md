@@ -7,7 +7,7 @@
 - `template.html`：页面结构，使用 Go `html/template` 语法。
 - `style.css`：通过 `/themes/<主题名称>/style.css` 提供。
 - `theme.js`：通过 `/themes/<主题名称>/theme.js` 提供。
-- `settings.json`：可选，声明当前模板在仓库“主题设置”页面显示的字段。
+- 不要添加 `settings.json`：模板只负责样式，功能设置由关联插件提供。
 
 修改这些文件后刷新公开分享页即可看到结果，不需要重启服务。
 
@@ -37,7 +37,7 @@
 
 ## 模板专属设置
 
-`settings.json` 顶层使用 `settings` 数组。字段支持 `text`、`textarea`、`url` 与可重复的 `group`，并通过 `max_length`、`max_items` 和 `required` 限制输入。服务端只保存声明过且通过校验的值，模板从 `.ThemeConfigJS` 或 `window.__THEME_CONFIG__` 读取。完整示例见管理后台“模板管理 → 模板指南”。
+如果需要设置项，请创建服务端插件，在插件的 `registration.Settings` 中声明字段，再把插件包放到模板根目录并命名为 `plugin.zip`。模板通过 `.ThemeConfigJS` 读取插件提供的展示配置。
 
 ## 发布检查
 

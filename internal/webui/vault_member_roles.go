@@ -1,4 +1,4 @@
-﻿// 成员角色
+// 成员角色
 package webui
 
 import (
@@ -11,8 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/vaultaccess"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
 type memberRow struct {
@@ -121,4 +121,3 @@ func (h *Handler) removeMember(c *gin.Context) {
 	}
 	c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/members?saved=1")
 }
-

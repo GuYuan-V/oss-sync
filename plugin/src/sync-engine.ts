@@ -36,6 +36,7 @@ import {
 import { SyncRunCoordinator } from "./sync-run-coordinator.js";
 import { SyncStrategyManager } from "./strategy.js";
 import { TaskPool, type TaskResult } from "./task-pool.js";
+import { buildTransferNoticePlan, type TransferNotice } from "./sync-notices.js";
 
 export type SyncState = "idle" | "syncing" | "error";
 
@@ -100,16 +101,24 @@ export class SyncEngine {
     this.debounceFn = this.createDebounce();
   }
 
+  async flushPendingQueue(): Promise<void> {
+    await this.enqueueChain;
+  }
+
   resetPolling(): void {
     this.stopCurrentPolling();
     if (this.stopped || !this.plugin.settings.vaultId || !this.api.hasToken()) return;
     if (this.effectiveMode === "long_poll") return this.startLongPoll();
-    const seconds = Math.max(10, this.plugin.settings.remotePollIntervalSec);
+    const seconds = Math.max(3, this.plugin.settings.remotePollIntervalSec);
     this.pollTimer = window.setInterval(() => {
       if (!this.stopped && this.plugin.settings.vaultId && this.api.hasToken()) {
         void this.runOnce({ forceFull: false });
       }
     }, seconds * 1000);
+  }
+
+  async refreshPollingStrategy(): Promise<void> {
+    await this.applyStrategy();
   }
 
   private stopCurrentPolling(): void {
@@ -219,6 +228,15 @@ export class SyncEngine {
         }
       }
       await this.baseline.save();
+      if (paths.size > 0) {
+        this.diagnostics?.record({
+          kind: "sync_queue",
+          at: Date.now(),
+          phase: "persisted",
+          operation: "delete",
+          pendingCount: this.baseline.pending().length,
+        });
+      }
       if (paths.size > 0) this.debounceFn();
     }).catch((error: unknown) => {
       new Notice(this.plugin.t("sync.saveDeleteQueueFailed", { error: errorMessage(error, this.plugin.t("common.unknownError")) }));
@@ -241,6 +259,13 @@ export class SyncEngine {
         oldPath: operation.oldPath === undefined ? undefined : normalizePath(operation.oldPath),
       });
       await this.baseline.save();
+      this.diagnostics?.record({
+        kind: "sync_queue",
+        at: Date.now(),
+        phase: "persisted",
+        operation: operation.kind,
+        pendingCount: this.baseline.pending().length,
+      });
       this.debounceFn();
     }).catch((error: unknown) => {
       new Notice(this.plugin.t("sync.saveQueueFailed", { error: errorMessage(error, this.plugin.t("common.unknownError")) }));
@@ -266,6 +291,24 @@ export class SyncEngine {
     try {
       await this.applyStrategy();
       await this.baseline.load();
+      const pendingAtStart = this.baseline.pending();
+      this.diagnostics?.record({
+        kind: "sync_run",
+        at: Date.now(),
+        phase: "start",
+        forceFull,
+        cursor: this.baseline.getCursor(),
+        pendingCount: pendingAtStart.length,
+      });
+      if (pendingAtStart.length > 0) {
+        this.diagnostics?.record({
+          kind: "sync_queue",
+          at: Date.now(),
+          phase: "resumed",
+          operation: pendingAtStart[0].kind,
+          pendingCount: pendingAtStart.length,
+        });
+      }
       let full = forceFull || !this.plugin.settings.incrementalCheck;
       if (this.baseline.bindVault(vaultID)) {
         full = true;
@@ -274,6 +317,16 @@ export class SyncEngine {
       if (this.needsFullSnapshotForDeletes(this.baseline.pending())) full = true;
       const remote = await this.fetchRemote(vaultID, full);
       let pending = this.baseline.pending();
+      this.diagnostics?.record({
+        kind: "sync_run",
+        at: Date.now(),
+        phase: "remote",
+        forceFull: full,
+        cursor: this.baseline.getCursor(),
+        nextCursor: remote.nextCursor,
+        remoteFiles: remote.files.size,
+        pendingCount: pending.length,
+      });
       if (remote.recoverySnapshot) {
         await this.prepareRecoveryRenames(pending, remote.files);
         pending = this.baseline.pending();
@@ -286,20 +339,50 @@ export class SyncEngine {
         maxRetries: 2,
         baseDelayMs: 500,
       }).run([...plan.actions], (action) => this.applyAction(vaultID, action));
+      this.reportTransferNotifications(plan.actions, results);
       if (hasUnresolvedAction(results)) {
         await this.baseline.save();
+        this.diagnostics?.record({
+          kind: "sync_run",
+          at: Date.now(),
+          phase: "failed",
+          forceFull: full,
+          cursor: this.baseline.getCursor(),
+          nextCursor: remote.nextCursor,
+          remoteFiles: remote.files.size,
+          actionCount: plan.actions.length,
+          resolvedCount: results.filter((result) => result.ok && result.result?.kind === "resolved").length,
+        });
         this.reportActionFailures(results);
         return false;
       }
       await this.api.acknowledge(vaultID, remote.nextCursor);
       this.baseline.setCursor(remote.nextCursor);
       await this.baseline.save();
+      this.diagnostics?.record({
+        kind: "sync_run",
+        at: Date.now(),
+        phase: "complete",
+        forceFull: full,
+        cursor: this.baseline.getCursor(),
+        nextCursor: remote.nextCursor,
+        remoteFiles: remote.files.size,
+        actionCount: plan.actions.length,
+        resolvedCount: results.filter((result) => result.ok && result.result?.kind === "resolved").length,
+      });
       if (this.api.isClockDriftLarge()) {
         new Notice(this.plugin.t("sync.clockDrift", { seconds: Math.round(this.api.getTimeOffset() / 1000) }), 8000);
       }
       this.plugin.setSyncState("idle");
       return true;
     } catch (error: unknown) {
+      this.diagnostics?.record({
+        kind: "sync_run",
+        at: Date.now(),
+        phase: "failed",
+        forceFull,
+        cursor: this.baseline.getCursor(),
+      });
       const message = this.localizedError(error);
       this.plugin.setSyncState("error", message);
       new Notice(this.plugin.t("sync.error", { error: message }), 8000);
@@ -315,7 +398,50 @@ export class SyncEngine {
     const count = results.filter((result) => !result.ok || result.result?.kind === "deferred_retry").length;
     const message = this.plugin.t("notice.syncFailures", { count });
     this.plugin.setSyncState("error", message);
-    new Notice(message, 6000);
+  }
+
+  private reportTransferNotifications(
+    actions: readonly OrdinarySyncAction[],
+    results: readonly TaskResult<OrdinarySyncActionOutcome>[],
+  ): void {
+    const uploaded: string[] = [];
+    const downloaded: string[] = [];
+    const failed: string[] = [];
+    for (const [index, action] of actions.entries()) {
+      const result = results[index];
+      const resolved = result?.ok === true && result.result?.kind === "resolved";
+      if (!resolved) {
+        failed.push(action.path);
+        continue;
+      }
+      switch (action.kind) {
+        case "upload":
+          uploaded.push(action.path);
+          break;
+        case "download":
+          downloaded.push(action.path);
+          break;
+        default:
+          break;
+      }
+    }
+    for (const notice of buildTransferNoticePlan(uploaded, downloaded, failed)) {
+      this.showTransferNotice(notice);
+    }
+  }
+
+  private showTransferNotice(notice: TransferNotice): void {
+    switch (notice.kind) {
+      case "uploaded":
+        new Notice(this.plugin.t(notice.count === undefined ? "sync.uploaded" : "sync.uploadedMany", notice));
+        break;
+      case "downloaded":
+        new Notice(this.plugin.t(notice.count === undefined ? "sync.downloaded" : "sync.downloadedMany", notice));
+        break;
+      case "failed":
+        new Notice(this.plugin.t("notice.syncFileFailed", notice), 6000);
+        break;
+    }
   }
 
   private async fetchRemote(vaultID: string, forceFull: boolean): Promise<RemoteSnapshot> {
@@ -521,7 +647,6 @@ export class SyncEngine {
       : await this.liveAcknowledgement({ path: action.path, server, local: current, bytes: snapshot.bytes, bytesHash: snapshot.hash }));
     if (action.operation) this.baseline.removePending(action.operation.id);
     this.queueCurrentLocalChange(action.path, snapshot, current);
-    new Notice(this.plugin.t("sync.uploaded", { path: action.path }));
     return { kind: "resolved" };
   }
 
@@ -558,7 +683,6 @@ export class SyncEngine {
       bytesHash: await sha256Hex(bytes),
     }));
     this.baseline.removePendingForPath(remote.path);
-    new Notice(this.plugin.t("sync.downloaded", { path: remote.path }));
     return { kind: "resolved" };
   }
 

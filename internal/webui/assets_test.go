@@ -42,6 +42,22 @@ func TestConsoleCSS_whenLoaded_usesSharedButtonTokens(t *testing.T) {
 	}
 }
 
+func TestConsoleCSS_whenLoaded_keepsTableActionCellsAsTableCells(t *testing.T) {
+	t.Parallel()
+
+	raw, err := webFS.ReadFile("assets/console.css")
+	if err != nil {
+		t.Fatalf("read console CSS: %v", err)
+	}
+	css := string(raw)
+	if !strings.Contains(css, ".action-cell { white-space: nowrap; }") {
+		t.Fatal("action cells must preserve table-cell layout")
+	}
+	if strings.Contains(css, ".action-cell { display: flex;") {
+		t.Fatal("action cells must not use flex display on table cells")
+	}
+}
+
 func TestServerUpdateAssets_whenLoaded_respectCSPAndHideConfirmUntilAvailable(t *testing.T) {
 	t.Parallel()
 

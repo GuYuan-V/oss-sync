@@ -626,8 +626,9 @@ input:focus {
   font: 700 11px/1.3 "IBM Plex Mono", "Cascadia Mono", monospace;
 }
 .file-breadcrumbs a { color: var(--cobalt-dark); text-underline-offset: 3px; }
-.action-cell { display: flex; gap: 12px; align-items: center; }
-.action-cell form { margin: 0; }
+.action-cell { white-space: nowrap; }
+.action-cell form { display: inline-block; margin: 0 12px 0 0; }
+.action-cell form:last-child { margin-right: 0; }
 .markdown-preview {
   width: min(100%, 88ch);
   max-width: 88ch;
@@ -1432,3 +1433,28 @@ body.body--console .console {
   .server-update-actions { gap: 10px; }
   .server-update-actions .button { flex: 1 1 auto; }
 }
+
+.plugin-id,
+.plugin-description,
+.plugin-association,
+.plugin-error {
+  display: block;
+  max-width: 34rem;
+  overflow-wrap: anywhere;
+}
+.plugin-id { margin-top: 4px; color: var(--muted); font: 700 11px/1.3 "IBM Plex Mono", "Cascadia Mono", monospace; }
+.plugin-description { margin-top: 6px; color: var(--muted); font-size: 12px; }
+.plugin-association { margin-top: 6px; color: var(--accent); font-size: 12px; }
+.switch-control:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+.plugin-error { margin-top: 6px; color: var(--danger); font-size: 12px; }
+.oss-repository-link {
+  display: block;
+  width: 100%;
+  margin: 24px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.oss-repository-link a { color: inherit; text-decoration: none; }
+.oss-repository-link a:hover { color: var(--ink); }
+.oss-repository-link a:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 3px; }

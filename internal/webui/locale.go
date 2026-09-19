@@ -1,4 +1,4 @@
-﻿// 国际化
+// 国际化
 package webui
 
 import "fmt"
@@ -36,4 +36,3 @@ func translate(lang, key string, args ...any) string {
 func Languages() []string {
 	return []string{"zh", "en"}
 }
-

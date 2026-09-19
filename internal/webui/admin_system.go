@@ -11,10 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
 const (

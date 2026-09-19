@@ -1,4 +1,4 @@
-﻿// 控制台主题文件
+// 控制台主题文件
 package consoletheme
 
 import (
@@ -172,4 +172,3 @@ func writeFile(root, rel string, content []byte) error {
 	}
 	return nil
 }
-

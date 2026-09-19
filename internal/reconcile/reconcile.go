@@ -1,4 +1,4 @@
-﻿// 存储对账
+// 存储对账
 package reconcile
 
 import (
@@ -15,10 +15,10 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/synclock"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/synclock"
 )
 
 type Report struct {
@@ -127,7 +127,7 @@ func (r *Reconciler) reconcileVault(
 			consumed[path] = true
 			report.DeletedRemoved++
 		}
-		if err := r.resolveFileIssues(vault.ID, issueStorageKey(file), now); err != nil {
+		if err := r.resolveFileIssuesByID(vault.ID, file.ID, now); err != nil {
 			return err
 		}
 	}
@@ -423,6 +423,17 @@ func (r *Reconciler) resolveFileIssues(vaultID, storageKey string, now time.Time
 		Update("resolved_at", sql.NullTime{Time: now, Valid: true}).Error
 }
 
+func (r *Reconciler) resolveFileIssuesByID(vaultID string, fileID uint, now time.Time) error {
+	return r.DB.Model(&models.StorageIssue{}).
+		Where(
+			"vault_id = ? AND file_id = ? AND kind IN ? AND resolved_at IS NULL",
+			vaultID,
+			fileID,
+			[]string{"missing", "hash_mismatch"},
+		).
+		Update("resolved_at", sql.NullTime{Time: now, Valid: true}).Error
+}
+
 func issueStorageKey(file models.File) string {
 	if file.StorageKey != "" {
 		return file.StorageKey
@@ -437,4 +448,3 @@ func truncate(value string, limit int) string {
 	}
 	return string(runes[:limit])
 }
-

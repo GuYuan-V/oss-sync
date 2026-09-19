@@ -1,4 +1,4 @@
-﻿// 更新下载
+// 更新下载
 package update
 
 import (
@@ -19,7 +19,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 // maxDownloadSize 限制单个资产下载上限，防止异常数据撑爆磁盘。
@@ -357,4 +357,3 @@ func prefersBinaryName(p string) bool {
 	l := strings.ToLower(filepath.Base(p))
 	return strings.Contains(l, "oss") || strings.Contains(l, "server") || strings.Contains(l, "sync")
 }
-

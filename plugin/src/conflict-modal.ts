@@ -26,7 +26,7 @@ export class ConflictModal extends Modal {
     private file: TFile,
     remoteContent: string,
     private onResolved: (r: ConflictResolution) => Promise<void>,
-    private readonly options: { baseText?: string | null } = {},
+    private readonly options: { baseText?: string | null; onClose?: () => void } = {},
   ) {
     super(app);
     this.remoteContent = remoteContent;
@@ -166,6 +166,7 @@ export class ConflictModal extends Modal {
   onClose(): void {
     this.contentEl.empty();
     this.plugin.sidebarView?.refresh();
+    this.options.onClose?.();
   }
 
   private async resolve(r: ConflictResolution): Promise<void> {

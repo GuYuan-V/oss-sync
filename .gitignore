@@ -28,9 +28,9 @@ configs/*.local.yaml
 
 # Go
 /bin/
-oss-server
-server
-server.exe
+/oss-server
+/server
+/server.exe
 *.exe
 *.test
 *.out
@@ -49,6 +49,8 @@ coverage.out
 /.omo/
 /.playwright-mcp/
 /.claude/
+/.agent/
+/plugin-install-backup-*/
 
 # Temp
 *.tmp

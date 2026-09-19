@@ -16,16 +16,16 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/collaboration"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/history"
-	"github.com/oss/oss-server/internal/jwt"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/recycle"
-	"github.com/oss/oss-server/internal/storagequota"
-	"github.com/oss/oss-server/internal/vaultaccess"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/collaboration"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/history"
+	"github.com/helantianshen/oss-sync/internal/jwt"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/recycle"
+	"github.com/helantianshen/oss-sync/internal/storagequota"
+	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
 func hashBytes(b []byte) string {
@@ -488,7 +488,7 @@ func (h *Handler) RecycleList(c *gin.Context) {
 	now := time.Now()
 	out := make([]gin.H, 0, len(files))
 	for _, f := range files {
-		expiresAt := f.DeletedAt.Time.Add(time.Duration(retention) * 24 * time.Hour)
+		expiresAt := recycle.ExpiresAt(f, retention)
 		remaining := expiresAt.Sub(now)
 		out = append(out, gin.H{
 			"id":                f.ID,
@@ -518,6 +518,14 @@ func (h *Handler) RecycleRestore(c *gin.Context) {
 	if err := h.DB.Where("id = ? AND vault_id = ? AND is_deleted = ?", c.Param("file_id"), vault.ID, true).
 		First(&file).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
+	if err := recycle.CheckRestorable(h.DB, file, time.Now()); err != nil {
+		if errors.Is(err, recycle.ErrRetentionExpired) {
+			c.JSON(http.StatusGone, gin.H{"error": "recycle retention has expired", "code": "recycle_retention_expired"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

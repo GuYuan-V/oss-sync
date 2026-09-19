@@ -12,9 +12,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
 // PaperTrailConfig 是 papertrail 博客设置的结构化配置。
@@ -201,20 +201,34 @@ func (h *Handler) homePosts(userID uint, vaultID string) []HomePost {
 	return posts
 }
 
-// extractPostMeta 提取文章标题与摘要（首个标题行 + 首个非空段落截断）。
+// extractPostMeta 提取文章标题与摘要；标题优先使用 frontmatter，否则使用文件名。
 func extractPostMeta(raw, fallbackTitle string) (string, string) {
-	title := fallbackTitle
+	title := basenameNoExt(fallbackTitle)
 	summary := ""
 	lines := strings.Split(raw, "\n")
-	for _, line := range lines {
+	inFrontmatter := false
+	frontmatterDone := false
+	for lineIndex, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if title == fallbackTitle && strings.HasPrefix(trimmed, "#") {
-			title = strings.TrimSpace(strings.TrimLeft(trimmed, "# "))
+		if !frontmatterDone && trimmed == "---" && (inFrontmatter || lineIndex == 0) {
+			if inFrontmatter {
+				inFrontmatter = false
+				frontmatterDone = true
+			} else {
+				inFrontmatter = true
+			}
+			continue
 		}
-		if summary == "" && trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+		if inFrontmatter && strings.HasPrefix(trimmed, "title:") {
+			value := strings.Trim(strings.TrimSpace(strings.TrimPrefix(trimmed, "title:")), "\"'")
+			if value != "" {
+				title = value
+			}
+		}
+		if summary == "" && trimmed != "" && !strings.HasPrefix(trimmed, "#") && !inFrontmatter {
 			summary = trimmed
 		}
-		if title != fallbackTitle && summary != "" {
+		if summary != "" && (frontmatterDone || !inFrontmatter) {
 			break
 		}
 	}
@@ -245,6 +259,7 @@ func (h *Handler) handleVaultBlog(c *gin.Context) {
 	cfg := ParsePaperTrailConfig(vs.ThemeConfig)
 	customEnabled := settingspolicy.CustomFragmentsEnabled(h.DB)
 	params := renderParams{
+		VaultID:       vaultID,
 		Title:         blogTitle(cfg, vault.Name),
 		ThemeName:     vs.ThemeName,
 		ThemeBaseURL:  themeBaseURL(vs.ThemeName),

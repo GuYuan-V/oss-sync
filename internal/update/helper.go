@@ -1,4 +1,4 @@
-﻿// 更新辅助
+// 更新辅助
 package update
 
 import (
@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 // RunHelper is the entry point for the helper process. It never returns
@@ -210,4 +210,3 @@ func readyzOnceWithVersion(client *http.Client, url string) (ready bool, version
 	}
 	return true, payload.Version, nil
 }
-

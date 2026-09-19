@@ -1,4 +1,4 @@
-﻿// 仓库预览
+// 仓库预览
 package webui
 
 import (
@@ -12,11 +12,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/blog"
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/markdown"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/shares"
+	"github.com/helantianshen/oss-sync/internal/blog"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/markdown"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/shares"
 )
 
 const (
@@ -125,4 +125,3 @@ func (h *Handler) previewMarkdownShareID(vault models.Vault, filePath string) (s
 	}
 	return shareID, nil
 }
-

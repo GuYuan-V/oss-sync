@@ -18,7 +18,6 @@ func TestScaffoldTheme_copiesEntireDirectory_whenBaseIsCustom(t *testing.T) {
 		"template.html":   "<main>{{.ContentHTML}}</main>",
 		"style.css":       "body { color: black; }",
 		"theme.js":        "console.log('theme');",
-		"settings.json":   `{"settings":[]}`,
 		"assets/mark.svg": "<svg></svg>",
 	}
 	for name, content := range files {
@@ -42,6 +41,9 @@ func TestScaffoldTheme_copiesEntireDirectory_whenBaseIsCustom(t *testing.T) {
 		if string(got) != want {
 			t.Errorf("copied %s = %q, want %q", name, got, want)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(targetDir, "settings.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("settings.json should not be copied, stat error = %v", err)
 	}
 	marker, err := os.ReadFile(filepath.Join(targetDir, ".oss-theme-source"))
 	if err != nil {

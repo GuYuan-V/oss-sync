@@ -1,4 +1,4 @@
-﻿// 控制台主题管理
+// 控制台主题管理
 package webui
 
 import (
@@ -13,9 +13,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/consoletheme"
-	"github.com/oss/oss-server/internal/markdown"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/consoletheme"
+	"github.com/helantianshen/oss-sync/internal/markdown"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 type consoleThemeFile struct {
@@ -50,7 +50,11 @@ func (h *Handler) adminConsoleThemesPage(c *gin.Context) {
 		}
 		d.Themes = append(d.Themes, row)
 	}
-	if source, err := webFS.ReadFile("assets/console-theme-guide.md"); err == nil {
+	guideName := "assets/console-theme-guide.en.md"
+	if h.userLang(c) == "zh" {
+		guideName = "assets/console-theme-guide.md"
+	}
+	if source, err := webFS.ReadFile(guideName); err == nil {
 		if guide, renderErr := markdown.RenderMarkdown(nil, string(source)); renderErr == nil {
 			d.GuideHTML = template.HTML(guide)
 		}
@@ -98,9 +102,40 @@ func (h *Handler) adminConsoleThemeUpload(c *gin.Context) {
 		h.redirectConsoleThemeError(c, h.t(c, "err.console_theme_zip_limit"))
 		return
 	}
+	bundledPlugin, err := bundledPluginFromTheme(content)
+	if err != nil {
+		h.redirectConsoleThemeError(c, err.Error())
+		return
+	}
 	if err := consoletheme.Upload(h.Cfg.Storage.DataDir, name, bytes.NewReader(content), int64(len(content))); err != nil {
 		h.redirectConsoleThemeError(c, err.Error())
 		return
+	}
+	if bundledPlugin != nil {
+		if h.pluginManager == nil {
+			_ = consoletheme.Delete(h.Cfg.Storage.DataDir, name)
+			h.redirectConsoleThemeError(c, h.t(c, "admin.theme_plugin_manager_unavailable"))
+			return
+		}
+		pluginInfo, err := h.pluginManager.InstallOrReuse(c.Request.Context(), bytes.NewReader(bundledPlugin), int64(len(bundledPlugin)))
+		if err != nil {
+			_ = consoletheme.Delete(h.Cfg.Storage.DataDir, name)
+			h.redirectConsoleThemeError(c, h.t(c, "admin.theme_plugin_install_failed"))
+			return
+		}
+		if !pluginInfo.Enabled {
+			if err := h.pluginManager.Enable(c.Request.Context(), pluginInfo.ID); err != nil {
+				_ = consoletheme.Delete(h.Cfg.Storage.DataDir, name)
+				h.redirectConsoleThemeError(c, h.t(c, "admin.theme_plugin_install_failed"))
+				return
+			}
+		}
+		association := models.ServerPluginAssociation{PluginID: pluginInfo.ID, Kind: "console_theme", TargetID: name, TargetName: name}
+		if err := h.DB.Where("plugin_id = ? AND kind = ? AND target_id = ?", association.PluginID, association.Kind, association.TargetID).FirstOrCreate(&association).Error; err != nil {
+			_ = consoletheme.Delete(h.Cfg.Storage.DataDir, name)
+			h.redirectConsoleThemeError(c, h.t(c, "admin.theme_plugin_install_failed"))
+			return
+		}
 	}
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/console-themes?saved=1")
 }
@@ -170,4 +205,3 @@ func (h *Handler) adminConsoleThemeDelete(c *gin.Context) {
 func (h *Handler) redirectConsoleThemeError(c *gin.Context, message string) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/console-themes?error="+url.QueryEscape(message))
 }
-

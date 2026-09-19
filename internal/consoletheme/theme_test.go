@@ -32,6 +32,17 @@ func TestList_includesBuiltinAndCustomThemes(t *testing.T) {
 	}
 }
 
+func TestValidateName_acceptsChineseAndRejectsPathCharacters(t *testing.T) {
+	if err := ValidateName("中文控制台"); err != nil {
+		t.Fatalf("Chinese console theme rejected: %v", err)
+	}
+	for _, name := range []string{"../escape", "主题/子目录", "-invalid", "带 空格"} {
+		if err := ValidateName(name); err == nil {
+			t.Fatalf("unsafe console theme name %q accepted", name)
+		}
+	}
+}
+
 func TestScaffold_copiesBuiltinOrCustomTheme(t *testing.T) {
 	// Given
 	dataDir := t.TempDir()

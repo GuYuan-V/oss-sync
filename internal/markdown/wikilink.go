@@ -113,6 +113,15 @@ func (r *wikilinkHTMLRenderer) renderWikilink(w util.BufWriter, source []byte, n
 		shareID = r.resolver.Resolve(linkText)
 	}
 	if shareID == "" {
+		if strings.HasPrefix(linkText, "#") {
+			heading := strings.TrimSpace(strings.TrimPrefix(linkText, "#"))
+			label := heading
+			if displayText != rawText {
+				label = displayText
+			}
+			fmt.Fprintf(w, `<a href="#" data-local-heading="%s">%s</a>`, htmlEscape(heading), htmlEscape(label))
+			return gast.WalkContinue, nil
+		}
 		fmt.Fprintf(w, `<span class="unshared-link">%s(未分享)</span>`, htmlEscape(displayText))
 		return gast.WalkContinue, nil
 	}
@@ -156,7 +165,7 @@ func NewMarkdown(resolver LinkResolver) goldmark.Markdown {
 
 func newMarkdown(resolver LinkResolver, assets AssetResolver) goldmark.Markdown {
 	return goldmark.New(
-		goldmark.WithExtensions(extension.GFM, &wikilinkExtension{resolver: resolver, assets: assets}),
+		goldmark.WithExtensions(extension.GFM, &wikilinkExtension{resolver: resolver, assets: assets}, &highlightExtension{}),
 		goldmark.WithRendererOptions(html.WithHardWraps()),
 	)
 }

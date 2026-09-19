@@ -1,10 +1,10 @@
-﻿// 设置策略
+// 设置策略
 package settingspolicy
 
 import (
 	"fmt"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 const (
@@ -142,4 +142,3 @@ func maxInt64(value, minimum int64) int64 {
 	}
 	return value
 }
-

@@ -12,10 +12,10 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/database"
-	"github.com/oss/oss-server/internal/jwt"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/database"
+	"github.com/helantianshen/oss-sync/internal/jwt"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func newTestDB(t *testing.T) *gorm.DB {

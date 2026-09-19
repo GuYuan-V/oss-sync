@@ -14,9 +14,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
+	"github.com/helantianshen/oss-sync/internal/models"
 	"gorm.io/gorm"
 )
 
@@ -734,8 +734,8 @@ func TestWebConsoleVaultSettingsAllowOwnerToSelectTheme(t *testing.T) {
 	}
 }
 
-func TestWebConsoleThemeSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing.T) {
-	// Given: a vault uses Papertrail and the user fills every kind of theme setting.
+func TestWebConsolePluginSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing.T) {
+	// Given: a vault uses the Papertrail plugin and the user fills every kind of plugin setting.
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
@@ -748,7 +748,8 @@ func TestWebConsoleThemeSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing.
 	session, csrf := webLogin(t, router, "theme-settings-owner", "password123")
 
 	// When: URL validation rejects the submitted Logo URL.
-	response := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/theme-settings", url.Values{
+	response := doForm(t, router, http.MethodPost, "/dashboard/plugins/papertrail-settings/settings", url.Values{
+		"vault_id":               {vaultID},
 		"setting_blog_name":      {"Draft blog"},
 		"setting_description":    {"Draft description"},
 		"setting_logo_url":       {"javascript:alert(1)"},
@@ -757,11 +758,11 @@ func TestWebConsoleThemeSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing.
 		"group_buttons_icon_url": {"/icon.svg"},
 	}, session, csrf)
 
-	// Then: the error page keeps every submitted value instead of redirecting to empty persisted data.
+	// Then: the plugin error page keeps every submitted value instead of redirecting to empty persisted data.
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid theme settings status=%d, want 400; body=%s", response.Code, response.Body)
 	}
-	for _, want := range []string{"Draft blog", "Draft description", "javascript:alert(1)", "/icon.svg", "模板设置 Logo URL 必须是 http(s) 或站内相对 URL"} {
+	for _, want := range []string{"Draft blog", "Draft description", "javascript:alert(1)", "/icon.svg", "设置 Logo URL 必须是 http(s) 或站内相对 URL"} {
 		if !strings.Contains(response.Body.String(), want) {
 			t.Fatalf("invalid theme settings lost %q: body=%s", want, response.Body)
 		}
@@ -977,8 +978,8 @@ func doFormRaw(
 
 var _ = gin.Mode
 
-// TestWebConsoleDeviceAuthorizationWorkflow 覆盖设备页：pending 一次性批准 + 改名 + 授权，
-// approved 仅可整体替换授权，设备名称保持批准时的值。
+// TestWebConsoleDeviceAuthorizationWorkflow 覆盖设备页：pending 先批准，
+// approved 再单独整体替换授权，设备名称保持批准时的值。
 func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -1013,8 +1014,8 @@ func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 	if !strings.Contains(body, "<th>操作</th>") ||
 		!strings.Contains(body, `class="device-auth-summary"`) ||
 		!strings.Contains(body, `class="device-auth-summary__actions"`) ||
-		!strings.Contains(body, `data-modal-open="device-modal-desktop-2"`) ||
-		!strings.Contains(body, `class="modal device-auth-modal"`) ||
+		!strings.Contains(body, `id="device-approve-desktop-2"`) ||
+		strings.Contains(body, `data-modal-open="device-modal-desktop-2"`) ||
 		!strings.Contains(body, `form="device-revoke-desktop-2"`) ||
 		!strings.Contains(body, `id="device-revoke-desktop-2"`) {
 		t.Fatalf("device authorization must use a summary, rightmost actions, and modal: %s", page.Body)
@@ -1031,8 +1032,7 @@ func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 	nameInput := strings.Index(deviceCell, `class="device-name-input"`)
 	clientID := strings.Index(deviceCell, `desktop-2`)
 	if deviceCellStart < 0 || deviceCellEnd < 0 || nameInput < 0 ||
-		!strings.Contains(page.Body.String(), `name="vault_ids"`) ||
-		!strings.Contains(page.Body.String(), "批准并保存") {
+		!strings.Contains(page.Body.String(), "批准设备") {
 		t.Fatalf("pending device page must replace the static name with the identity input: %s", page.Body)
 	}
 	if strings.Contains(deviceCell, `<strong>桌面机</strong>`) || clientID < 0 || nameInput > clientID {
@@ -1047,15 +1047,11 @@ func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 		t.Fatalf("invalid pending name must be rejected: %d %q", bad.Code, bad.Header().Get("Location"))
 	}
 
-	// pending 一次性提交：名称 + 批准 + 授权（一个表单动作）。
-	save := doForm(t, router, http.MethodPost, "/dashboard/devices/desktop-2/authorize",
-		url.Values{
-			"name":      {"新笔记本"},
-			"status":    {"approved"},
-			"vault_ids": {vaultID},
-		}, session, csrf)
-	if save.Code != http.StatusSeeOther {
-		t.Fatalf("approve+rename+authorize: %d body=%s", save.Code, save.Body)
+	// pending 只提交批准与设备名称，不依赖仓库授权。
+	approve := doForm(t, router, http.MethodPost, "/dashboard/devices/desktop-2/approve",
+		url.Values{"name": {"新笔记本"}}, session, csrf)
+	if approve.Code != http.StatusSeeOther {
+		t.Fatalf("approve+rename: %d body=%s", approve.Code, approve.Body)
 	}
 	var dev models.ClientDevice
 	if err := db.Where("user_id = ? AND client_id = ?", owner.ID, "desktop-2").First(&dev).Error; err != nil {
@@ -1065,6 +1061,15 @@ func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 		t.Fatalf("device after save: %#v", dev)
 	}
 	var access models.DeviceVaultAccess
+	if err := db.Where("user_id = ? AND client_id = ? AND vault_id = ?", owner.ID, "desktop-2", vaultID).
+		First(&access).Error; err == nil {
+		t.Fatal("approval must not grant vault access")
+	}
+	authorize := doForm(t, router, http.MethodPost, "/dashboard/devices/desktop-2/authorize",
+		url.Values{"vault_ids": {vaultID}}, session, csrf)
+	if authorize.Code != http.StatusSeeOther {
+		t.Fatalf("authorize approved device: %d body=%s", authorize.Code, authorize.Body)
+	}
 	if err := db.Where("user_id = ? AND client_id = ? AND vault_id = ?", owner.ID, "desktop-2", vaultID).
 		First(&access).Error; err != nil {
 		t.Fatalf("authorized vault missing: %v", err)
@@ -1135,9 +1140,52 @@ func TestWebConsoleDevicesEmptyVaultState(t *testing.T) {
 		t.Fatal("must not render a misleading empty vault multi-select")
 	}
 	if !strings.Contains(page.Body.String(), `class="device-auth-summary"`) ||
+		!strings.Contains(page.Body.String(), `id="device-approve-desktop-empty"`) ||
 		!strings.Contains(page.Body.String(), `form="device-revoke-desktop-empty"`) ||
 		strings.Contains(page.Body.String(), `data-modal-open="device-modal-desktop-empty"`) {
 		t.Fatalf("empty vault authorization must use a one-line summary without an empty modal: %s", page.Body)
+	}
+}
+
+func TestAdminCanApproveDeviceWithoutVault(t *testing.T) {
+	t.Chdir(t.TempDir())
+	srv, db, _ := newTestServer(t)
+	router := srv.Router()
+	if _, err := auth.CreateAccount(db, "root-admin", "root-password-123", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.CreateAccount(db, "no-vault-user", "password123", "user"); err != nil {
+		t.Fatal(err)
+	}
+	code, _ := loginAsDevice(t, router, "no-vault-user", "password123", "desktop-no-vault", "无仓库设备")
+	if code != http.StatusOK {
+		t.Fatalf("device login: %d", code)
+	}
+	var owner models.User
+	if err := db.Where("username = ?", "no-vault-user").First(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	adminSession, adminCSRF := webLogin(t, router, "root-admin", "root-password-123")
+	page := doForm(t, router, http.MethodGet, "/dashboard/admin/devices", nil, adminSession, adminCSRF)
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), `id="device-approve-`+strconv.FormatUint(uint64(owner.ID), 10)+`-desktop-no-vault"`) {
+		t.Fatalf("admin page must expose approval without a vault: %d %s", page.Code, page.Body)
+	}
+	approve := doForm(t, router, http.MethodPost, "/dashboard/admin/devices/desktop-no-vault/approve",
+		url.Values{"user_id": {strconv.FormatUint(uint64(owner.ID), 10)}}, adminSession, adminCSRF)
+	if approve.Code != http.StatusSeeOther {
+		t.Fatalf("approve device without vault: %d %s", approve.Code, approve.Body)
+	}
+	var device models.ClientDevice
+	if err := db.Where("user_id = ? AND client_id = ?", owner.ID, "desktop-no-vault").First(&device).Error; err != nil {
+		t.Fatal(err)
+	}
+	if device.Status != deviceauth.DeviceStatusApproved {
+		t.Fatalf("device status = %q, want approved", device.Status)
+	}
+	var accessCount int64
+	db.Model(&models.DeviceVaultAccess{}).Where("user_id = ? AND client_id = ?", owner.ID, "desktop-no-vault").Count(&accessCount)
+	if accessCount != 0 {
+		t.Fatalf("approval without vault must not create vault access, got %d", accessCount)
 	}
 }
 
@@ -1220,6 +1268,14 @@ func TestAdminDeviceAuthorizationRejectsInaccessibleVault(t *testing.T) {
 	}
 
 	rootSession, rootCSRF := webLogin(t, router, "root-admin", "root-password-123")
+	approve := doForm(t, router, http.MethodPost, "/dashboard/admin/devices/member-dev/approve",
+		url.Values{
+			"user_id": {strconv.FormatUint(uint64(member.ID), 10)},
+			"name":    {"Member PC"},
+		}, rootSession, rootCSRF)
+	if approve.Code != http.StatusSeeOther || strings.Contains(approve.Header().Get("Location"), "error=") {
+		t.Fatalf("member device approval must succeed before vault authorization: %d %q", approve.Code, approve.Header().Get("Location"))
+	}
 
 	// member-b 的仓库是 owner-a 的仓库：管理员不能为 member 设备授权 owner 的仓库。
 	denied := doForm(t, router, http.MethodPost, "/dashboard/admin/devices/member-dev/authorize",

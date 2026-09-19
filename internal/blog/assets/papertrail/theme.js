@@ -40,7 +40,7 @@
     const content = document.querySelector("[data-reading-content]");
     if (!toc || !content) return;
     const list = toc.querySelector("[data-toc-list]");
-    const headings = Array.from(content.querySelectorAll("h1, h2, h3"));
+    const headings = Array.from(content.querySelectorAll("h1:not([data-article-title]), h2, h3"));
     if (!list || headings.length === 0) return;
     const usedIDs = new Set();
     content.querySelectorAll("[id]").forEach((element) => {
@@ -66,6 +66,12 @@
       item.append(link);
       list.append(item);
       items.push({ heading, link });
+    });
+
+    content.querySelectorAll("a[data-local-heading]").forEach((link) => {
+      const target = link.dataset.localHeading;
+      const heading = headings.find((candidate) => candidate.textContent.trim() === target);
+      if (heading && heading.id) link.href = `#${heading.id}`;
     });
 
     const setActive = (next) => {

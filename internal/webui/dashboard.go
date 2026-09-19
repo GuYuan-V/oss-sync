@@ -1,4 +1,4 @@
-﻿// 仪表盘
+// 仪表盘
 package webui
 
 import (
@@ -20,17 +20,17 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/oss/oss-server/internal/blog"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/history"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/recycle"
-	"github.com/oss/oss-server/internal/settingspolicy"
-	"github.com/oss/oss-server/internal/shares"
-	"github.com/oss/oss-server/internal/synclock"
-	"github.com/oss/oss-server/internal/vaultaccess"
-	"github.com/oss/oss-server/internal/vaultbackup"
+	"github.com/helantianshen/oss-sync/internal/blog"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/history"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/recycle"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/shares"
+	"github.com/helantianshen/oss-sync/internal/synclock"
+	"github.com/helantianshen/oss-sync/internal/vaultaccess"
+	"github.com/helantianshen/oss-sync/internal/vaultbackup"
 )
 
 const maxCustomFragmentRunes = 2000
@@ -176,19 +176,9 @@ func (h *Handler) resolveVaultPage(c *gin.Context) (models.Vault, string, bool) 
 
 // setVaultLayout 填充侧边栏"当前仓库"上下文。
 func (h *Handler) setVaultLayout(ld *layoutData, vault models.Vault) {
-	themeName := "default"
-	var setting models.VaultSetting
-	if err := h.DB.Where("vault_id = ?", vault.ID).First(&setting).Error; err == nil {
-		if setting.ThemeName != "" {
-			themeName = setting.ThemeName
-		}
-	}
-	fields, err := blog.ThemeSettings(h.Cfg.Storage.DataDir, themeName)
 	ld.CurrentVault = &vaultNav{
-		ID:                 vault.ID,
-		Name:               vault.Name,
-		HasThemeSettings:   err == nil && len(fields) > 0,
-		ThemeSettingsLabel: themeSettingsLabel(themeName),
+		ID:   vault.ID,
+		Name: vault.Name,
 	}
 }
 
@@ -327,12 +317,20 @@ func (h *Handler) renderVaultStatus(c *gin.Context, status int, ld layoutData, p
 	ld.Page = page
 	ld.Title = title
 	ld.ActiveGroup = "vault"
+	if page == "vault-plugin-settings" {
+		ld.ActiveGroup = "plugins"
+	}
 	ld.ActivePage = page
 	ld.ShowSidebar = true
 	ld.Username = u.Username
 	ld.IsAdmin = u.Role == "admin"
 	ld.ConsoleThemeName = h.selectedConsoleTheme(u.ID)
 	ld.Language = h.userLang(c)
+	if vaultID := c.Param("vault_id"); vaultID != "" {
+		h.setPluginNavigationForVault(&ld, vaultID, h.webUser(c))
+	} else {
+		h.setPluginNavigationForUser(&ld, h.webUser(c))
+	}
 	if token, err := c.Cookie(csrfCookie); err == nil {
 		ld.CSRF = token
 	}
@@ -669,6 +667,12 @@ func (h *Handler) webRestoreRecycle(vault models.Vault, u *models.User, fileID u
 		First(&file).Error; err != nil {
 		return errors.New("回收站项目不存在")
 	}
+	if err := recycle.CheckRestorable(h.DB, file, time.Now()); err != nil {
+		if errors.Is(err, recycle.ErrRetentionExpired) {
+			return errors.New("回收站保留期已过，无法恢复")
+		}
+		return fmt.Errorf("读取回收站保留期失败: %w", err)
+	}
 	return h.DB.Transaction(func(tx *gorm.DB) error {
 		target := filepath.Join(h.Cfg.Storage.DataDir, filepath.FromSlash(filestore.VaultStorageKey(vault.ID, file.Path)))
 		if err := recycle.MoveOut(h.Cfg.Storage.DataDir, file, target); err != nil {
@@ -831,19 +835,20 @@ func classifyWebFile(path string) string {
 // 仓库设置
 
 type vaultSettingsData struct {
-	VaultID                string
-	VaultName              string
-	ThemeName              string
-	Themes                 []blog.ThemeInfo
-	CustomHeader           string
-	CustomFooter           string
-	RecycleBinDays         int
-	DefaultRecycleDays     int
-	IsPublicBlog           bool
-	CustomFragmentsEnabled bool
-	CanManage              bool
-	Error                  string
-	Saved                  bool
+	VaultID                 string
+	VaultName               string
+	ThemeName               string
+	Themes                  []blog.ThemeInfo
+	ThemeSupportsPublicBlog bool
+	CustomHeader            string
+	CustomFooter            string
+	RecycleBinDays          int
+	DefaultRecycleDays      int
+	IsPublicBlog            bool
+	CustomFragmentsEnabled  bool
+	CanManage               bool
+	Error                   string
+	Saved                   bool
 }
 
 func (h *Handler) vaultSettingsPage(c *gin.Context) {
@@ -863,6 +868,12 @@ func (h *Handler) vaultSettingsPage(c *gin.Context) {
 		return
 	}
 	d.Themes = themes
+	for _, theme := range themes {
+		if theme.Name == d.ThemeName {
+			d.ThemeSupportsPublicBlog = theme.SupportsPublicBlog
+			break
+		}
+	}
 	var setting models.VaultSetting
 	if err := h.DB.Where("vault_id = ?", vault.ID).First(&setting).Error; err == nil {
 		if setting.ThemeName != "" {
@@ -872,6 +883,12 @@ func (h *Handler) vaultSettingsPage(c *gin.Context) {
 		d.IsPublicBlog = setting.IsPublicBlog
 		d.CustomHeader = setting.CustomHeader
 		d.CustomFooter = setting.CustomFooter
+	}
+	if d.ThemeName == "default" {
+		d.ThemeSupportsPublicBlog = blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, d.ThemeName)
+	}
+	if !d.ThemeSupportsPublicBlog {
+		d.IsPublicBlog = false
 	}
 	defDays, err := systemDefaultRecycleDays(h.DB)
 	if err == nil {
@@ -915,6 +932,12 @@ func (h *Handler) saveVaultSettings(c *gin.Context) {
 		days = 0
 	}
 	isPublic := c.PostForm("is_public_blog") == "on"
+	if !blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, themeName) {
+		isPublic = false
+	}
+	if !blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, themeName) {
+		isPublic = false
+	}
 	customFragmentsEnabled := settingspolicy.CustomFragmentsEnabled(h.DB)
 	customHeader := ""
 	customFooter := ""
@@ -1125,9 +1148,17 @@ func (h *Handler) approveDevice(c *gin.Context) {
 		return
 	}
 	now := time.Now()
-	if err := h.DB.Model(&dev).Updates(map[string]any{
+	updates := map[string]any{
 		"status": "approved", "approved_at": now, "approved_by_user_id": u.ID,
-	}).Error; err != nil {
+	}
+	if name := strings.TrimSpace(c.PostForm("name")); name != "" {
+		if len([]rune(name)) > 128 {
+			c.Redirect(http.StatusSeeOther, "/dashboard/devices?error="+url.QueryEscape(h.t(c, "err.device_name_length")))
+			return
+		}
+		updates["name"] = name
+	}
+	if err := h.DB.Model(&dev).Updates(updates).Error; err != nil {
 		c.Redirect(http.StatusSeeOther, "/dashboard/devices?error="+url.QueryEscape(h.t(c, "err.approve_failed")))
 		return
 	}
@@ -1166,17 +1197,12 @@ func (h *Handler) authorizeDevice(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/dashboard/devices?error="+url.QueryEscape(h.t(c, "err.device_not_found")))
 		return
 	}
+	if dev.Status != deviceauth.DeviceStatusApproved {
+		c.Redirect(http.StatusSeeOther, "/dashboard/devices?error="+url.QueryEscape(h.t(c, "err.invalid_device_status")))
+		return
+	}
 
 	name := dev.Name
-	if dev.Status == deviceauth.DeviceStatusPending {
-		name = strings.TrimSpace(c.PostForm("name"))
-		if name == "" {
-			name = dev.Name
-		} else if len([]rune(name)) > 128 {
-			c.Redirect(http.StatusSeeOther, "/dashboard/devices?error="+url.QueryEscape(h.t(c, "err.device_name_length")))
-			return
-		}
-	}
 
 	// 待批准设备必须提交 approved 状态。
 	status := strings.TrimSpace(c.PostForm("status"))
@@ -1249,4 +1275,3 @@ func (h *Handler) deleteVault(c *gin.Context) {
 }
 
 var _ = fmt.Sprintf
-

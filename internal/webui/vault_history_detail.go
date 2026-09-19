@@ -1,4 +1,4 @@
-﻿// 历史详情
+// 历史详情
 package webui
 
 import (
@@ -10,9 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/history"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/vaultaccess"
+	"github.com/helantianshen/oss-sync/internal/history"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
 type historyDiffLine struct {
@@ -111,4 +111,3 @@ func newHistoryDiffLine(line string) historyDiffLine {
 		return historyDiffLine{Prefix: " ", Text: line[1:], Kind: "context"}
 	}
 }
-

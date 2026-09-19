@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 func fakeDigestForFile(path string) string {

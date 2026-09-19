@@ -3,7 +3,7 @@ package settingspolicy
 import (
 	"testing"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func TestResolve_whenPreferencesExceedLimits_clampsToAdministratorCeilings(t *testing.T) {

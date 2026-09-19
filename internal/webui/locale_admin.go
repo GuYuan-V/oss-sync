@@ -56,6 +56,7 @@ func init() {
 		"admin.unauthorized_vaults":              {"未授权仓库", "Unauthorized vaults"},
 		"admin.no_authorizable_vaults":           {"暂无可授权仓库", "No vaults available for authorization."},
 		"admin.approve_and_configure":            {"批准并配置", "Approve and configure"},
+		"admin.approve_device":                   {"批准设备", "Approve device"},
 		"admin.edit_auth":                        {"编辑授权", "Edit authorization"},
 		"admin.revoke_device_confirm":            {"吊销设备 %s？", "Revoke device %s?"},
 		"admin.no_devices_yet":                   {"暂无设备。", "No devices yet."},

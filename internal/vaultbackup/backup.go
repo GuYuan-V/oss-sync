@@ -16,8 +16,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 const rootDirName = "backups/vaults"
@@ -31,16 +31,13 @@ type manifest struct {
 	Files    []models.File        `json:"files"`
 }
 
-// Root is intentionally relative to the server process working directory.
-// It therefore remains a project-run-directory archive even when file storage
-// itself is redirected elsewhere.
-func Root() string { return rootDirName }
+func Root(dataDir string) string { return filepath.Join(dataDir, filepath.FromSlash(rootDirName)) }
 
-func Path(fileName string) (string, error) {
+func Path(dataDir, fileName string) (string, error) {
 	if fileName == "" || filepath.Base(fileName) != fileName || !strings.HasSuffix(fileName, ".zip") {
 		return "", fmt.Errorf("invalid backup file name")
 	}
-	return filepath.Join(Root(), fileName), nil
+	return filepath.Join(Root(dataDir), fileName), nil
 }
 
 func Create(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup, error) {
@@ -56,14 +53,14 @@ func Create(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup
 	if err := db.Where("vault_id = ?", vault.ID).Order("path asc").Find(&files).Error; err != nil {
 		return models.VaultBackup{}, err
 	}
-	root := Root()
+	root := Root(dataDir)
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return models.VaultBackup{}, fmt.Errorf("create backup directory: %w", err)
 	}
 
 	id := uuid.NewString()
 	fileName := fmt.Sprintf("vault-%s-%s.zip", time.Now().UTC().Format("20060102T150405Z"), id)
-	archivePath, err := Path(fileName)
+	archivePath, err := Path(dataDir, fileName)
 	if err != nil {
 		return models.VaultBackup{}, err
 	}

@@ -1,4 +1,4 @@
-﻿// 管理后台
+// 管理后台
 package webui
 
 import (
@@ -13,11 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/vaultaccess"
-	"github.com/oss/oss-server/internal/vaultbackup"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/vaultaccess"
+	"github.com/helantianshen/oss-sync/internal/vaultbackup"
 )
 
 // 备份管理
@@ -65,7 +65,7 @@ func (h *Handler) downloadBackup(c *gin.Context) {
 		c.String(http.StatusNotFound, "backup not found")
 		return
 	}
-	path, err := vaultbackup.Path(backup.FileName)
+	path, err := vaultbackup.Path(h.Cfg.Storage.DataDir, backup.FileName)
 	if err != nil {
 		c.String(http.StatusNotFound, "backup not found")
 		return
@@ -83,7 +83,7 @@ func (h *Handler) deleteBackup(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/dashboard/admin/system")
 		return
 	}
-	path, err := vaultbackup.Path(backup.FileName)
+	path, err := vaultbackup.Path(h.Cfg.Storage.DataDir, backup.FileName)
 	if err == nil {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			c.String(http.StatusInternalServerError, "failed to delete backup archive")
@@ -568,6 +568,46 @@ func deviceAuthSummary(vaults []vaultOption, clientID string) (int, []string) {
 	return len(names), names
 }
 
+// adminApproveDevice 只批准设备，不修改仓库授权；仓库授权由单独的表单处理。
+func (h *Handler) adminApproveDevice(c *gin.Context) {
+	admin := h.webUser(c)
+	clientID := deviceauth.NormalizeClientID(c.Param("client_id"))
+	userID, err := strconv.ParseUint(c.PostForm("user_id"), 10, 64)
+	if clientID == "" || err != nil {
+		c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?error="+url.QueryEscape(h.t(c, "err.invalid_device")))
+		return
+	}
+	var dev models.ClientDevice
+	if err := h.DB.Where("user_id = ? AND client_id = ?", uint(userID), clientID).First(&dev).Error; err != nil {
+		c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?error="+url.QueryEscape(h.t(c, "err.device_not_found")))
+		return
+	}
+	if dev.Status == deviceauth.DeviceStatusRevoked || dev.RevokedAt.Valid {
+		c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?error="+url.QueryEscape(h.t(c, "err.invalid_device_status")))
+		return
+	}
+	updates := map[string]any{
+		"status":              deviceauth.DeviceStatusApproved,
+		"approved_at":         time.Now(),
+		"approved_by_user_id": admin.ID,
+		"revoked_at":          nil,
+	}
+	if name := strings.TrimSpace(c.PostForm("name")); name != "" {
+		if len([]rune(name)) > 128 {
+			c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?error="+url.QueryEscape(h.t(c, "err.device_name_length")))
+			return
+		}
+		updates["name"] = name
+	}
+	if err := h.DB.Model(&models.ClientDevice{}).
+		Where("user_id = ? AND client_id = ?", uint(userID), clientID).
+		Updates(updates).Error; err != nil {
+		c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?error="+url.QueryEscape(h.t(c, "err.approve_failed")))
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?saved=1")
+}
+
 func (h *Handler) adminAuthorizeDevice(c *gin.Context) {
 	admin := h.webUser(c)
 	clientID := deviceauth.NormalizeClientID(c.Param("client_id"))
@@ -581,17 +621,12 @@ func (h *Handler) adminAuthorizeDevice(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?error="+url.QueryEscape(h.t(c, "err.device_not_found")))
 		return
 	}
-	name := dev.Name
-	if dev.Status == deviceauth.DeviceStatusPending {
-		name = strings.TrimSpace(c.PostForm("name"))
-		if name == "" {
-			name = dev.Name
-		} else if len([]rune(name)) > 128 {
-			c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?error="+url.QueryEscape(h.t(c, "err.device_name_length")))
-			return
-		}
+	if dev.Status != deviceauth.DeviceStatusApproved {
+		c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?error="+url.QueryEscape(h.t(c, "err.invalid_device_status")))
+		return
 	}
-	// 状态：pending 表单提交 approved 一并批准；空则保持当前状态。
+	name := dev.Name
+	// 仓库授权只允许在设备已批准后保存。
 	status := strings.TrimSpace(c.PostForm("status"))
 	if status == "" {
 		status = dev.Status
@@ -640,4 +675,3 @@ func (h *Handler) adminRevokeDevice(c *gin.Context) {
 	}
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?saved=1")
 }
-

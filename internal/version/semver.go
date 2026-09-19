@@ -1,4 +1,4 @@
-﻿// 版本比较
+// 版本比较
 package version
 
 import (
@@ -256,4 +256,3 @@ func Normalize(s string) string {
 	}
 	return s
 }
-

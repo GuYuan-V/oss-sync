@@ -12,7 +12,7 @@ import {
   TFolder,
   Vault,
 } from "obsidian";
-import type { Command } from "obsidian";
+import type { Command, Editor } from "obsidian";
 import { OSSApiClient, VaultOut } from "./api";
 import type {
   ShareOut,
@@ -20,6 +20,7 @@ import type {
   ServerUpdateCheckResponse,
   ServerUpdateStatusResponse,
   ServerUpdateTriggerResponse,
+  ServerPluginHook,
 } from "./api";
 import type { AuthResponse } from "./api";
 import {
@@ -67,6 +68,7 @@ import {
   type TranslationParams,
 } from "./i18n";
 import { localizeError } from "./localized-error";
+import { ConflictOpeningGuard } from "./conflict-opening-guard";
 
 interface PluginData extends OSSSettings {
   token?: string;
@@ -82,10 +84,10 @@ export default class OSSPlugin extends Plugin {
 
   private readonly diagnostics = new Diagnostics((event) => {
     if (this.settings.diagnosticsEnabled) {
-      console.log("[oss-sync]", event);
+      console.log("[oss-sync]", event.kind, JSON.stringify(event));
       // 同时用 warn 级别确保在过滤 debug 的控制台也能看到关键协作失败
       if (event.kind === "api_error" || event.kind === "collab_upload_attempt") {
-        console.warn("[oss-sync]", event);
+        console.warn("[oss-sync]", event.kind, JSON.stringify(event));
       }
     }
   });
@@ -97,6 +99,7 @@ export default class OSSPlugin extends Plugin {
   private serverUpdatePoller: ServerUpdatePoller | null = null;
   private loaded = false;
   private readonly conflictWarningLast = new Map<string, number>();
+  private readonly conflictOpenings = new ConflictOpeningGuard();
 
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
@@ -240,6 +243,7 @@ export default class OSSPlugin extends Plugin {
       void (async () => {
         await Promise.resolve();
         if (!this.loaded) return;
+        await this.registerServerPluginCommands();
         if (this.settings.vaultId) {
           this.collabManager.start();
         }
@@ -276,8 +280,9 @@ export default class OSSPlugin extends Plugin {
     });
   }
 
-  onunload(): void {
+  async onunload(): Promise<void> {
     this.loaded = false;
+    await this.syncEngine?.flushPendingQueue();
     this.syncEngine?.stop();
     this.collabManager?.stop();
     this.serverUpdatePoller?.dispose();
@@ -364,8 +369,8 @@ export default class OSSPlugin extends Plugin {
       this.settings.clientId = createClientID();
       await this.saveSettings();
     }
-    if (!this.settings.deviceName) {
-      this.settings.deviceName = `${this.app.vault.getName()} - Obsidian`;
+    if (this.settings.remotePollIntervalSec === 30) {
+      this.settings.remotePollIntervalSec = 3;
       await this.saveSettings();
     }
   }
@@ -377,6 +382,23 @@ export default class OSSPlugin extends Plugin {
       ...(this.token ? { token: this.token } : {}),
     };
     await this.saveData(data);
+  }
+
+  async setDeviceName(deviceName: string): Promise<void> {
+    if (this.isLoggedIn()) throw new Error(this.t("notice.deviceNameChangeAfterLogout"));
+    const nextName = deviceName.trim();
+    if (!nextName) throw new Error(this.t("notice.deviceNameRequired"));
+    if (this.settings.deviceName && this.settings.deviceName !== nextName) {
+      this.settings.clientId = createClientID();
+      this.settings.vaultId = "";
+      this.settings.vaultName = "";
+      this.availableVaults = [];
+      this.api.setToken(null);
+      this.syncEngine.stop();
+      this.collabManager.stop();
+    }
+    this.settings.deviceName = nextName;
+    await this.saveSettings();
   }
 
   getLanguage(): PluginLanguage {
@@ -481,6 +503,7 @@ export default class OSSPlugin extends Plugin {
     this.syncEngine.start();
     if (this.settings.vaultId) {
       this.collabManager.start();
+      void this.syncEngine.runOnce({ forceFull: false });
     }
     return result;
   }
@@ -769,8 +792,10 @@ export default class OSSPlugin extends Plugin {
   }
 
   openConflictModal(path: string): void {
+    if (!this.conflictOpenings.begin(path)) return;
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
+      this.conflictOpenings.end(path);
       new Notice(this.t("notice.conflictFileMissing", { path }));
       this.syncEngine.dismissConflict(path);
       this.sidebarView?.refresh();
@@ -781,35 +806,78 @@ export default class OSSPlugin extends Plugin {
       let baseText: string | null = null;
       try {
         const conflict = this.syncEngine.getConflict(path);
-        if (!conflict || conflict.remoteDeleted) {
+        if (!conflict) {
           new Notice(this.t("notice.conflictTextUnavailable"));
+          this.conflictOpenings.end(path);
           return;
         }
-        const res = await this.api.downloadV2(
-          this.settings.vaultId,
-          path,
-          conflict.remoteRevision
-        );
-        remote = new TextDecoder().decode(new Uint8Array(res.content));
         baseText = this.syncEngine.getBaseline(path)?.baseText ?? null;
+        if (conflict.remoteDeleted) {
+          remote = "";
+        } else {
+          const res = await this.api.downloadV2(
+            this.settings.vaultId,
+            path,
+            conflict.remoteRevision
+          );
+          remote = new TextDecoder().decode(new Uint8Array(res.content));
+        }
       } catch (e) {
         new Notice(this.t("notice.fetchRemoteFailed", { error: this.localizedError(e) }));
+        this.conflictOpenings.end(path);
         return;
       }
       new ConflictModal(this.app, this, this.api, file, remote, async (r) => {
         await this.applyConflictResolution(path, r);
-      }, { baseText }).open();
+      }, { baseText, onClose: () => this.conflictOpenings.end(path) }).open();
     })();
   }
 
+  private async registerServerPluginCommands(): Promise<void> {
+    try {
+      const capabilities = await this.api.getServerPluginCapabilities();
+      for (const plugin of capabilities.plugins) {
+        for (const hook of plugin.hooks) {
+          if (hook.name !== "editor.command" || !hook.id || !hook.label) continue;
+          const command: ServerPluginHook = hook;
+          this.addCommand({
+            id: `oss-plugin-${plugin.plugin_id}-${command.id}`,
+            name: `${plugin.name}: ${command.label}`,
+            editorCallback: (editor) => {
+              void this.runEditorPluginCommand(plugin.plugin_id, command, editor);
+            },
+          });
+        }
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        new Notice(this.t("notice.pluginCapabilitiesFailed", { error: error.message }));
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private async runEditorPluginCommand(pluginID: string, hook: ServerPluginHook, editor: Editor): Promise<void> {
+    const result = await this.api.runServerPluginHook("editor.command", editor.getValue(), {
+      plugin_id: pluginID,
+      command_id: hook.id ?? "",
+    });
+    editor.setValue(result.content);
+  }
+
   openCollaborationConflictModal(vaultId: string, fileId: number): void {
+    const guardKey = `collaboration:${vaultId}:${fileId}`;
+    if (!this.conflictOpenings.begin(guardKey)) return;
     const entry = this.baseline.getCollaboration(vaultId, fileId);
     if (!entry?.conflict) {
+      this.conflictOpenings.end(guardKey);
       new Notice(this.t("notice.conflictTextUnavailable"));
       return;
     }
     const file = this.app.vault.getAbstractFileByPath(entry.localPath);
     if (!(file instanceof TFile)) {
+      this.conflictOpenings.end(guardKey);
       new Notice(this.t("notice.conflictFileMissing", { path: entry.localPath }));
       return;
     }
@@ -817,7 +885,7 @@ export default class OSSPlugin extends Plugin {
     const baseText = entry.baseText ?? "";
     new ConflictModal(this.app, this, this.api, file, remote, async (r) => {
       await this.applyCollaborationConflictResolution(vaultId, fileId, r);
-    }, { baseText }).open();
+    }, { baseText, onClose: () => this.conflictOpenings.end(guardKey) }).open();
   }
 
   async applyCollaborationConflictResolution(vaultId: string, fileId: number, r: ConflictResolution): Promise<void> {

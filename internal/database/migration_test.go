@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
 type legacySystemSetting struct {

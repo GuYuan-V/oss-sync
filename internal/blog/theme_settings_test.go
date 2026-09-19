@@ -1,110 +1,25 @@
 package blog
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
-func TestThemeSettings_loadsDeclaredFields_whenThemeIsPapertrail(t *testing.T) {
-	// Given
+func TestSupportsPublicBlog_allowsPapertrailButNotDefault(t *testing.T) {
 	dataDir := t.TempDir()
-
-	// When
-	fields, err := ThemeSettings(dataDir, "papertrail")
-
-	// Then
-	if err != nil {
-		t.Fatalf("ThemeSettings() error = %v", err)
+	if SupportsPublicBlog(dataDir, "default") {
+		t.Fatal("default theme must not support public blog")
 	}
-	if len(fields) != 6 {
-		t.Fatalf("field count = %d, want 6", len(fields))
-	}
-	if fields[0].Key != "blog_name" || fields[0].Type != "text" {
-		t.Fatalf("first field = %#v", fields[0])
-	}
-	if fields[3].Key != "logo_size" || fields[3].Type != "text" {
-		t.Fatalf("logo size field = %#v", fields[3])
-	}
-	if fields[4].Key != "logo_shape" || fields[4].Type != "choice" || len(fields[4].Choices) != 2 {
-		t.Fatalf("logo shape field = %#v", fields[4])
-	}
-	if fields[5].Key != "buttons" || fields[5].Type != "group" || len(fields[5].Fields) != 3 {
-		t.Fatalf("group field = %#v", fields[5])
+	if !SupportsPublicBlog(dataDir, "papertrail") {
+		t.Fatal("papertrail theme must support public blog")
 	}
 }
 
-func TestThemeSettings_returnsEmpty_whenThemeHasNoDeclaration(t *testing.T) {
-	// When
-	fields, err := ThemeSettings(t.TempDir(), "default")
-
-	// Then
-	if err != nil {
-		t.Fatalf("ThemeSettings() error = %v", err)
+func TestValidateThemeName_acceptsChineseAndRejectsPathCharacters(t *testing.T) {
+	if err := ValidateThemeName("中文模板"); err != nil {
+		t.Fatalf("Chinese theme name rejected: %v", err)
 	}
-	if len(fields) != 0 {
-		t.Fatalf("fields = %#v, want empty", fields)
-	}
-}
-
-func TestThemeSettings_loadsDeclaration_whenThemeIsCustom(t *testing.T) {
-	// Given
-	dataDir := t.TempDir()
-	dir := filepath.Join(dataDir, "themes", "custom")
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "template.html"), []byte("{{.ContentHTML}}"), 0o640); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{
-		"settings":[{"key":"subtitle","label":"副标题","type":"text","max_length":80}]
-	}`), 0o640); err != nil {
-		t.Fatal(err)
-	}
-
-	// When
-	fields, err := ThemeSettings(dataDir, "custom")
-
-	// Then
-	if err != nil {
-		t.Fatalf("ThemeSettings() error = %v", err)
-	}
-	if len(fields) != 1 || fields[0].Key != "subtitle" {
-		t.Fatalf("fields = %#v", fields)
-	}
-}
-
-func TestThemeSettings_rejectsInvalidDeclaration(t *testing.T) {
-	tests := []struct {
-		name   string
-		schema string
-	}{
-		{name: "unknown type", schema: `{"settings":[{"key":"x","label":"X","type":"number","max_length":10}]}`},
-		{name: "invalid key", schema: `{"settings":[{"key":"Bad-Key","label":"X","type":"text","max_length":10}]}`},
-		{name: "duplicate key", schema: `{"settings":[{"key":"x","label":"X","type":"text","max_length":10},{"key":"x","label":"Y","type":"text","max_length":10}]}`},
-		{name: "nested group", schema: `{"settings":[{"key":"rows","label":"Rows","type":"group","max_items":2,"fields":[{"key":"nested","label":"Nested","type":"group","max_items":2}]}]}`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Given
-			dataDir := t.TempDir()
-			dir := filepath.Join(dataDir, "themes", "custom")
-			if err := os.MkdirAll(dir, 0o750); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(tt.schema), 0o640); err != nil {
-				t.Fatal(err)
-			}
-
-			// When
-			_, err := ThemeSettings(dataDir, "custom")
-
-			// Then
-			if err == nil {
-				t.Fatal("ThemeSettings() error = nil, want invalid schema error")
-			}
-		})
+	for _, name := range []string{"../escape", "模板/子目录", "-invalid", "带 空格"} {
+		if err := ValidateThemeName(name); err == nil {
+			t.Fatalf("unsafe theme name %q accepted", name)
+		}
 	}
 }
 
@@ -170,9 +85,16 @@ func TestValidateThemeConfig_rejectsInvalidURL(t *testing.T) {
 
 func TestValidateThemeConfig_preservesPapertrailShape_whenLegacyValuesAreSaved(t *testing.T) {
 	// Given
-	fields, err := ThemeSettings(t.TempDir(), "papertrail")
-	if err != nil {
-		t.Fatal(err)
+	fields := []ThemeSettingField{
+		{Key: "blog_name", Label: "博客名称", Type: "text", MaxLength: 120},
+		{Key: "description", Label: "博客介绍", Type: "textarea", MaxLength: 500},
+		{Key: "logo_url", Label: "Logo", Type: "url", MaxLength: 512},
+		{Key: "logo_size", Label: "Logo 大小", Type: "text", MaxLength: 3},
+		{Key: "buttons", Label: "按钮", Type: "group", MaxItems: 5, Fields: []ThemeSettingField{
+			{Key: "label", Label: "名称", Type: "text", MaxLength: 40, Required: true},
+			{Key: "url", Label: "URL", Type: "url", MaxLength: 512, Required: true},
+			{Key: "icon_url", Label: "图标", Type: "url", MaxLength: 512},
+		}},
 	}
 	raw := map[string]any{
 		"logo_url":    "/logo.svg",

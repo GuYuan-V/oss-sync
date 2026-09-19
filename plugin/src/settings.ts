@@ -55,7 +55,7 @@ export const DEFAULT_SETTINGS: OSSSettings = {
   vaultName: "",
   clientId: "",
   deviceName: "",
-  remotePollIntervalSec: 30,
+  remotePollIntervalSec: 3,
   forceSSE: false,
   diagnosticsEnabled: false,
   vaultSyncMode: "short_poll",

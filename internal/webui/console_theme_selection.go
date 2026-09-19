@@ -1,4 +1,4 @@
-﻿// 控制台主题选择
+// 控制台主题选择
 package webui
 
 import (
@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/consoletheme"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/consoletheme"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func (h *Handler) selectedConsoleTheme(userID uint) string {
@@ -62,4 +62,3 @@ func (h *Handler) consoleThemeAsset(c *gin.Context) {
 	}
 	c.File(path)
 }
-

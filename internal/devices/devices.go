@@ -1,4 +1,4 @@
-﻿// 设备管理
+// 设备管理
 package devices
 
 import (
@@ -12,11 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/vaultaccess"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
 var ErrRevoked = deviceauth.ErrRevoked
@@ -447,4 +447,3 @@ func formatTime(value time.Time) string {
 	}
 	return value.UTC().Format(time.RFC3339)
 }
-

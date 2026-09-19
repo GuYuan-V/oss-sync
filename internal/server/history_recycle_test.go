@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/oss/oss-server/internal/collaboration"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/collaboration"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func TestHistoryAndRecycleFlow(t *testing.T) {

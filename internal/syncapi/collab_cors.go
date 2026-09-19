@@ -1,4 +1,4 @@
-﻿// 协作跨域
+// 协作跨域
 package syncapi
 
 import "github.com/gin-gonic/gin"
@@ -14,4 +14,3 @@ func allowObsidianDesktopOrigin() gin.HandlerFunc {
 		c.Next()
 	}
 }
-

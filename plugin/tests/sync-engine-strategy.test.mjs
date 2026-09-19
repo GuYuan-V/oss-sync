@@ -65,3 +65,25 @@ test("restarts long polling when the server wait changes", async () => {
     await cleanup();
   }
 });
+
+test("refreshes the effective transport immediately after the user changes mode", async () => {
+  const { SyncEngine, cleanup } = await loadSyncEngine();
+  try {
+    const api = {
+      hasToken: () => true,
+      syncStrategy: async () => strategy("long_poll", 3, 30),
+    };
+    const engine = new SyncEngine({ vault: {} }, api, {}, plugin());
+    engine.strategy.strategy = strategy("short_poll", 3, 30);
+    engine.effectiveMode = "short_poll";
+    let resets = 0;
+    engine.resetPolling = () => resets++;
+
+    await engine.refreshPollingStrategy();
+
+    assert.equal(engine.effectiveMode, "long_poll");
+    assert.equal(resets, 1);
+  } finally {
+    await cleanup();
+  }
+});

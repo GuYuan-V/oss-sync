@@ -1,11 +1,11 @@
-﻿// 平台适配
+// 平台适配
 package update
 
 import (
 	"fmt"
 	"runtime"
 
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 // Platform 表示受支持的 OS/Arch 组合。
@@ -91,4 +91,3 @@ func ExpectedAssetNames(v string) (map[string]string, error) {
 	}
 	return out, nil
 }
-

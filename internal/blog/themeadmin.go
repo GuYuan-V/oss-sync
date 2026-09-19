@@ -14,7 +14,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 // BuiltinThemeNames 内置只读模板。
@@ -42,13 +42,14 @@ const (
 
 // ThemeInfo 模板目录条目。
 type ThemeInfo struct {
-	Name         string      `json:"name"`
-	Source       ThemeSource `json:"source"`
-	Creator      string      `json:"creator,omitempty"`
-	CreatedAt    string      `json:"created_at,omitempty"`
-	FileCount    int         `json:"file_count"`
-	Size         int64       `json:"size"`
-	UsedByVaults []string    `json:"used_by_vaults"`
+	Name               string      `json:"name"`
+	Source             ThemeSource `json:"source"`
+	Creator            string      `json:"creator,omitempty"`
+	CreatedAt          string      `json:"created_at,omitempty"`
+	FileCount          int         `json:"file_count"`
+	Size               int64       `json:"size"`
+	UsedByVaults       []string    `json:"used_by_vaults"`
+	SupportsPublicBlog bool        `json:"supports_public_blog"`
 }
 
 // zip limits 防止解压炸弹。
@@ -69,7 +70,7 @@ func ListThemes(db *gorm.DB, dataDir string) ([]ThemeInfo, error) {
 		fileCount, size := builtinThemeStats(name)
 		used := themesUsedByVaults(db, name)
 		out = append(out, ThemeInfo{
-			Name: name, Source: SourceBuiltin,
+			Name: name, Source: SourceBuiltin, SupportsPublicBlog: SupportsPublicBlog(dataDir, name),
 			FileCount: fileCount, Size: size, UsedByVaults: used,
 		})
 	}
@@ -102,7 +103,7 @@ func ListThemes(db *gorm.DB, dataDir string) ([]ThemeInfo, error) {
 		source := themeSourceOf(dataDir, name)
 		out = append(out, ThemeInfo{
 			Name: name, Source: source,
-			FileCount: fileCount, Size: size, UsedByVaults: used,
+			FileCount: fileCount, Size: size, UsedByVaults: used, SupportsPublicBlog: SupportsPublicBlog(dataDir, name),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -176,6 +177,9 @@ func UploadTheme(dataDir, themeName string, r io.ReaderAt, size int64) error {
 			continue
 		}
 		name := filepath.ToSlash(f.Name)
+		if name == "settings.json" {
+			return errors.New("模板不能包含 settings.json；功能设置必须由关联插件提供")
+		}
 		if !safeThemeEntryPath(name) {
 			return fmt.Errorf("ZIP 包含非法路径: %s", name)
 		}
@@ -284,6 +288,9 @@ func ListThemeFiles(dataDir, themeName string) ([]string, error) {
 		if err != nil {
 			return err
 		}
+		if filepath.ToSlash(rel) == "settings.json" {
+			return nil
+		}
 		out = append(out, filepath.ToSlash(rel))
 		return nil
 	})
@@ -320,6 +327,9 @@ func SaveThemeFile(dataDir, themeName, relPath string, content []byte) error {
 	}
 	if len(content) > maxEditableBytes {
 		return errors.New("文件超过 1 MiB 编辑上限")
+	}
+	if filepath.ToSlash(relPath) == "settings.json" {
+		return errors.New("模板不能保存 settings.json；功能设置必须由关联插件提供")
 	}
 	abs, err := safeThemeFilePath(dataDir, themeName, relPath)
 	if err != nil {
@@ -389,6 +399,9 @@ func CreateThemeZip(dataDir, themeName string, zw *zip.Writer) error {
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
 			return err
+		}
+		if filepath.ToSlash(rel) == "settings.json" {
+			return nil
 		}
 		header, err := zip.FileInfoHeader(info)
 		if err != nil {

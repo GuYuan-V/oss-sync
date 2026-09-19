@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 func newServiceTestManager(t *testing.T) (*Manager, *Updater, *config.Config, string) {

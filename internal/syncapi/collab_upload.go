@@ -19,12 +19,12 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/oss/oss-server/internal/collaboration"
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/history"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/settingspolicy"
-	"github.com/oss/oss-server/internal/storagequota"
+	"github.com/helantianshen/oss-sync/internal/collaboration"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/history"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/storagequota"
 )
 
 var (

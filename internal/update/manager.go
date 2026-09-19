@@ -1,4 +1,4 @@
-﻿// 更新管理
+// 更新管理
 package update
 
 import (
@@ -313,4 +313,3 @@ func (m *Manager) CurrentStatus() ManagerStatus {
 	}
 	return ManagerStatus{Active: active, History: hist}
 }
-

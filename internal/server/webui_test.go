@@ -13,9 +13,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/vaultbackup"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/vaultbackup"
 )
 
 func TestWebRegistrationCreatesPluginLoginAccount(t *testing.T) {
@@ -96,7 +96,7 @@ func TestDashboardMetricsRequiresSessionAndReturnsLiveFields(t *testing.T) {
 
 func TestAdminSystemControlsRegistration(t *testing.T) {
 	t.Chdir(t.TempDir())
-	srv, db, _ := newTestServer(t)
+	srv, db, dataDir := newTestServer(t)
 	router := srv.Router()
 	if _, err := auth.CreateAccount(db, "admin", "admin-password-123", "admin"); err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestAdminSystemControlsRegistration(t *testing.T) {
 	}
 
 	backup := models.VaultBackup{ID: "backup-test", VaultID: "deleted-vault", OwnerID: 1, VaultName: "Deleted notes", FileName: "vault-backup-test.zip", Size: 7}
-	backupPath, err := vaultbackup.Path(backup.FileName)
+	backupPath, err := vaultbackup.Path(dataDir, backup.FileName)
 	if err != nil {
 		t.Fatal(err)
 	}

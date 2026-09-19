@@ -1,4 +1,4 @@
-﻿// 访问日志
+// 访问日志
 package server
 
 import (
@@ -27,4 +27,3 @@ func formatAccessLog(params gin.LogFormatterParams) string {
 		path,
 	)
 }
-

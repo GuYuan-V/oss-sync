@@ -1,13 +1,15 @@
 package recycle
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func TestRetentionDays_whenVaultOverrideExceedsAdministratorCeiling_clampsToCeiling(t *testing.T) {
@@ -58,5 +60,23 @@ func TestRetentionDays_whenVaultOverrideExceedsAdministratorCeiling_clampsToCeil
 	}
 	if days != 90 {
 		t.Errorf("retention days = %d, want 90", days)
+	}
+}
+
+func TestCanRestore_whenRetentionBoundaryPasses_marksEntryExpired(t *testing.T) {
+	// Given
+	deletedAt := time.Date(2026, time.September, 16, 12, 0, 0, 0, time.UTC)
+	file := models.File{DeletedAt: sql.NullTime{Time: deletedAt, Valid: true}}
+
+	// When
+	beforeExpiry := CanRestore(file, 1, deletedAt.Add(24*time.Hour-time.Second))
+	atExpiry := CanRestore(file, 1, deletedAt.Add(24*time.Hour))
+
+	// Then
+	if !beforeExpiry {
+		t.Error("entry should remain restorable before its retention deadline")
+	}
+	if atExpiry {
+		t.Error("entry should expire at its retention deadline")
 	}
 }

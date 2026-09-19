@@ -1,4 +1,4 @@
-﻿// 仓库服务
+// 仓库服务
 package vaults
 
 import (
@@ -11,13 +11,13 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/settingspolicy"
-	"github.com/oss/oss-server/internal/vaultaccess"
-	"github.com/oss/oss-server/internal/vaultbackup"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/vaultaccess"
+	"github.com/helantianshen/oss-sync/internal/vaultbackup"
 )
 
 type Handler struct {
@@ -250,7 +250,7 @@ func (h *Handler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, h.toOut(vault, role))
 }
 
-// Delete first writes a ZIP archive below ./backups/vaults, then permanently
+// Delete first writes a ZIP archive below the persistent data directory, then permanently
 // removes the Vault, shares, membership data, revisions and stored content.
 func (h *Handler) Delete(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
@@ -492,4 +492,3 @@ func (h *Handler) toOut(vault models.Vault, accessRole string) vaultOut {
 		AccessRole: accessRole, StorageQuota: vault.StorageQuota, StorageUsed: vault.StorageUsed,
 		HeadRevision: state.HeadRevision, CreatedAt: vault.CreatedAt.Format(time.RFC3339), UpdatedAt: vault.UpdatedAt.Format(time.RFC3339)}
 }
-

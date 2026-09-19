@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
 func TestParseAdminSystemInput_whenValuesAreWithinHardLimits_convertsMegabytesToBytes(t *testing.T) {

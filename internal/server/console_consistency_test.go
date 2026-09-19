@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/auth"
 )
 
 // consoleHeadingPages 覆盖全部 20 个已登录控制台模板，断言标题标签契约：
@@ -47,7 +47,6 @@ func TestConsoleHeadingHierarchy(t *testing.T) {
 		{"/dashboard/vaults/" + vaultID + "/history", ownerSession, ownerCSRF},
 		{"/dashboard/vaults/" + vaultID + "/members", ownerSession, ownerCSRF},
 		{"/dashboard/vaults/" + vaultID + "/settings", ownerSession, ownerCSRF},
-		{"/dashboard/vaults/" + vaultID + "/theme-settings", ownerSession, ownerCSRF},
 		{"/dashboard/admin", adminSession, adminCSRF},
 		{"/dashboard/admin/vaults", adminSession, adminCSRF},
 		{"/dashboard/admin/vaults/" + vaultID, adminSession, adminCSRF},

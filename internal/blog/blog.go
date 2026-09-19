@@ -7,6 +7,7 @@ package blog
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -22,20 +23,39 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/markdown"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/markdown"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
 //go:embed templates/*.html
 var templatesFS embed.FS
 
 type Handler struct {
-	DB  *gorm.DB
-	Cfg *config.Config
-	tpl *template.Template
+	DB          *gorm.DB
+	Cfg         *config.Config
+	tpl         *template.Template
+	pluginHooks PluginHookRunner
+}
+
+// PluginHookRunner is the minimal host contract used by blog rendering.
+type PluginHookRunner interface {
+	ApplyHook(context.Context, string, PluginHookPayload) (string, error)
+}
+
+type PluginHookPayload struct {
+	VaultID  string         `json:"vault_id"`
+	Theme    string         `json:"theme"`
+	Content  string         `json:"content"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+	Settings map[string]any `json:"settings,omitempty"`
+}
+
+// SetPluginHooks connects trusted server-plugin hooks to blog rendering.
+func (h *Handler) SetPluginHooks(runner PluginHookRunner) {
+	h.pluginHooks = runner
 }
 
 func New(db *gorm.DB, cfg *config.Config) (*Handler, error) {
@@ -132,7 +152,9 @@ func basenameNoExt(p string) string {
 
 type renderParams struct {
 	Title         string
+	ArticleTitle  string
 	ThemeName     string
+	VaultID       string
 	ThemeBaseURL  string
 	ThemeConfigJS template.JS
 	CustomHeader  template.HTML
@@ -168,6 +190,7 @@ func (h *Handler) shareRenderParams(share models.Share, setting *models.VaultSet
 	}
 	return renderParams{
 		ThemeName:     setting.ThemeName,
+		VaultID:       share.VaultID,
 		ThemeBaseURL:  themeBaseURL(setting.ThemeName),
 		ThemeConfigJS: template.JS(mustJSON(setting.ThemeConfig)),
 		CustomHeader:  customHeader,
@@ -219,6 +242,26 @@ func (h *Handler) loadVaultSettings(userID uint, vaultID string) (*models.VaultS
 }
 
 func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
+	if h.pluginHooks != nil && p.ContentHTML != "" {
+		filtered, err := h.pluginHooks.ApplyHook(c.Request.Context(), "blog.content", PluginHookPayload{
+			VaultID: p.VaultID,
+			Theme:   p.ThemeName,
+			Content: string(p.ContentHTML),
+		})
+		if err == nil {
+			p.ContentHTML = template.HTML(filtered)
+		}
+	}
+	if h.pluginHooks != nil && p.ContentHTML != "" {
+		filtered, err := h.pluginHooks.ApplyHook(c.Request.Context(), "theme.render", PluginHookPayload{
+			VaultID: p.VaultID,
+			Theme:   p.ThemeName,
+			Content: string(p.ContentHTML),
+		})
+		if err == nil {
+			p.ContentHTML = template.HTML(filtered)
+		}
+	}
 	if IsBuiltinTheme(p.ThemeName) {
 		if p.ThemeName == "papertrail" {
 			h.renderBuiltinTheme(c, p, "papertrail")
@@ -321,7 +364,8 @@ func (h *Handler) handleSingle(c *gin.Context) {
 
 	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
 	params := h.shareRenderParams(share, us)
-	params.Title = basenameNoExt(f.Path) + " · OSS"
+	params.ArticleTitle, _ = extractPostMeta(raw, f.Path)
+	params.Title = params.ArticleTitle + " · OSS"
 	params.ContentHTML = template.HTML(html)
 	h.renderTemplate(c, params)
 }
@@ -404,7 +448,8 @@ func (h *Handler) renderFolderFile(c *gin.Context, share models.Share, f models.
 
 	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
 	params := h.shareRenderParams(share, us)
-	params.Title = basenameNoExt(f.Path) + " · " + share.TargetPath
+	params.ArticleTitle, _ = extractPostMeta(raw, f.Path)
+	params.Title = params.ArticleTitle + " · " + share.TargetPath
 	params.ContentHTML = template.HTML(html)
 	h.renderTemplate(c, params)
 }

@@ -1,4 +1,4 @@
-﻿// 历史筛选
+// 历史筛选
 package webui
 
 import (
@@ -11,8 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/history"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/history"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 const historyFilterTimeLayout = "2006-01-02T15:04"
@@ -164,4 +164,3 @@ func historyActionLabel(action string) string {
 		return action
 	}
 }
-

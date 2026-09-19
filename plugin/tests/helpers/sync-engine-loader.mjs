@@ -25,7 +25,9 @@ export async function loadModule(entryPath) {
             contents: `
               export class App {}
               export class Vault {}
-              export class Notice {}
+              export class Notice {
+                constructor(message) { globalThis.__ossNotices?.push(message); }
+              }
               export class TFile {
                 static [Symbol.hasInstance](value) {
                   return value?.__tfile === true;

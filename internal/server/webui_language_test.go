@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 // TestWebConsoleLanguageDefaultChinese 验证新账户默认以中文渲染控制台。

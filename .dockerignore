@@ -14,6 +14,5 @@ plugin
 *.log
 *.tmp
 *.bak
-oss-server
-server
-server.exe
+/oss-server
+/server.exe

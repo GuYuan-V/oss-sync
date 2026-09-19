@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oss/oss-server/internal/history"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/history"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func TestWebConsoleHistory_whenFiltersCombined_returnsOnlyMatchingRows(t *testing.T) {

@@ -54,7 +54,7 @@ jobs:
           mkdir -p "$BUILD_DIR" "$DIST_DIR"
           built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           commit="${GITHUB_SHA::12}"
-          ldflags="-s -w -X github.com/oss/oss-server/internal/version.Version=$VERSION -X github.com/oss/oss-server/internal/version.Commit=$commit -X github.com/oss/oss-server/internal/version.BuiltAt=$built_at"
+          ldflags="-s -w -X github.com/helantianshen/oss-sync/internal/version.Version=$VERSION -X github.com/helantianshen/oss-sync/internal/version.Commit=$commit -X github.com/helantianshen/oss-sync/internal/version.BuiltAt=$built_at"
 
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
             goos="${target%/*}"

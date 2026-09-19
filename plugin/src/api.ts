@@ -203,6 +203,26 @@ export interface ServerVersionInfo {
   readonly built_at?: string;
 }
 
+export interface ServerPluginHook {
+  readonly name: string;
+  readonly id?: string;
+  readonly label?: string;
+}
+
+export interface ServerPluginCapability {
+  readonly plugin_id: string;
+  readonly name: string;
+  readonly hooks: readonly ServerPluginHook[];
+}
+
+export interface ServerPluginCapabilitiesResponse {
+  readonly plugins: readonly ServerPluginCapability[];
+}
+
+export interface ServerPluginHookResponse {
+  readonly content: string;
+}
+
 export interface ServerUpdateCandidate {
   readonly version: string;
   readonly tag: string;
@@ -326,6 +346,18 @@ export class OSSApiClient {
     return this.doRequest<ServerVersionInfo>("GET", "/api/admin/version");
   }
 
+  async getServerPluginCapabilities(): Promise<ServerPluginCapabilitiesResponse> {
+    return this.doRequest<ServerPluginCapabilitiesResponse>("GET", "/api/plugin-capabilities");
+  }
+
+  async runServerPluginHook(hook: string, content: string, metadata: Record<string, string> = {}): Promise<ServerPluginHookResponse> {
+    return this.doRequest<ServerPluginHookResponse>("POST", `/api/plugin-hooks/${encodeURIComponent(hook)}`, {
+      vault_id: this.settings.vaultId,
+      content,
+      metadata,
+    });
+  }
+
   async checkServerUpdate(): Promise<ServerUpdateCheckResponse> {
     return this.doRequest<ServerUpdateCheckResponse>("GET", "/api/admin/update/check");
   }
@@ -364,18 +396,6 @@ export class OSSApiClient {
       "GET",
       "/api/devices"
     );
-  }
-
-  async renameDevice(clientID: string, name: string): Promise<void> {
-    await this.doRequest<void>(
-      "PATCH",
-      `/api/devices/${encodeURIComponent(clientID)}`,
-      { name }
-    );
-  }
-
-  async revokeDevice(clientID: string): Promise<void> {
-    await this.doRequest<void>("DELETE", `/api/devices/${encodeURIComponent(clientID)}`);
   }
 
   async manifest(vaultID: string, after = 0, waitSeconds = 0): Promise<SyncManifestResponse> {

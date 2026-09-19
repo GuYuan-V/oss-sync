@@ -15,8 +15,8 @@ import (
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 // Init 根据配置初始化 GORM 连接。
@@ -87,6 +87,10 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Share{},
 		&models.Collaboration{},
 		&models.FileHistory{},
+		&models.ServerPlugin{},
+		&models.ServerPluginAssociation{},
+		&models.ServerPluginMigration{},
+		&models.VaultPluginSetting{},
 	); err != nil {
 		return fmt.Errorf("AutoMigrate 失败: %w", err)
 	}
@@ -99,7 +103,27 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := backfillDeviceStates(db); err != nil {
 		return err
 	}
-	return backfillVaultSettings(db)
+	if err := backfillVaultSettings(db); err != nil {
+		return err
+	}
+	return backfillServerPluginMetadata(db)
+}
+
+func backfillServerPluginMetadata(db *gorm.DB) error {
+	if err := db.Model(&models.ServerPlugin{}).
+		Where("runtime = '' OR runtime IS NULL").
+		Update("runtime", "wasm").Error; err != nil {
+		return fmt.Errorf("回填插件运行时失败: %w", err)
+	}
+	if err := db.Model(&models.ServerPlugin{}).
+		Where("payload_hash = '' OR payload_hash IS NULL").
+		Updates(map[string]any{
+			"payload_hash": gorm.Expr("wasm_hash"),
+			"payload_size": gorm.Expr("wasm_size"),
+		}).Error; err != nil {
+		return fmt.Errorf("回填插件载荷元数据失败: %w", err)
+	}
+	return nil
 }
 
 // backfillLegacyVaults 只为升级前没有 VaultID 的历史内容创建承载 Vault。

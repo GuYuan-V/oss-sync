@@ -1,4 +1,4 @@
-﻿// 限流
+// 限流
 package auth
 
 import (
@@ -39,4 +39,3 @@ func (l *AttemptLimiter) Allow(key string) bool {
 	l.entries[key] = append(kept, now)
 	return true
 }
-

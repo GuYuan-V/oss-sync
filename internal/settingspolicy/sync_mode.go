@@ -1,4 +1,4 @@
-﻿// 同步模式策略
+// 同步模式策略
 package settingspolicy
 
 import (
@@ -26,4 +26,3 @@ func ParseSyncMode(value string) (SyncMode, error) {
 		return "", fmt.Errorf("%w: %q", ErrInvalidSyncMode, value)
 	}
 }
-

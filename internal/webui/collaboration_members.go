@@ -1,4 +1,4 @@
-﻿// 协作成员页面
+// 协作成员页面
 package webui
 
 import (
@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/collaboration"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/vaultaccess"
+	"github.com/helantianshen/oss-sync/internal/collaboration"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
 type collaborationArticleRow struct {
@@ -149,4 +149,3 @@ func (h *Handler) revokeMemberCollaborations(c *gin.Context) {
 	}
 	c.Redirect(http.StatusSeeOther, redirect+"?saved=1")
 }
-

@@ -1,4 +1,4 @@
-﻿// 账户设置
+// 账户设置
 package webui
 
 import (
@@ -12,10 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/consoletheme"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/consoletheme"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
 type accountData struct {
@@ -227,4 +227,3 @@ func (h *Handler) renderAccountError(c *gin.Context, user *models.User, status i
 	data.Error = message
 	h.render(c, status, "account", h.t(c, "page.account"), "account", "account", data)
 }
-

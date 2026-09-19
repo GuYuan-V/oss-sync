@@ -1,11 +1,11 @@
-﻿// 存储路径
+// 存储路径
 package filestore
 
 import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 // VaultStorageKey 返回 Vault 文件的标准存储键。
@@ -24,4 +24,3 @@ func DiskPath(dataDir string, file models.File) string {
 		filepath.FromSlash(file.Path),
 	)
 }
-

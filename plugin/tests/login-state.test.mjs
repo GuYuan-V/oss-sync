@@ -26,6 +26,8 @@ test("login accepts existing credentials shorter than registration minimums", as
   const { module, cleanup } = await loadLoginState();
   try {
     assert.equal(module.validateLoginCredentials("ab", "short"), null);
+    assert.equal(module.validateServerURL("http://localhost:8080"), null);
+    assert.equal(module.validateServerURL("https://sync.example.com"), null);
   } finally {
     await cleanup();
   }
@@ -36,6 +38,17 @@ test("login rejects only missing credential fields", async () => {
   try {
     assert.equal(module.validateLoginCredentials("", "password"), "username_required");
     assert.equal(module.validateLoginCredentials("user", ""), "password_required");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("server URL validation explains missing protocols and malformed URLs", async () => {
+  const { module, cleanup } = await loadLoginState();
+  try {
+    assert.equal(module.validateServerURL("localhost:8080"), "protocol_required");
+    assert.equal(module.validateServerURL("ftp://sync.example.com"), "protocol_required");
+    assert.equal(module.validateServerURL("http://"), "invalid_url");
   } finally {
     await cleanup();
   }

@@ -1,4 +1,4 @@
-﻿// 密钥管理
+// 密钥管理
 package auth
 
 import (
@@ -9,8 +9,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 // EnsureDatabaseJWTSecret loads the stable server signing key from the DB. On
@@ -48,4 +48,3 @@ func randomJWTSecret() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
-

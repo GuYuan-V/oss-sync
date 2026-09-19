@@ -11,9 +11,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/update"
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/update"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 // adminUpdateStatus 供模板与 JSON 状态接口共用。

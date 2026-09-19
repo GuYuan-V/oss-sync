@@ -1,4 +1,4 @@
-﻿// 数据模型
+// 数据模型
 package models
 
 import (
@@ -289,4 +289,3 @@ type FileHistory struct {
 	ClientID   string    `gorm:"size:64"`
 	CreatedAt  time.Time `gorm:"index"`
 }
-
