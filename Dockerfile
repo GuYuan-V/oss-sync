@@ -13,14 +13,15 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
-COPY cmd ./cmd
+COPY cmd/server ./cmd/server
 COPY internal ./internal
+COPY pkg/ossplugin ./pkg/ossplugin
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath \
-      -ldflags "-s -w -X github.com/oss/oss-server/internal/version.Version=$VERSION -X github.com/oss/oss-server/internal/version.Commit=$COMMIT -X github.com/oss/oss-server/internal/version.BuiltAt=$BUILT_AT" \
+      -ldflags "-s -w -X github.com/helantianshen/oss-sync/internal/version.Version=$VERSION -X github.com/helantianshen/oss-sync/internal/version.Commit=$COMMIT -X github.com/helantianshen/oss-sync/internal/version.BuiltAt=$BUILT_AT" \
       -o /out/oss-server ./cmd/server
 
 FROM alpine:3.24

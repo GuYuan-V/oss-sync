@@ -1,4 +1,4 @@
-﻿// 仓库文案
+// 仓库文案
 package webui
 
 func init() {
@@ -34,6 +34,7 @@ func init() {
 		"vault.recycle_bin_days_hint":         {"0 表示继承系统默认值（当前 %d 天）", "0 means inherit system default (currently %d days)"},
 		"vault.public_blog":                   {"公开首页博客", "Public blog homepage"},
 		"vault.public_blog_hint":              {"开启后，此 Vault 会显示在服务器首页，并可通过 /b/%s 访问。", "When enabled, this vault appears on the server homepage and is accessible via /b/%s."},
+		"vault.public_blog_unsupported":       {"该模板不支持公开博客。", "This template does not support public blogs."},
 		"vault.custom_header":                 {"自定义页眉", "Custom header"},
 		"vault.custom_footer":                 {"自定义页脚", "Custom footer"},
 		"vault.custom_fragments_desc":         {"仓库的自定义页眉/页脚只会影响该仓库的公开页面（首页与分享页），可用于品牌与说明。", "Custom header/footer only affects this vault's public pages (blog homepage and shares), useful for branding and notices."},
@@ -53,17 +54,9 @@ func init() {
 		"vault.document_preview":              {"文档预览", "Document preview"},
 		"vault.back_to_files":                 {"返回文件", "Back to files"},
 		"vault.download_original":             {"下载原文件", "Download original"},
-
-		// vault theme settings
-		"vault.theme_settings_saved":            {"%s %s已保存。", "%s %s saved."},
-		"vault.theme_settings_generated":        {"此页面由 %s 的 settings.json 动态生成，只保存该模板的专属内容。", "This page is generated from %s's settings.json and only saves that template's own content."},
-		"vault.theme_managed_in_settings":       {"模板选择和公开入口仍在仓库设置中管理。", "Template selection and public access are still managed in vault settings."},
-		"vault.theme_settings_delete_item":      {"删除此项", "Delete this item"},
-		"vault.theme_settings_add_button":       {"添加按钮", "Add item"},
-		"vault.theme_settings_item_suffix":      {"项", "items"},
-		"vault.theme_settings_save_button":      {"保存 %s %s", "Save %s %s"},
-		"vault.theme_settings_no_config":        {"当前模板没有可配置项。", "This template has no configurable items."},
-		"vault.theme_settings_back_to_settings": {"返回仓库设置选择其他模板", "Back to vault settings to choose another template"},
+		"vault.theme_settings_delete_item":    {"删除此项", "Delete this item"},
+		"vault.theme_settings_add_button":     {"添加项", "Add item"},
+		"vault.theme_settings_item_suffix":    {"项", "items"},
 
 		// share.* — vault shares page
 		"share.manage_shares_desc":   {"管理此仓库的文章与文件夹分享。分享公开后可被任何人访问。", "Manage article and folder shares for this vault. Shared content is publicly accessible."},
@@ -146,4 +139,3 @@ func init() {
 		"member.revoke_all":              {"取消全部授权", "Revoke all"},
 	})
 }
-

@@ -41,7 +41,9 @@ const OBSIDIAN_STUB = `
     constructor(message) { globalThis.__ossNotices?.push(message); }
   }
   export class TAbstractFile {}
-  export class TFile {}
+  export class TFile {
+    static [Symbol.hasInstance](value) { return value?.__tfile === true; }
+  }
   export class TFolder {}
   export class Vault {
     static recurseChildren() {}
@@ -53,7 +55,7 @@ const OBSIDIAN_STUB = `
       this.titleEl = new globalThis.FakeElement("h1");
       this.contentEl = new globalThis.FakeElement("div");
     }
-    open() {}
+    open() { globalThis.__ossOpenedModals?.push(this); }
     close() {}
   }
   export class Setting {

@@ -1,4 +1,4 @@
-﻿// 服务路由
+// 服务路由
 package server
 
 import (
@@ -10,18 +10,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/admin"
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/blog"
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/devices"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/shares"
-	"github.com/oss/oss-server/internal/syncapi"
-	"github.com/oss/oss-server/internal/update"
-	"github.com/oss/oss-server/internal/vaults"
-	"github.com/oss/oss-server/internal/version"
-	"github.com/oss/oss-server/internal/webui"
+	"github.com/helantianshen/oss-sync/internal/admin"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/blog"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/devices"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/serverplugin"
+	"github.com/helantianshen/oss-sync/internal/shares"
+	"github.com/helantianshen/oss-sync/internal/syncapi"
+	"github.com/helantianshen/oss-sync/internal/update"
+	"github.com/helantianshen/oss-sync/internal/vaults"
+	"github.com/helantianshen/oss-sync/internal/version"
+	"github.com/helantianshen/oss-sync/internal/webui"
 )
 
 // Server 持有运行期依赖：配置、DB、磁盘根。
@@ -32,6 +33,8 @@ type Server struct {
 	Updater *update.Updater
 	// UpdateService 为 helper 交接提供异步关闭回调，优于旧 supervisor 模型。
 	UpdateService *update.Service
+	// PluginManager 持有管理员安装的 WASM 服务插件。
+	PluginManager *serverplugin.Manager
 }
 
 // New 创建 Server 实例，确保磁盘根目录存在。
@@ -51,6 +54,9 @@ func (s *Server) Router() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(accessLogger())
+	if s.PluginManager != nil {
+		r.Use(s.PluginManager.Middleware(s.Cfg))
+	}
 
 	// 超出内存上限的 multipart 内容由 Gin 写入临时文件。
 	r.MaxMultipartMemory = s.Cfg.Server.MaxMultipartMemoryMB << 20
@@ -71,6 +77,9 @@ func (s *Server) Router() *gin.Engine {
 	if s.UpdateService != nil && s.Updater != nil {
 		webH.SetUpdateService(s.UpdateService, s.Updater)
 	}
+	if s.PluginManager != nil {
+		webH.SetPluginManager(s.PluginManager)
+	}
 	webH.Register(r)
 
 	vaultsH := vaults.New(s.DB, s.Cfg)
@@ -86,6 +95,9 @@ func (s *Server) Router() *gin.Engine {
 	if err != nil {
 		panic("blog.New: " + err.Error())
 	}
+	if s.PluginManager != nil {
+		blogH.SetPluginHooks(s.PluginManager)
+	}
 	blogH.Register(r)
 
 	sharesH := shares.New(s.DB, s.Cfg)
@@ -99,6 +111,9 @@ func (s *Server) Router() *gin.Engine {
 			updateH = update.NewHandler(s.DB, s.Cfg, s.Updater)
 		}
 		updateH.Register(r)
+	}
+	if s.PluginManager != nil {
+		s.PluginManager.RegisterRoutes(r, s.Cfg)
 	}
 
 	return r
@@ -139,4 +154,3 @@ func (s *Server) readyz(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"ready": true, "version": version.Version, "open_storage_issues": 0})
 }
-

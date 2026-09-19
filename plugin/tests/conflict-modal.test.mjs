@@ -208,6 +208,28 @@ test("renders the no-change state while retaining resolution settings", async ()
   }
 });
 
+test("runs the conflict lifecycle callback when the modal closes", async () => {
+  const { ConflictModal, cleanup } = await loadConflictModal();
+  try {
+    let closes = 0;
+    const modal = new ConflictModal(
+      { vault: { read: async () => "local" } },
+      pluginWithTranslations(),
+      {},
+      { path: "Notes/A.md" },
+      "remote",
+      async () => {},
+      { onClose: () => { closes += 1; } },
+    );
+
+    modal.onClose();
+
+    assert.equal(closes, 1);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("inserts WBR before forward-slash and backslash path separators in diff text and preserves visible text", async () => {
   const { ConflictModal, cleanup } = await loadConflictModal();
   try {

@@ -32,11 +32,13 @@ function seedPluginData(overrides = {}) {
 }
 function installWindow() {
   const origWindow = globalThis.window; const origFake = globalThis.FakeElement; const origNotices = globalThis.__ossNotices;
+  const origModals = globalThis.__ossOpenedModals;
   globalThis.window = { setInterval: () => 1, clearInterval: () => {}, setTimeout, clearTimeout };
-  globalThis.FakeElement = FakeElement; globalThis.__ossNotices = [];
+  globalThis.FakeElement = FakeElement; globalThis.__ossNotices = []; globalThis.__ossOpenedModals = [];
   return () => {
     if (origWindow === undefined) delete globalThis.window; else globalThis.window = origWindow;
     globalThis.FakeElement = origFake; globalThis.__ossNotices = origNotices;
+    globalThis.__ossOpenedModals = origModals;
   };
 }
 async function createPlugin(captured) {
@@ -189,5 +191,31 @@ test("expired device token is removed and prompts for login without losing vault
     assert.equal(saved.vaultName, "Vault");
     assert.equal(globalThis.__ossNotices.length, 1);
     assert.match(globalThis.__ossNotices[0], /expired|过期/i);
+  } finally { await plugin.onunload(); await cleanup(); restore(); }
+});
+
+test("opens one resolver for a remote deletion conflict and releases the path when closed", async () => {
+  const restore = installWindow();
+  const captured = { cb: null };
+  const { plugin, cleanup } = await createPlugin(captured);
+  try {
+    plugin.app.vault.getAbstractFileByPath = () => ({ __tfile: true, path: "note.md" });
+    plugin.syncEngine.getConflict = () => ({ remoteDeleted: true, remoteRevision: 7 });
+    plugin.syncEngine.getBaseline = () => ({ baseText: "before" });
+    let downloads = 0;
+    plugin.api.downloadV2 = async () => { downloads += 1; throw new Error("must not download a tombstone"); };
+
+    plugin.openConflictModal("note.md");
+    plugin.openConflictModal("note.md");
+    await flushTicks(2);
+
+    assert.equal(downloads, 0);
+    assert.equal(globalThis.__ossOpenedModals.length, 1);
+    assert.equal(globalThis.__ossNotices.length, 0);
+
+    globalThis.__ossOpenedModals[0].onClose();
+    plugin.openConflictModal("note.md");
+    await flushTicks(2);
+    assert.equal(globalThis.__ossOpenedModals.length, 2);
   } finally { await plugin.onunload(); await cleanup(); restore(); }
 });

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func withLocalHTTPServer(t *testing.T, handler http.Handler) string {

@@ -90,10 +90,10 @@ func TestSplitFrontmatter(t *testing.T) {
 
 func TestNormalizeRel(t *testing.T) {
 	cases := map[string]string{
-		"./a/b.png":   "a/b.png",
-		"\\a\\b.png":  "a/b.png",
-		"/a/b.png":    "a/b.png",
-		"a/../b.png":  "b.png",
+		"./a/b.png":  "a/b.png",
+		"\\a\\b.png": "a/b.png",
+		"/a/b.png":   "a/b.png",
+		"a/../b.png": "b.png",
 	}
 	for in, want := range cases {
 		if got := normalizeRel(in); got != want {

@@ -53,6 +53,11 @@ jobs:
       OSS_BUILT_AT: unknown
     steps:
       - uses: actions/checkout@v7
+      - name: Verify container build inputs
+        run: |
+          test -f cmd/server/main.go
+          test -f internal/server/server.go
+          grep -F 'github.com/helantianshen/oss-sync/internal/version.Version' Dockerfile
       - run: docker compose config --quiet
       - run: docker compose up --build --wait --wait-timeout 120
       - run: curl --fail --silent --show-error http://127.0.0.1:18080/readyz

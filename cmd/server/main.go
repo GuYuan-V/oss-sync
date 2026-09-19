@@ -11,14 +11,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/cron"
-	"github.com/oss/oss-server/internal/database"
-	"github.com/oss/oss-server/internal/reconcile"
-	"github.com/oss/oss-server/internal/server"
-	"github.com/oss/oss-server/internal/update"
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/cron"
+	"github.com/helantianshen/oss-sync/internal/database"
+	"github.com/helantianshen/oss-sync/internal/reconcile"
+	"github.com/helantianshen/oss-sync/internal/server"
+	"github.com/helantianshen/oss-sync/internal/serverplugin"
+	"github.com/helantianshen/oss-sync/internal/update"
+	"github.com/helantianshen/oss-sync/internal/version"
 
 	"gorm.io/gorm"
 )
@@ -76,6 +77,19 @@ func main() {
 		log.Printf("[OSS] 启动存储对账失败: %v", err)
 	}
 
+	pluginManager, err := serverplugin.NewManager(context.Background(), db, cfg.Storage.DataDir)
+	if err != nil {
+		log.Fatalf("初始化服务插件管理器失败: %v", err)
+	}
+	defer func() {
+		if err := pluginManager.Close(context.Background()); err != nil {
+			log.Printf("[OSS] 关闭服务插件管理器失败: %v", err)
+		}
+	}()
+	if err := pluginManager.LoadEnabled(context.Background()); err != nil {
+		log.Printf("[OSS] 加载服务插件失败: %v", err)
+	}
+
 	updateDone := make(chan struct{})
 	if updateSvc != nil {
 		updateSvc.SetOnShutdown(func() {
@@ -93,6 +107,7 @@ func main() {
 	}
 	srv.Updater = updater
 	srv.UpdateService = updateSvc
+	srv.PluginManager = pluginManager
 
 	router := srv.Router()
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
@@ -103,6 +118,9 @@ func main() {
 
 	sched := cron.NewScheduler(db, cfg)
 	sched.Register()
+	if err := pluginManager.RegisterTasks(sched); err != nil {
+		log.Printf("[OSS] 注册插件任务失败: %v", err)
+	}
 	sched.Start()
 
 	go func() {

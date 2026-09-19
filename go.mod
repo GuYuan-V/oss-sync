@@ -1,15 +1,17 @@
-module github.com/oss/oss-server
+module github.com/helantianshen/oss-sync
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/uuid v1.3.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/tetratelabs/wazero v1.12.0
 	github.com/yuin/goldmark v1.8.4
 	golang.org/x/crypto v0.23.0
-	golang.org/x/term v0.23.0
+	golang.org/x/net v0.25.0
+	golang.org/x/sys v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/postgres v1.5.7
 	gorm.io/gorm v1.25.10
@@ -46,8 +48,6 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	golang.org/x/arch v0.8.0 // indirect
-	golang.org/x/net v0.25.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/text v0.15.0 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
 	modernc.org/libc v1.22.5 // indirect

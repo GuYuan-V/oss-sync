@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 // 1. Token only for configured GitHub API asset origin, never for browser_download_url.

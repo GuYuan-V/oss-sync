@@ -1,4 +1,4 @@
-﻿// 认证设置
+// 认证设置
 package auth
 
 import (
@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 const systemSettingsID uint = 1
@@ -54,4 +54,3 @@ func SetRegistrationEnabled(db *gorm.DB, enabled bool) error {
 	}
 	return nil
 }
-

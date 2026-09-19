@@ -1,4 +1,4 @@
-﻿// 更新存储
+// 更新存储
 package update
 
 import (
@@ -340,4 +340,3 @@ func toPublic(op Operation) PublicOperation {
 		Error:     op.Error,
 	}
 }
-

@@ -137,8 +137,8 @@ The Obsidian right sidebar uses the host pane as its scroll owner. Its internal 
 - **Structure**: `仓库设置` lists built-in and administrator-published custom templates in a labelled native select.
 - **Permissions**: a Vault owner or manager selects the template for that Vault. Uploading, scaffolding, editing, downloading, and deleting global template files remains administrator-only.
 - **Sync policy boundary**: the same page shows the effective sync policy to every Vault manager, but only administrators receive an enabled policy selector; the server ignores forged policy fields from non-admin forms.
-- **State**: the selected `ThemeName` persists on `VaultSetting`; navigation refreshes against the selected template's optional settings declaration.
-- **Theme-owned settings**: any selected template may declare a bounded `settings.json`. When fields exist, the current-Vault navigation labels the shared route with the selected template name (for example, `papertrail 设置`); scalar and repeatable-group controls are generated from that declaration and persist only `VaultSetting.ThemeConfig`.
+- **State**: the selected `ThemeName` persists on `VaultSetting`; navigation refreshes against enabled plugins associated with the selected template.
+- **Functional settings**: templates do not declare or own settings. A linked plugin declares settings, stores values per Vault, and supplies safe values to the template through `.ThemeConfigJS`.
 
 ### Server console theme management
 
@@ -159,6 +159,12 @@ The Obsidian right sidebar uses the host pane as its scroll owner. Its internal 
 - **Actions**: both templates expose light, dark, permitted copy, and back-to-top controls. Papertrail additionally keeps logo and blog name at the left of its sticky top bar, custom links plus return-to-blog-home at the right, and a blog home containing identity plus every accessible shared article.
 - **States**: copy is rendered only when the share allows it and swaps to a short success label before restoring. An empty heading directory hides itself; back-to-top remains available in the reading toolbar.
 - **Accessibility**: utility controls use native buttons/links, the directory is a labelled navigation landmark, copy status is announced through a polite live region, and focus remains visible in both color schemes.
+
+### Repository identity link
+
+- **Structure**: every server-rendered console and public page, including both built-in reading templates, ends with a compact text link to the canonical GitHub repository.
+- **Layout**: the identifier remains in document flow and is centered across the footer row so it cannot cover article text or controls at desktop or mobile widths.
+- **Accessibility**: native external-link semantics, readable text, and a visible theme-colored focus outline.
 
 ### Obsidian conflict diff
 

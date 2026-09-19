@@ -1,10 +1,10 @@
-﻿// 更新状态
+// 更新状态
 package update
 
 import (
 	"time"
 
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 // OperationState 是更新操作的有穷状态，字符串值稳定，作为 API 与持久化契约。
@@ -112,4 +112,3 @@ func (u *Updater) Status() Status {
 		LastUpdate:       lu,
 	}
 }
-

@@ -6,8 +6,8 @@
   <meta name="description" content="{{.Description}}">
   <title>{{.Title}}</title>
   <script src="/ui/assets/theme.js?v=2"></script>
-  <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css?v=3">
-  <script defer src="{{.ThemeBaseURL}}/theme.js?v=3"></script>
+  <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css?v=4">
+  <script defer src="{{.ThemeBaseURL}}/theme.js?v=4"></script>
 </head>
 <body id="top">
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -78,7 +78,7 @@
       </div>
     </nav>
     <article class="pt-article oss-content" data-reading-content {{if .AllowCopy}}data-allow-copy{{end}} tabindex="-1">
-      {{if .IsFolder}}<h1>{{.FolderTitle}}</h1><nav class="pt-file-directory" aria-label="文件目录">{{.ContentHTML}}</nav>{{else}}{{.ContentHTML}}{{end}}
+      {{if .IsFolder}}<h1>{{.FolderTitle}}</h1><nav class="pt-file-directory" aria-label="文件目录">{{.ContentHTML}}</nav>{{else}}{{if .ArticleTitle}}<h1 class="pt-article-title" data-article-title>{{.ArticleTitle}}</h1>{{end}}{{.ContentHTML}}{{end}}
     </article>
     {{end}}
   </main>
@@ -90,5 +90,6 @@
   {{end}}
   {{if .FooterNotice}}<aside class="oss-notice">{{.FooterNotice}}</aside>{{end}}
   <p class="reading-status" data-copy-status role="status" aria-live="polite"></p>
+    <p class="oss-repository-link">Powered by <a href="https://github.com/helantianshen/oss-sync" target="_blank" rel="noopener noreferrer">OSS Sync</a></p>
 </body>
 </html>

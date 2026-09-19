@@ -2,15 +2,18 @@ import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type { ButtonComponent } from "obsidian";
 import type OSSPlugin from "./main";
 import type { OSSSettings } from "./settings";
-import { validateLoginCredentials } from "./login-state";
+import { validateLoginCredentials, validateServerURL } from "./login-state";
 import { isUpdateAvailable } from "./plugin-update";
 
 export class OSSSettingTab extends PluginSettingTab {
+  private vaultRefreshTimer: number | null = null;
+
   constructor(app: App, private plugin: OSSPlugin) {
     super(app, plugin);
   }
 
   display(): void {
+    this.stopVaultRefresh();
     const { containerEl } = this;
     containerEl.empty();
 
@@ -33,6 +36,11 @@ export class OSSSettingTab extends PluginSettingTab {
           })
       );
 
+    if (!this.plugin.settings.deviceName.trim()) {
+      this.renderInitialDeviceName(containerEl);
+      return;
+    }
+
     new Setting(containerEl).setName(this.plugin.t("settings.server.title")).setHeading();
 
     new Setting(containerEl)
@@ -43,7 +51,7 @@ export class OSSSettingTab extends PluginSettingTab {
           .setPlaceholder("http://localhost:8080")
           .setValue(this.plugin.settings.serverUrl)
           .onChange(async (value) => {
-            this.plugin.settings.serverUrl = value.replace(/\/$/, "");
+            this.plugin.settings.serverUrl = value.trim().replace(/\/$/, "");
             await this.plugin.saveSettings();
           })
       );
@@ -57,9 +65,14 @@ export class OSSSettingTab extends PluginSettingTab {
             await this.plugin.logout();
             new Notice(this.plugin.t("notice.logoutSuccess"));
             this.display();
-          })
+         })
         );
+      new Setting(containerEl)
+        .setName(this.plugin.t("settings.devices.thisDevice"))
+        .setDesc(this.plugin.settings.deviceName);
     } else {
+      this.renderLoggedOutDeviceName(containerEl);
+
       new Setting(containerEl)
         .setName(this.plugin.t("settings.server.username"))
         .addText((text) =>
@@ -87,9 +100,14 @@ export class OSSSettingTab extends PluginSettingTab {
         .setDesc(this.plugin.t("settings.server.checking"))
         .addButton((btn) =>
           btn.setButtonText(this.plugin.t("settings.server.loginButton")).onClick(async () => {
+            const serverUrlError = validateServerURL(this.plugin.settings.serverUrl);
+            if (serverUrlError) {
+              new Notice(this.plugin.t(serverUrlError === "protocol_required" ? "settings.server.protocolRequired" : "settings.server.invalidUrl"));
+              return;
+            }
             const error = this.validateCredentials();
             if (error) {
-              new Notice(error === this.plugin.t("settings.server.usernameRequired") || error === this.plugin.t("settings.server.passwordRequired") ? error : this.plugin.t("notice.invalidCredentials"));
+              new Notice(error);
               return;
             }
             try {
@@ -112,22 +130,29 @@ export class OSSSettingTab extends PluginSettingTab {
         )
         .addButton((btn) =>
           btn.setButtonText(this.plugin.t("settings.server.registrationButton")).onClick(() => {
+            const serverUrlError = validateServerURL(this.plugin.settings.serverUrl);
+            if (serverUrlError) {
+              new Notice(this.plugin.t(serverUrlError === "protocol_required" ? "settings.server.protocolRequired" : "settings.server.invalidUrl"));
+              return;
+            }
             window.open(this.plugin.webURL("/register"), "_blank", "noopener,noreferrer");
           })
         );
 
-      void this.plugin.api.authStatus().then((status) => {
-        if (status.needs_first_admin) {
-          authSetting.setDesc(this.plugin.t("settings.server.needsAdmin"));
-        } else if (status.registration_enabled) {
-          authSetting.setDesc(this.plugin.t("settings.server.registrationOpen"));
-        } else {
-          authSetting.setDesc(this.plugin.t("settings.server.registrationClosed"));
-        }
-      }).catch((e: unknown) => {
-        authSetting.setDesc(this.plugin.t("settings.server.statusUnavailable"));
-        new Notice(this.plugin.t("notice.authStatusFailed", { error: this.errorMessage(e) }));
-      });
+      if (!validateServerURL(this.plugin.settings.serverUrl)) {
+        void this.plugin.api.authStatus().then((status) => {
+          if (status.needs_first_admin) {
+            authSetting.setDesc(this.plugin.t("settings.server.needsAdmin"));
+          } else if (status.registration_enabled) {
+            authSetting.setDesc(this.plugin.t("settings.server.registrationOpen"));
+          } else {
+            authSetting.setDesc(this.plugin.t("settings.server.registrationClosed"));
+          }
+        }).catch((e: unknown) => {
+          authSetting.setDesc(this.plugin.t("settings.server.statusUnavailable"));
+          new Notice(this.plugin.t("notice.authStatusFailed", { error: this.errorMessage(e) }));
+        });
+      }
     }
 
     new Setting(containerEl).setName(this.plugin.t("settings.vault.title")).setHeading();
@@ -148,11 +173,16 @@ export class OSSSettingTab extends PluginSettingTab {
             new Notice(this.plugin.t("notice.vaultBindFailed", { error: this.errorMessage(error) }));
           }
         });
-        void this.plugin.refreshVaults().then((vaults) => {
-          if (vaults.length === 0) {
-            dropdown.addOption("", this.plugin.t("settings.vault.none"));
-            boundVaultSetting.setDesc(this.plugin.t("settings.vault.noneDesc"));
-          }
+        const applyVaultOptions = (vaults: Awaited<ReturnType<OSSPlugin["refreshVaults"]>>): void => {
+          while (dropdown.selectEl.options.length > 0) dropdown.selectEl.remove(0);
+          dropdown.addOption("", vaults.length === 0
+            ? this.plugin.t("settings.vault.none")
+            : this.plugin.t("settings.vault.select"));
+          boundVaultSetting.setDesc(
+            vaults.length === 0
+              ? this.plugin.t("settings.vault.noneDesc")
+              : this.plugin.t("settings.vault.boundDesc")
+          );
           for (const vault of vaults) {
             dropdown.addOption(
               vault.id,
@@ -161,10 +191,23 @@ export class OSSSettingTab extends PluginSettingTab {
                 : vault.name
             );
           }
-          dropdown.setValue(this.plugin.settings.vaultId);
-        }).catch(() => {
-          // 尚未登录时保留空列表。
-        });
+          const selected = vaults.some((vault) => vault.id === this.plugin.settings.vaultId)
+            ? this.plugin.settings.vaultId
+            : "";
+          dropdown.setValue(selected);
+        };
+        const refreshVaultOptions = async (): Promise<void> => {
+          if (!this.plugin.isLoggedIn()) return;
+          try {
+            applyVaultOptions(await this.plugin.refreshVaults());
+          } catch {
+            // 保留现有选项，下一次轮询继续尝试。
+          }
+        };
+        void refreshVaultOptions();
+        this.vaultRefreshTimer = window.setInterval(() => {
+          void refreshVaultOptions();
+        }, 3000);
       });
     let newVaultName = "";
     new Setting(containerEl)
@@ -198,39 +241,11 @@ export class OSSSettingTab extends PluginSettingTab {
 
     new Setting(containerEl).setName(this.plugin.t("settings.devices.title")).setHeading();
 
-    let nextDeviceName = this.plugin.settings.deviceName;
-    new Setting(containerEl)
-      .setName(this.plugin.t("settings.devices.thisDevice"))
-      .setDesc(this.plugin.t("settings.devices.thisDeviceDesc"))
-      .addText((text) =>
-        text.setValue(nextDeviceName).onChange((value) => {
-          nextDeviceName = value.trim();
-        })
-      )
-      .addButton((button) =>
-        button.setButtonText(this.plugin.t("settings.devices.rename")).onClick(async () => {
-          if (!nextDeviceName) {
-            new Notice(this.plugin.t("notice.deviceNameRequired"));
-            return;
-          }
-          try {
-            await this.plugin.api.renameDevice(this.plugin.settings.clientId, nextDeviceName);
-            this.plugin.settings.deviceName = nextDeviceName;
-            await this.plugin.saveSettings();
-            new Notice(this.plugin.t("notice.deviceRenamed"));
-            this.display();
-          } catch (error: unknown) {
-            new Notice(this.plugin.t("notice.deviceRenameFailed", { error: this.errorMessage(error) }));
-          }
-        })
-      );
-
     const devicesEl = containerEl.createDiv({ cls: "oss-device-list" });
     devicesEl.setText(this.plugin.t("settings.devices.loading"));
     void this.plugin.api.listDevices().then((result) => {
       devicesEl.empty();
       for (const device of result.devices) {
-        let deviceName = device.name || device.client_id;
         const cursorSummary = device.vaults.length > 0
           ? device.vaults
               .map((vault) => `${vault.vault_name}: ${vault.last_cursor}/${vault.head_revision}`)
@@ -240,48 +255,9 @@ export class OSSSettingTab extends PluginSettingTab {
         const lastSeen = device.last_seen_at
           ? new Date(device.last_seen_at).toLocaleString()
           : this.plugin.t("common.unknown");
-        const setting = new Setting(devicesEl)
+        new Setting(devicesEl)
           .setName(`${device.name || this.plugin.t("settings.devices.unnamed")}${device.is_current ? ` (${this.plugin.t("settings.devices.currentSuffix")})` : ""}`)
-          .setDesc(this.plugin.t("settings.devices.summary", { state, lastSeen, cursor: cursorSummary }))
-          .addText((text) =>
-            text.setValue(device.name).onChange((value) => {
-              deviceName = value.trim();
-            })
-          )
-          .addButton((button) =>
-            button.setButtonText(this.plugin.t("common.save")).onClick(async () => {
-              if (!deviceName) {
-                new Notice(this.plugin.t("notice.deviceNameRequired"));
-                return;
-              }
-              try {
-                await this.plugin.api.renameDevice(device.client_id, deviceName);
-                if (device.is_current) {
-                  this.plugin.settings.deviceName = deviceName;
-                  await this.plugin.saveSettings();
-                }
-                this.display();
-              } catch (error: unknown) {
-                new Notice(this.plugin.t("notice.deviceRenameFailed", { error: this.errorMessage(error) }));
-              }
-            })
-          );
-        if (!device.is_current) {
-          setting.addButton((button) =>
-            button
-              .setButtonText(this.plugin.t("settings.devices.revoke"))
-              .setWarning()
-              .onClick(async () => {
-                try {
-                  await this.plugin.api.revokeDevice(device.client_id);
-                  new Notice(this.plugin.t("notice.deviceRevoked", { name: device.name || device.client_id }));
-                  this.display();
-                } catch (error: unknown) {
-                  new Notice(this.plugin.t("notice.deviceRevokeFailed", { error: this.errorMessage(error) }));
-                }
-              })
-          );
-        }
+          .setDesc(this.plugin.t("settings.devices.summary", { state, lastSeen, cursor: cursorSummary }));
       }
       if (result.devices.length === 0) {
         devicesEl.setText(this.plugin.t("settings.devices.none"));
@@ -321,7 +297,7 @@ export class OSSSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.vaultSyncMode = value as "short_poll" | "long_poll";
             await this.plugin.saveSettings();
-            this.plugin.syncEngine.resetPolling();
+            await this.plugin.syncEngine.refreshPollingStrategy();
           })
       );
 
@@ -370,11 +346,11 @@ export class OSSSettingTab extends PluginSettingTab {
       .setDesc(this.plugin.t("settings.sync.remoteIntervalDesc"))
       .addText((text) =>
         text
-          .setPlaceholder("30")
+          .setPlaceholder("3")
           .setValue(String(this.plugin.settings.remotePollIntervalSec))
           .onChange(async (value) => {
             const n = parseInt(value, 10);
-            if (!isNaN(n) && n >= 10) {
+            if (!isNaN(n) && n >= 3) {
               this.plugin.settings.remotePollIntervalSec = n;
               await this.plugin.saveSettings();
               this.plugin.syncEngine.resetPolling();
@@ -440,6 +416,69 @@ export class OSSSettingTab extends PluginSettingTab {
     if (this.plugin.isAdmin()) {
       this.renderServerUpdateSection(containerEl);
     }
+  }
+
+  hide(): void {
+    this.stopVaultRefresh();
+    super.hide();
+  }
+
+  private stopVaultRefresh(): void {
+    if (this.vaultRefreshTimer !== null) {
+      window.clearInterval(this.vaultRefreshTimer);
+      this.vaultRefreshTimer = null;
+    }
+  }
+
+  private renderLoggedOutDeviceName(containerEl: HTMLElement): void {
+    let deviceName = this.plugin.settings.deviceName;
+    new Setting(containerEl)
+      .setName(this.plugin.t("settings.devices.thisDevice"))
+      .setDesc(this.plugin.t("settings.devices.thisDeviceDesc"))
+      .addText((text) => text
+        .setValue(deviceName)
+        .onChange((value) => {
+          deviceName = value.trim();
+        }))
+      .addButton((button) => button
+        .setButtonText(this.plugin.t("common.save"))
+        .onClick(async () => {
+          if (!deviceName) {
+            new Notice(this.plugin.t("notice.deviceNameRequired"));
+            return;
+          }
+          try {
+            await this.plugin.setDeviceName(deviceName);
+            new Notice(this.plugin.t("notice.deviceNameSaved"));
+            this.display();
+          } catch (error: unknown) {
+            new Notice(this.errorMessage(error));
+          }
+        }));
+  }
+
+  private renderInitialDeviceName(containerEl: HTMLElement): void {
+    new Setting(containerEl).setName(this.plugin.t("settings.devices.setupTitle")).setHeading();
+    let deviceName = this.plugin.settings.deviceName;
+    new Setting(containerEl)
+      .setName(this.plugin.t("settings.devices.setupName"))
+      .setDesc(this.plugin.t("settings.devices.setupDesc"))
+      .addText((text) => text.setValue(deviceName).onChange((value) => {
+        deviceName = value.trim();
+      }))
+      .addButton((button) => button.setButtonText(this.plugin.t("common.save")).onClick(async () => {
+        if (!deviceName) {
+          new Notice(this.plugin.t("notice.deviceNameRequired"));
+          return;
+        }
+        try {
+          await this.plugin.setDeviceName(deviceName);
+          new Notice(this.plugin.t("notice.deviceNameSaved"));
+          this.display();
+        } catch (error: unknown) {
+          new Notice(this.errorMessage(error));
+        }
+      }));
   }
 
   private renderUpdateSection(containerEl: HTMLElement): void {

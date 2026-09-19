@@ -1,30 +1,83 @@
-﻿// 博客主题
+// 博客主题
 package blog
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
+
+type themeMetadata struct {
+	SupportsPublicBlog bool `json:"supports_public_blog"`
+}
+
+// SupportsPublicBlog reports whether a theme explicitly supports public blog rendering.
+func SupportsPublicBlog(dataDir, themeName string) bool {
+	if IsBuiltinTheme(themeName) {
+		return themeName == "papertrail"
+	}
+	dir, err := themeDirectory(dataDir, themeName)
+	if err != nil {
+		return false
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "theme.json"))
+	if err != nil {
+		return CustomThemeExists(dataDir, themeName)
+	}
+	var metadata themeMetadata
+	return json.Unmarshal(raw, &metadata) == nil && metadata.SupportsPublicBlog
+}
+
+// ThemeHasBundledPlugin reports whether a custom theme carries a server plugin package.
+func ThemeHasBundledPlugin(dataDir, themeName string) bool {
+	if IsBuiltinTheme(themeName) {
+		return false
+	}
+	dir, err := themeDirectory(dataDir, themeName)
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dir, "plugin.zip"))
+	return err == nil && info.Mode().IsRegular()
+}
 
 const (
 	customTemplateFile = "template.html"
 	maxTemplateSize    = 1 << 20 // 1 MiB is ample for a page layout.
 )
 
-var themeNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
-
 // ValidateThemeName limits theme names to one portable directory component.
 // It is used for both disk access and the public asset URL.
 func ValidateThemeName(name string) error {
-	if !themeNamePattern.MatchString(name) {
+	if !validThemeName(name) {
 		return errors.New("主题名称只能使用字母、数字、连字符和下划线，且长度为 1–64")
 	}
 	return nil
+}
+
+func validThemeName(name string) bool {
+	if name == "" || utf8.RuneCountInString(name) > 64 || strings.TrimSpace(name) != name {
+		return false
+	}
+	for index, r := range name {
+		if index == 0 {
+			if !unicode.IsLetter(r) && !unicode.IsNumber(r) {
+				return false
+			}
+			continue
+		}
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '-' && r != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func themeDirectory(dataDir, themeName string) (string, error) {
@@ -110,4 +163,3 @@ func (h *Handler) customThemeTemplate(themeName string) (*template.Template, err
 	}
 	return template.New("custom-theme").Option("missingkey=error").Parse(string(raw))
 }
-

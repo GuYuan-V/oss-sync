@@ -26,11 +26,11 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/update"
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/update"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 func newWebUITestDB(t *testing.T) (*gorm.DB, *config.Config, string) {

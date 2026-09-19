@@ -17,10 +17,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/update"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/serverplugin"
+	"github.com/helantianshen/oss-sync/internal/update"
+	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
 // sessionCookie 是登录后网页会话的 HttpOnly cookie。
@@ -41,12 +43,18 @@ type Handler struct {
 	registerLimit *auth.AttemptLimiter
 	updater       *update.Updater
 	updateSvc     *update.Service
+	pluginManager *serverplugin.Manager
 }
 
 // SetUpdateService 注入共享更新服务（直接注入，不代理 Bearer token）。
 func (h *Handler) SetUpdateService(svc *update.Service, up *update.Updater) {
 	h.updateSvc = svc
 	h.updater = up
+}
+
+// SetPluginManager 注入服务插件管理器。
+func (h *Handler) SetPluginManager(manager *serverplugin.Manager) {
+	h.pluginManager = manager
 }
 
 // layoutData 是所有控制台页面共用的外壳数据。
@@ -59,6 +67,9 @@ type layoutData struct {
 	ShowSidebar      bool // 登录/注册页为 false
 	ActiveGroup      string
 	ActivePage       string
+	ActivePluginID   string
+	PluginSettings   []pluginNav
+	PluginAdminPages []serverplugin.PluginAdminPage
 	CurrentVault     *vaultNav // 进入仓库页后为当前仓库导航
 	Flash            string
 	FlashKind        string // success / error
@@ -73,10 +84,13 @@ func (ld layoutData) T(key string, args ...any) string {
 
 // vaultNav 侧边栏"当前仓库"菜单的上下文。
 type vaultNav struct {
-	ID                 string
-	Name               string
-	HasThemeSettings   bool
-	ThemeSettingsLabel string
+	ID   string
+	Name string
+}
+
+type pluginNav struct {
+	ID   string
+	Name string
 }
 
 func New(db *gorm.DB, cfg *config.Config) (*Handler, error) {
@@ -150,10 +164,12 @@ func (h *Handler) Register(r *gin.Engine) {
 		console.POST("/vaults/:vault_id/members/:user_id/collaborations/revoke", h.revokeMemberCollaborations)
 		console.GET("/vaults/:vault_id/settings", h.vaultSettingsPage)
 		console.POST("/vaults/:vault_id/settings", h.saveVaultSettings)
-		console.GET("/vaults/:vault_id/theme-settings", h.themeSettingsPage)
-		console.POST("/vaults/:vault_id/theme-settings", h.saveThemeSettings)
+		console.GET("/vaults/:vault_id/plugins/:plugin_id/settings", h.pluginSettingsPage)
+		console.POST("/vaults/:vault_id/plugins/:plugin_id/settings", h.savePluginSettings)
+		console.GET("/plugins/:plugin_id/settings", h.pluginSettingsGlobalPage)
+		console.POST("/plugins/:plugin_id/settings", h.savePluginSettingsGlobal)
 		console.GET("/vaults/:vault_id/papertrail", func(c *gin.Context) {
-			c.Redirect(http.StatusMovedPermanently, "/dashboard/vaults/"+url.PathEscape(c.Param("vault_id"))+"/theme-settings")
+			c.Redirect(http.StatusMovedPermanently, "/dashboard/plugins/papertrail-settings/settings?vault_id="+url.QueryEscape(c.Param("vault_id")))
 		})
 		console.POST("/vaults/:vault_id/delete", h.deleteVault)
 		console.GET("/devices", h.devicesPage)
@@ -178,6 +194,7 @@ func (h *Handler) Register(r *gin.Engine) {
 		adminGroup.GET("/vaults", h.adminVaultsPage)
 		adminGroup.GET("/vaults/:vault_id", h.adminVaultDetailPage)
 		adminGroup.GET("/devices", h.adminDevicesPage)
+		adminGroup.POST("/devices/:client_id/approve", h.adminApproveDevice)
 		adminGroup.POST("/devices/:client_id/authorize", h.adminAuthorizeDevice)
 		adminGroup.POST("/devices/:client_id/revoke", h.adminRevokeDevice)
 		adminGroup.GET("/system", h.adminSystemPage)
@@ -199,6 +216,12 @@ func (h *Handler) Register(r *gin.Engine) {
 		adminGroup.GET("/console-themes/:name/download", h.adminConsoleThemeDownload)
 		adminGroup.POST("/console-themes/:name/files/save", h.adminConsoleThemeFileSave)
 		adminGroup.POST("/console-themes/:name/delete", h.adminConsoleThemeDelete)
+		adminGroup.GET("/plugins", h.adminPluginsPage)
+		adminGroup.POST("/plugins/upload", h.adminPluginUpload)
+		adminGroup.POST("/plugins/:id/enable", h.adminPluginEnable)
+		adminGroup.POST("/plugins/:id/disable", h.adminPluginDisable)
+		adminGroup.POST("/plugins/:id/delete", h.adminPluginDelete)
+		adminGroup.GET("/plugins/:id/page/:slug", h.adminPluginPage)
 		adminGroup.GET("/backups/:id/download", h.downloadBackup)
 		adminGroup.POST("/backups/:id/delete", h.deleteBackup)
 	}
@@ -395,11 +418,112 @@ func (h *Handler) render(c *gin.Context, status int, page, title string, activeG
 		ld.IsAdmin = u.Role == "admin"
 		ld.ConsoleThemeName = h.selectedConsoleTheme(u.ID)
 		ld.Language = h.userLang(c)
+		h.setPluginNavigationForUser(&ld, u)
+		if ld.IsAdmin && h.pluginManager != nil {
+			ld.PluginAdminPages = h.pluginManager.AdminPages()
+		}
 	}
 	if token, err := c.Cookie(csrfCookie); err == nil {
 		ld.CSRF = token
 	}
 	h.renderWithLayout(c, status, ld, data)
+}
+
+func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
+	if h.hasAccessibleTheme(u, "papertrail") {
+		papertrailAdded := false
+		for _, manifest := range serverplugin.BuiltinManifests() {
+			if manifest.ID == "papertrail-settings" {
+				ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
+				papertrailAdded = true
+				break
+			}
+		}
+		if !papertrailAdded {
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: "papertrail-settings", Name: "Papertrail"})
+		}
+	}
+	var plugins []models.ServerPlugin
+	if err := h.DB.Where("enabled = ?", true).Order("id asc").Find(&plugins).Error; err != nil {
+		return
+	}
+	for _, plugin := range plugins {
+		manifest, err := serverplugin.ParseManifest([]byte(plugin.ManifestJSON))
+		if h.pluginManager != nil {
+			if registration, ok := h.pluginManager.RegistrationFor(plugin.ID); ok && len(registration.Settings) > 0 {
+				manifest.Settings = registration.Settings
+			}
+		}
+		if err == nil && len(manifest.Settings) > 0 && pluginHasNoAssociations(h.DB, manifest.ID) {
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
+		}
+	}
+}
+
+// hasAccessibleTheme reports whether the current user can access at least one
+// Vault using the requested blog theme. Built-in theme settings are global
+// navigation entries, so they must not depend on the current Vault page.
+func (h *Handler) hasAccessibleTheme(u *models.User, themeName string) bool {
+	var count int64
+	query := h.DB.Model(&models.VaultSetting{}).
+		Where("theme_name = ?", themeName)
+	if u.Role == "admin" {
+		return query.Count(&count).Error == nil && count > 0
+	}
+	var vaultIDs []string
+	if err := h.DB.Model(&models.Vault{}).Where("owner_id = ?", u.ID).Pluck("id", &vaultIDs).Error; err != nil {
+		return false
+	}
+	var memberIDs []string
+	if err := h.DB.Model(&models.VaultMember{}).Where("user_id = ? AND role IN ?", u.ID, []string{vaultaccess.RoleManager, vaultaccess.RoleParticipant}).Pluck("vault_id", &memberIDs).Error; err == nil {
+		vaultIDs = append(vaultIDs, memberIDs...)
+	}
+	if len(vaultIDs) == 0 {
+		return false
+	}
+	return query.Where("vault_id IN ?", vaultIDs).Count(&count).Error == nil && count > 0
+}
+
+func (h *Handler) setPluginNavigationForVault(ld *layoutData, vaultID string, u *models.User) {
+	var setting models.VaultSetting
+	_ = h.DB.Where("vault_id = ?", vaultID).First(&setting).Error
+	if setting.ThemeName == "" {
+		setting.ThemeName = "default"
+	}
+	h.setPluginNavigationForUser(ld, u)
+	var plugins []models.ServerPlugin
+	if err := h.DB.Where("enabled = ?", true).Order("id asc").Find(&plugins).Error; err != nil {
+		return
+	}
+	for _, plugin := range plugins {
+		manifest, err := serverplugin.ParseManifest([]byte(plugin.ManifestJSON))
+		if err != nil {
+			continue
+		}
+		if h.pluginManager != nil {
+			if registration, ok := h.pluginManager.RegistrationFor(plugin.ID); ok && len(registration.Settings) > 0 {
+				manifest.Settings = registration.Settings
+			}
+		}
+		if len(manifest.Settings) == 0 || pluginHasNoAssociations(h.DB, manifest.ID) {
+			continue
+		}
+		var links []models.ServerPluginAssociation
+		if err := h.DB.Where("plugin_id = ?", manifest.ID).Find(&links).Error; err != nil {
+			continue
+		}
+		for _, link := range links {
+			if link.Kind == "blog_theme" && link.TargetID == setting.ThemeName {
+				ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
+				break
+			}
+		}
+	}
+}
+
+func pluginHasNoAssociations(db *gorm.DB, pluginID string) bool {
+	var count int64
+	return db.Model(&models.ServerPluginAssociation{}).Where("plugin_id = ?", pluginID).Count(&count).Error == nil && count == 0
 }
 
 // renderWithLayout 渲染页面内容并把结果注入统一布局。

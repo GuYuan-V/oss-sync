@@ -9,12 +9,15 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
+
+var ErrRetentionExpired = errors.New("recycle retention has expired")
 
 // RetentionDays 返回仓库的回收站保留天数，0 表示继承系统默认值。
 func RetentionDays(db *gorm.DB, vaultID string) (int, error) {
@@ -32,6 +35,29 @@ func RetentionDays(db *gorm.DB, vaultID string) (int, error) {
 		days = setting.RecycleBinDays
 	}
 	return days, nil
+}
+
+func ExpiresAt(file models.File, retentionDays int) time.Time {
+	if !file.DeletedAt.Valid {
+		return time.Time{}
+	}
+	return file.DeletedAt.Time.Add(time.Duration(retentionDays) * 24 * time.Hour)
+}
+
+func CanRestore(file models.File, retentionDays int, now time.Time) bool {
+	expiresAt := ExpiresAt(file, retentionDays)
+	return !expiresAt.IsZero() && now.Before(expiresAt)
+}
+
+func CheckRestorable(db *gorm.DB, file models.File, now time.Time) error {
+	retentionDays, err := RetentionDays(db, file.VaultID)
+	if err != nil {
+		return err
+	}
+	if !CanRestore(file, retentionDays, now) {
+		return ErrRetentionExpired
+	}
+	return nil
 }
 
 // Key 返回某 File 在回收站中的存储键。

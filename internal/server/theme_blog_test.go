@@ -16,9 +16,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/blog"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/blog"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 // zipTheme 构造包含 template.html 的主题 ZIP。
@@ -212,12 +212,6 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	}
 	session, csrf := webLogin(t, router, "blog-root", "root-password-123")
 
-	// 默认模板没有专属设置字段。
-	defaultThemeSettings := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/theme-settings", nil, session, csrf)
-	if defaultThemeSettings.Code != http.StatusOK || !strings.Contains(defaultThemeSettings.Body.String(), "没有可配置项") {
-		t.Fatalf("default theme settings page: %d body=%s", defaultThemeSettings.Code, defaultThemeSettings.Body)
-	}
-
 	// 先通过仓库设置选择 papertrail 并启用公开入口。
 	vaultSettings := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings",
 		url.Values{
@@ -229,18 +223,19 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 		t.Fatalf("save vault theme: %d body=%s", vaultSettings.Code, vaultSettings.Body)
 	}
 
-	// 通用主题设置页按 settings.json 动态显示并保存博客信息。
-	pt := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/theme-settings", nil, session, csrf)
+	// Papertrail 功能设置由内置插件页面动态显示并保存博客信息。
+	pt := doForm(t, router, http.MethodGet, "/dashboard/plugins/papertrail-settings/settings?vault_id="+vaultID, nil, session, csrf)
 	if pt.Code != http.StatusOK ||
 		!strings.Contains(pt.Body.String(), `name="setting_blog_name"`) ||
-		!strings.Contains(pt.Body.String(), "papertrail 设置") ||
+		!strings.Contains(pt.Body.String(), "Papertrail 设置") ||
 		!strings.Contains(pt.Body.String(), `data-theme-setting-group`) ||
 		!strings.Contains(pt.Body.String(), `data-group-add`) ||
 		strings.Contains(pt.Body.String(), ` name="group_buttons_label"`) {
 		t.Fatalf("theme settings page: %d body=%s", pt.Code, pt.Body)
 	}
-	ptSave := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/theme-settings",
+	ptSave := doForm(t, router, http.MethodPost, "/dashboard/plugins/papertrail-settings/settings",
 		url.Values{
+			"vault_id":               {vaultID},
 			"setting_blog_name":      {"我的笔记"},
 			"setting_description":    {"公开的学习记录"},
 			"setting_logo_url":       {"https://example.com/logo.svg"},
@@ -252,7 +247,7 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	if ptSave.Code != http.StatusSeeOther {
 		t.Fatalf("save theme settings: %d body=%s", ptSave.Code, ptSave.Body)
 	}
-	ptSaved := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/theme-settings", nil, session, csrf)
+	ptSaved := doForm(t, router, http.MethodGet, "/dashboard/plugins/papertrail-settings/settings?vault_id="+vaultID, nil, session, csrf)
 	if ptSaved.Code != http.StatusOK ||
 		strings.Count(ptSaved.Body.String(), ` name="group_buttons_label"`) != 1 ||
 		!strings.Contains(ptSaved.Body.String(), `data-group-remove`) {
@@ -260,7 +255,7 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	}
 	legacyRoute := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/papertrail", nil, session, csrf)
 	if legacyRoute.Code != http.StatusMovedPermanently ||
-		legacyRoute.Header().Get("Location") != "/dashboard/vaults/"+vaultID+"/theme-settings" {
+		legacyRoute.Header().Get("Location") != "/dashboard/plugins/papertrail-settings/settings?vault_id="+vaultID {
 		t.Fatalf("legacy papertrail route: %d location=%q", legacyRoute.Code, legacyRoute.Header().Get("Location"))
 	}
 	var setting models.VaultSetting
@@ -317,7 +312,7 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 		!strings.Contains(blogEntry.Body.String(), "公开的学习记录") ||
 		!strings.Contains(blogEntry.Body.String(), "https://example.com/logo.svg") ||
 		!strings.Contains(blogEntry.Body.String(), "关于") ||
-		!strings.Contains(blogEntry.Body.String(), "你好世界") {
+		!strings.Contains(blogEntry.Body.String(), ">Hello</a>") {
 		t.Fatalf("blog entry: %d", blogEntry.Code)
 	}
 	if strings.Count(blogEntry.Body.String(), `href="/p/xyz"`) != 1 {
@@ -359,7 +354,7 @@ func TestPublicBlogRoutesRenderCustomFragmentsWithoutScriptAndExcludeFromHome(t 
 	customHeader := "HEADER_MARKER\n\n<a href=\"https://example.com\">Safe Link</a> <a href=\"javascript:alert(1)\">Unsafe</a>"
 	customFooter := "FOOTER_MARKER\n\n<img src=\"javascript:alert(1)\" onerror=\"alert(1)\" />"
 	res := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings", url.Values{
-		"theme_name":       {"default"},
+		"theme_name":       {"papertrail"},
 		"recycle_bin_days": {"0"},
 		"is_public_blog":   {"on"},
 		"custom_header":    {customHeader},
@@ -448,7 +443,7 @@ func TestPublicBlogRoutesDoNotRenderCustomFragmentsWhenPolicyDisabled(t *testing
 	session, csrf := webLogin(t, router, "policy-disabled-admin", "root-password-123")
 
 	res := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings", url.Values{
-		"theme_name":       {"default"},
+		"theme_name":       {"papertrail"},
 		"recycle_bin_days": {"0"},
 		"is_public_blog":   {"on"},
 		"custom_header":    {"SECRET_HEADER_MARKER"},

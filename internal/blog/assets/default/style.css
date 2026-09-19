@@ -229,6 +229,11 @@ button { font: inherit; }
 }
 .reading-status { position: fixed; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
 .oss-notice { padding: 12px 16px; color: var(--oss-muted); border-top: 1px solid var(--oss-border); }
+.oss-repository-link { display: block; width: 100%; margin: 24px 0 12px; color: var(--oss-muted); font-size: 12px; text-align: center; }
+.oss-repository-link a { color: inherit; text-decoration: none; }
+.oss-repository-link a:hover { color: var(--oss-text); }
+.oss-repository-link a:focus-visible { outline: 2px solid var(--oss-accent); outline-offset: 3px; }
+.oss-content mark { color: inherit; background: color-mix(in srgb, var(--oss-accent) 24%, transparent); }
 
 @media (max-width: 1220px) {
   .reading-toc { position: sticky; z-index: 10; top: 124px; width: min(760px, 100%); max-height: min(42dvh, 360px); margin: 0 auto 16px; box-shadow: var(--oss-shadow); }
@@ -250,19 +255,15 @@ button { font: inherit; }
     padding: 0;
     border: 0;
     background: transparent;
-    transform: translateX(-100%);
-    transition: transform 200ms ease;
+    pointer-events: none;
     overflow: visible;
     opacity: 0.98;
     z-index: 35;
   }
 
-  .reading-toc.is-open {
-    transform: translateX(0);
-  }
-
   .reading-toc__open {
     display: inline-flex;
+    pointer-events: auto;
   }
 
   .reading-toc__backdrop {
@@ -283,6 +284,7 @@ button { font: inherit; }
 
   .reading-toc__panel {
     position: relative;
+    z-index: 35;
     height: 100dvh;
     width: 100%;
     display: flex;
@@ -292,6 +294,14 @@ button { font: inherit; }
     border-right: 1px solid var(--oss-border);
     box-shadow: var(--oss-shadow);
     overflow: hidden;
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+    pointer-events: none;
+  }
+
+  .reading-toc.is-open .reading-toc__panel {
+    transform: translateX(0);
+    pointer-events: auto;
   }
 
   .reading-toc__panel-header {

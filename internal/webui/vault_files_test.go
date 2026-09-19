@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func TestVaultFilesTemplate_whenRendered_exposesManagementAndPerFileHistoryLinks(t *testing.T) {

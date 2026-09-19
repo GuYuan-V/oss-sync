@@ -1,4 +1,4 @@
-﻿// 分享管理
+// 分享管理
 package shares
 
 import (
@@ -11,10 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/vaultaccess"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
 type Handler struct {
@@ -367,4 +367,3 @@ func genShareID() (string, error) {
 	}
 	return string(out), nil
 }
-

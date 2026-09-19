@@ -31,6 +31,10 @@ a { color: var(--signal); text-underline-offset: .18em; }
 .oss-tree li { margin: .55em 0; }
 .notice { padding: 14px 17px; border-left: 4px solid var(--accent); background: #ebe3d5; }
 .site-footer { padding: 22px 0 34px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 12px; }
+.oss-repository-link { display: block; width: 100%; margin: 24px 0 12px; color: var(--muted); font-size: 12px; text-align: center; }
+.oss-repository-link a { color: inherit; text-decoration: none; }
+.oss-repository-link a:hover { color: var(--ink); }
+.oss-repository-link a:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
 
 @media (max-width: 560px) {
   .site-header { align-items: flex-start; flex-direction: column; gap: 8px; }

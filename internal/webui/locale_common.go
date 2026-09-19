@@ -1,4 +1,4 @@
-﻿// 通用文案
+// 通用文案
 package webui
 
 func init() {
@@ -63,7 +63,6 @@ func init() {
 		"common.new_vault":                {"新建仓库", "New vault"},
 		"common.current_vault":            {"当前仓库", "Current vault"},
 		"common.vault_settings":           {"仓库设置", "Vault settings"},
-		"common.template_settings":        {"模板设置", "Template settings"},
 		"common.device_management":        {"设备管理", "Device management"},
 		"common.personal_center":          {"个人中心", "Account"},
 		"common.account_info":             {"账户信息", "Account information"},
@@ -76,9 +75,10 @@ func init() {
 		"common.all_devices":              {"全部设备", "All devices"},
 		"common.template_management":      {"模板管理", "Template management"},
 		"common.server_themes":            {"服务器主题", "Server themes"},
+		"common.plugin_management":        {"插件管理", "Plugins"},
+		"common.plugin_settings":          {"插件设置", "Plugin settings"},
 		"common.system_settings":          {"系统设置", "System settings"},
 		"common.data_information":         {"数据信息", "Data information"},
 		"files.delete_confirm":            {"确定删除 %s？删除后可在回收站中恢复。", "Delete %s? It can be restored from the recycle bin later."},
 	})
 }
-

@@ -29,7 +29,7 @@
             <td class="device-cell">
               {{if eq $dev.Status "pending"}}
                <input class="device-name-input" type="text" id="device-name-{{$dev.ClientID}}" name="name" value="{{$dev.Name}}"
-                      aria-label="{{$.Layout.T "device.name"}}" minlength="1" maxlength="128" required form="device-auth-{{$dev.ClientID}}">
+                       aria-label="{{$.Layout.T "device.name"}}" minlength="1" maxlength="128" required form="device-approve-{{$dev.ClientID}}">
               {{else}}
               <strong>{{$dev.Name}}</strong>
               {{end}}
@@ -62,12 +62,17 @@
             </td>
             <td><time>{{timeFmt $dev.LastSeenAt}}</time></td>
             <td class="device-actions">
-              {{if ne $dev.Status "revoked"}}
-                <div class="device-auth-summary">
-                <div class="device-auth-summary__actions">
-                {{if $.Data.AllVaults}}
-                <button class="text-button" type="button" data-modal-open="device-modal-{{$dev.ClientID}}">{{if eq $dev.Status "pending"}}{{$.Layout.T "device.approve_and_configure"}}{{else}}{{$.Layout.T "device.edit_authorization"}}{{end}}</button>
-                {{end}}
+               {{if ne $dev.Status "revoked"}}
+                 <div class="device-auth-summary">
+                 <div class="device-auth-summary__actions">
+                 {{if eq $dev.Status "pending"}}
+                 <form id="device-approve-{{$dev.ClientID}}" method="post" action="/dashboard/devices/{{$dev.ClientID}}/approve">
+                   <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                   <button class="text-button" type="submit">{{$.Layout.T "device.approve_device"}}</button>
+                 </form>
+                 {{else if $.Data.AllVaults}}
+                 <button class="text-button" type="button" data-modal-open="device-modal-{{$dev.ClientID}}">{{$.Layout.T "device.edit_authorization"}}</button>
+                 {{end}}
                 <button class="text-button text-button--danger" type="submit" form="device-revoke-{{$dev.ClientID}}">{{$.Layout.T "common.revoke"}}</button>
                 </div>
                 </div>
@@ -85,7 +90,7 @@
 </div>
 
 {{range $dev := .Data.Devices}}
-{{if ne $dev.Status "revoked"}}{{if $.Data.AllVaults}}
+{{if eq $dev.Status "approved"}}{{if $.Data.AllVaults}}
 <div class="modal device-auth-modal" id="device-modal-{{$dev.ClientID}}" role="dialog" aria-modal="true" aria-labelledby="device-modal-title-{{$dev.ClientID}}">
   <div class="modal__backdrop" data-modal-close></div>
   <div class="modal__panel">
@@ -93,7 +98,6 @@
     <form id="device-auth-{{$dev.ClientID}}" method="post"
           action="/dashboard/devices/{{$dev.ClientID}}/authorize" class="stack-form device-auth-form">
       <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
-      {{if eq $dev.Status "pending"}}<input type="hidden" name="status" value="approved">{{end}}
       <fieldset class="vault-check-list">
         <legend>{{$.Layout.T "device.authorized_vaults"}}</legend>
         {{range $.Data.AllVaults}}
@@ -104,7 +108,7 @@
         {{end}}
       </fieldset>
       <div class="action-row">
-        <button class="button button--primary" type="submit">{{if eq $dev.Status "pending"}}{{$.Layout.T "device.approve_and_save"}}{{else}}{{$.Layout.T "device.save_authorization"}}{{end}}</button>
+         <button class="button button--primary" type="submit">{{$.Layout.T "device.save_authorization"}}</button>
         <button class="text-button" type="button" data-modal-close>{{$.Layout.T "common.cancel"}}</button>
       </div>
     </form>

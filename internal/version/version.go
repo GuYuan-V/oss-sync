@@ -2,7 +2,7 @@
 //
 // 版本号默认是 dev，发布构建通过 -ldflags 注入，例如：
 //
-//	go build -ldflags "-X github.com/oss/oss-server/internal/version.Version=1.2.3 -X github.com/oss/oss-server/internal/version.Commit=abc123 -X github.com/oss/oss-server/internal/version.BuiltAt=2026-01-01T00:00:00Z" ./cmd/server
+//	go build -ldflags "-X github.com/helantianshen/oss-sync/internal/version.Version=1.2.3 -X github.com/helantianshen/oss-sync/internal/version.Commit=abc123 -X github.com/helantianshen/oss-sync/internal/version.BuiltAt=2026-01-01T00:00:00Z" ./cmd/server
 //
 // 该变量同时复用于 /healthz、/api/admin/version 与自动更新校验。
 // dev 默认值不会被视为合法的发布版本，无法通过自更新能力检查。

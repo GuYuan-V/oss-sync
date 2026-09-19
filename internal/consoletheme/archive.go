@@ -1,4 +1,4 @@
-﻿// 控制台主题归档
+// 控制台主题归档
 package consoletheme
 
 import (
@@ -144,4 +144,3 @@ type archiveEntry struct {
 	name    string
 	content []byte
 }
-

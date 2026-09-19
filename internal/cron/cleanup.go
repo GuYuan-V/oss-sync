@@ -13,14 +13,14 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/devices"
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/history"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/recycle"
-	"github.com/oss/oss-server/internal/settingspolicy"
-	"github.com/oss/oss-server/internal/synclock"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/devices"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/history"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/recycle"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/synclock"
 )
 
 type Cleanup struct {

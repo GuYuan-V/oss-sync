@@ -21,8 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 // Options 覆盖 Updater 的默认行为，主要用于测试。

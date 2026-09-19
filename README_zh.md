@@ -16,6 +16,7 @@ OSS Sync 是 Obsidian 官方同步的自托管替代，由 Go（Gin）后端与 
 - **多 Vault**：单账号可拥有多个笔记仓库。
 - **设备感知**：每个客户端以稳定 `client_id` 标识，状态 `待批准 / 已批准 / 已吊销`。
 - **离线优先**：本地编辑先入队，经三方合并后按 revision 的 CAS 同步。
+- **队列持久化**：普通 Vault 的待上传操作先写入 `.oss-sync-state.json`，关闭并重新打开 Obsidian 后会自动续传。
 
 ## 功能
 
@@ -29,6 +30,9 @@ OSS Sync 是 Obsidian 官方同步的自托管替代，由 Go（Gin）后端与 
 - Markdown 协作：邀请/接受/撤销，SSE 实时（失败降级长轮询）
 - 仓库级同步策略：`user_choice` / `short_poll` / `long_poll`
 - 控制台与博客主题 ZIP 上传
+- 首次使用先设置设备名称；设备批准与仓库授权分离，插件设置页会自动刷新已授权仓库
+- 类 WordPress 的服务端扩展：兼容 WASM，并支持管理员信任的可执行插件、动态 Hook、路由、中间件、后台页面、任务、迁移、依赖和宿主 RPC
+- 公开 Go SDK：`github.com/helantianshen/oss-sync/pkg/ossplugin`，无需手写 JSON Lines 即可构建受信任扩展
 - 默认 SQLite，PostgreSQL 可选；定时存储对账
 
 ## 架构
@@ -44,6 +48,7 @@ internal/
   collaboration   # 邀请、接受、正文写入、事件
   history/recycle # 快照、恢复、保留
   blog            # 模板、公开页
+  serverplugin    # WASM 与受信任可执行插件、命名空间路由
   webui           # 控制台页面、管理后台
 plugin/src        # Obsidian 插件
 ```
@@ -96,7 +101,7 @@ curl -fsSL https://raw.githubusercontent.com/helantianshen/oss-sync/main/install
 
 安装完成后可运行全局命令 `oss` 或 `oss-sync` 打开管理菜单，用于更新、卸载、查看运行状态与空间用量、启停或重启服务，以及修改项目总容量和映射端口。每次更新都会先选择更新源，因此无需重新安装即可更换加速地址。卸载只移除容器和管理命令，项目数据默认保留。
 
-再次执行同一安装命令会下载最新 Release 并重建容器，同时复用现有端口、部署路径和容量设置。旧版本创建的 `oss-data` 命名卷会继续保留，不自动迁移。非交互环境可使用 `OSS_PORT`、`OSS_RELEASE_PROXY=official`（或自定义 HTTPS 地址前缀）、`OSS_INSTALL_DIR`、`OSS_STORAGE_LIMIT_GB` 和 `OSS_INSTALL_DOCKER=1`。全局命令更新可使用 `OSS_RELEASE_SOURCE=official`、`OSS_RELEASE_SOURCE=proxy`，或使用 `OSS_RELEASE_PROXY=https://example.com/` 指定自定义源。高级场景仍可用 `OSS_IMAGE` 指定完整 Registry 镜像，例如 `ghcr.io/helantianshen/oss-sync-server:0.1.12`。
+再次执行同一安装命令会下载最新 Release 并重建容器，同时复用现有端口、部署路径和容量设置。旧版本创建的 `oss-data` 命名卷会继续保留，不自动迁移。非交互环境可使用 `OSS_PORT`、`OSS_RELEASE_PROXY=official`（或自定义 HTTPS 地址前缀）、`OSS_INSTALL_DIR`、`OSS_STORAGE_LIMIT_GB` 和 `OSS_INSTALL_DOCKER=1`。全局命令更新可使用 `OSS_RELEASE_SOURCE=official`、`OSS_RELEASE_SOURCE=proxy`，或使用 `OSS_RELEASE_PROXY=https://example.com/` 指定自定义源。高级场景仍可用 `OSS_IMAGE` 指定完整 Registry 镜像，例如 `ghcr.io/helantianshen/oss-sync-server:<版本号>`。
 
 默认 SQLite 部署不会拉取 PostgreSQL。手动增加 Docker Hub 依赖时，可以直接使用 `docker.1panel.live/library/postgres:17` 这类 1Panel 完整镜像地址，无需改变 Release 下载源或修改 Docker daemon 配置。
 
@@ -135,7 +140,59 @@ npm run build
 # 复制到 <vault>/.obsidian/plugins/oss-sync/
 ```
 
-在 Obsidian 中重载插件并启用 *Obsidian Sync & Share*，填入服务端地址、用户名/密码，创建或绑定 Vault。插件在库根维护本地 ` .oss-sync-state.json`（v3），不上传。
+在 Obsidian 中重载插件并启用 *Obsidian Sync & Share*：先设置设备名称，再填写包含 `http://` 或 `https://` 的服务端地址并登录。在网页控制台中先批准设备，再单独授权仓库。插件设置页保持打开时每 3 秒刷新一次仓库授权列表。插件在 Vault 根目录维护本地 `.oss-sync-state.json`（v3），该文件不会上传，并保存可在重启后续传的待处理队列。
+
+## 插件、博客模板与控制台主题
+
+扩展系统只有一条核心规则：
+
+- **插件负责功能**：设置、路由、Hook、数据、后台页面、任务和外部集成。
+- **博客模板只负责公开页面的结构与样式**：`template.html`、`style.css`、可选 `theme.js` 和 `theme.json` 能力声明。
+- **控制台主题只负责控制台外观**：`theme.css`、图片和字体。
+
+模板和主题不能保存功能设置。博客模板不要创建 `settings.json`；需要设置时在插件中声明，OSS Sync 会在一级 **插件设置** 菜单中渲染，并按 Vault 保存。
+
+### 最简单的插件创建方式
+
+1. 复制 [`examples/server-plugin-echo`](examples/server-plugin-echo)。
+2. 修改插件 ID 和处理函数。
+3. 编译可执行文件，与 `manifest.json` 一起打包。
+4. 在 **管理员设置 → 插件管理** 上传 ZIP。
+
+```powershell
+cd examples/server-plugin-echo
+go build -o plugin.exe .
+Compress-Archive manifest.json,plugin.exe my-plugin.zip
+```
+
+插件使用公开 Go SDK `github.com/helantianshen/oss-sync/pkg/ossplugin`，不需要手写 JSON Lines 协议。控制台内的“插件指南”提供设置、Hook、路由、后台页面、任务、迁移和宿主服务的简明示例；完整参考见 [`docs/server-plugins.md`](docs/server-plugins.md)。
+
+可执行插件运行在服务器上，因此二进制需要匹配服务器系统，但不需要分别管理多个插件。一个 ZIP 可以同时包含 `plugin.exe`、`plugin` 和 `plugin-arm64`，并在 `manifest.json` 中分别声明 `windows-amd64`、`linux-amd64`、`linux-arm64`，服务器会自动选择。只追求最简单使用时，只构建当前服务器平台即可。
+
+### 最简单的模板或主题创建方式
+
+博客模板：
+
+```text
+my-template.zip
+├── template.html
+├── style.css
+├── theme.js
+├── theme.json
+└── plugin.zip   # 可选功能插件
+```
+
+控制台主题：
+
+```text
+my-console-theme.zip
+├── theme.css
+├── images/
+├── fonts/
+└── plugin.zip   # 可选功能插件
+```
+
+需要关联功能时，把已经构建好的插件 ZIP 放到模板或主题 ZIP 根目录，并命名为 `plugin.zip`。上传模板或主题时，系统会自动安装、启用并建立关联，不需要再填写关联表单。网页控制台已经内置简短的 **模板指南**、**服务器主题指南** 和 **插件指南**，都提供可直接修改的最小示例。
 
 ## 配置
 
@@ -188,6 +245,9 @@ npm run build
 - JWT 为 HS256，密钥按部署随机生成并落库。
 - 网页会话使用 24 小时有效的 HttpOnly Secure SameSite Cookie + CSRF；插件使用 30 天有效的设备绑定 Bearer JWT。插件令牌过期后会从本地移除并提示重新登录。
 - 所有变更接口校验已批准设备 + 仓库授权。
+- 服务端插件支持 WASM 包和管理员信任的可执行包。WASM 模块不提供 WASI、文件、网络、数据库或环境变量访问，通过旧 ABI 返回响应；可执行包声明平台入口并通过常驻双向 JSON Lines 协议通信，可以注册任意 Hook、路由、中间件、后台页面、任务、数据库迁移和依赖，并通过宿主 RPC 调用核心数据/服务，继承服务端账号的文件、网络、数据库、环境和命令执行权限。可执行插件的宿主模型刻意对齐 WordPress 插件的自由度。
+- 启用插件可以声明宿主设置字段；系统会在一级 **插件设置** 菜单中显示，并按 Vault 保存，插件不能注入 HTML 或 JavaScript。Papertrail 等主题关联设置不再要求先进入当前仓库页面，全局入口会自动选择当前用户可访问的对应仓库。
+- 当前服务端插件已经支持博客/HTML 内容过滤、主题渲染过滤、管理员插件页面和 Obsidian 编辑器命令；评论过滤预留到项目有评论实体和渲染入口后接入，任意 JavaScript 注入仍不开放。
 
 ## 许可证
 

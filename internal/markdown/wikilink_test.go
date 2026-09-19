@@ -102,3 +102,46 @@ func TestReferencedAssetsIgnoresCodeBlocks(t *testing.T) {
 		t.Fatalf("expected only public image reference, got %v", references)
 	}
 }
+
+func TestSameDocumentWikilinkRendersAsLocalHeadingLink(t *testing.T) {
+	html, err := RenderMarkdown(nil, "[[# 基础使用教程]]\n\n# 基础使用教程")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, `data-local-heading="基础使用教程"`) {
+		t.Fatalf("expected local heading metadata, got %s", html)
+	}
+	if strings.Contains(html, "未分享") {
+		t.Fatalf("same-document link must not be treated as an unshared article: %s", html)
+	}
+}
+
+func TestSameDocumentWikilinkPreservesAlias(t *testing.T) {
+	html, err := RenderMarkdown(nil, "[[# 基础使用教程|跳转到教程]]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, `data-local-heading="基础使用教程">跳转到教程</a>`) {
+		t.Fatalf("expected local heading target with alias label, got %s", html)
+	}
+}
+
+func TestObsidianHighlightRendersMark(t *testing.T) {
+	html, err := RenderMarkdown(nil, "点击==`绘制路线`==按钮")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "<mark><code>绘制路线</code></mark>") {
+		t.Fatalf("expected Obsidian highlight, got %s", html)
+	}
+}
+
+func TestObsidianHighlightInsideCodeSpanStaysLiteral(t *testing.T) {
+	html, err := RenderMarkdown(nil, "`==not highlighted==`")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(html, "<mark>") || !strings.Contains(html, "<code>==not highlighted==</code>") {
+		t.Fatalf("code span must not render highlight markup, got %s", html)
+	}
+}

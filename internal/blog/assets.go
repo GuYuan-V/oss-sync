@@ -1,4 +1,4 @@
-﻿// 博客资源
+// 博客资源
 package blog
 
 import (
@@ -11,9 +11,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/markdown"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/markdown"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 //go:embed assets/default/* assets/development-template/* assets/papertrail/* assets/scaffold/*
@@ -161,4 +161,3 @@ func isRemoteReference(reference string) bool {
 	lower := strings.ToLower(reference)
 	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") || strings.HasPrefix(lower, "data:")
 }
-

@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 func withVersion(t *testing.T, v string) {

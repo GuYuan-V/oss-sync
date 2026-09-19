@@ -9,7 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 // 协作状态。

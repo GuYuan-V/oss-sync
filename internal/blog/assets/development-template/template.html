@@ -24,12 +24,13 @@
         <nav class="oss-tree">{{.ContentHTML}}</nav>
       </section>
       {{else}}
-      <article class="entry">{{.ContentHTML}}</article>
+      <article class="entry">{{if .ArticleTitle}}<h1 data-article-title>{{.ArticleTitle}}</h1>{{end}}{{.ContentHTML}}</article>
       {{end}}
     </main>
     {{if .FooterNotice}}<aside class="notice">{{.FooterNotice}}</aside>{{end}}
     <footer class="site-footer">A small independent publishing surface.</footer>
   </div>
   {{if .CustomFooter}}{{.CustomFooter}}{{end}}
+    <p class="oss-repository-link">Powered by <a href="https://github.com/helantianshen/oss-sync" target="_blank" rel="noopener noreferrer">OSS Sync</a></p>
 </body>
 </html>

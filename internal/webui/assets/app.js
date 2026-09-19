@@ -9,6 +9,7 @@
     initFlashDismiss();
     initCollaborationSelection();
     initThemeSettingGroups();
+    initPublicBlogThemeCapability();
     initPapertrailPreview();
     initServerUpdate();
     initModals();
@@ -78,6 +79,22 @@
 
     setActiveByHash();
     window.addEventListener("hashchange", setActiveByHash);
+  }
+
+  function initPublicBlogThemeCapability() {
+    var themeSelect = document.querySelector('select[name="theme_name"]');
+    var control = document.querySelector("[data-public-blog-control]");
+    var checkbox = control ? control.querySelector('input[name="is_public_blog"]') : null;
+    if (!themeSelect || !control || !checkbox) return;
+    function update() {
+      var option = themeSelect.options[themeSelect.selectedIndex];
+      var supported = option && option.dataset.supportsPublicBlog === "true";
+      checkbox.disabled = !supported;
+      control.title = supported ? "" : (control.dataset.unsupportedTitle || "");
+      if (!supported) checkbox.checked = false;
+    }
+    themeSelect.addEventListener("change", update);
+    update();
   }
 
   function closeDrawer() {

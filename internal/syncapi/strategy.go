@@ -1,4 +1,4 @@
-﻿// 同步策略
+// 同步策略
 package syncapi
 
 import (
@@ -8,10 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/settingspolicy"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
 // strategyResponse 是 GET /api/vaults/:vault_id/sync/strategy 的响应。
@@ -81,4 +81,3 @@ func (h *Handler) V2Strategy(c *gin.Context) {
 		LongPollWaitSec: timing.LongPollWaitSec,
 	})
 }
-

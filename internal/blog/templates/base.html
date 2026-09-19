@@ -7,8 +7,8 @@
   <meta name="powered-by" content="oss-sync">
   <title>{{.Title}}</title>
    <script src="/ui/assets/theme.js?v=2"></script>
-   <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css?v=3">
-   <script defer src="{{.ThemeBaseURL}}/theme.js?v=3"></script>
+   <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css?v=4">
+   <script defer src="{{.ThemeBaseURL}}/theme.js?v=4"></script>
 </head>
 <body id="top">
   <a class="skip-link" href="#article-content">跳到文章正文</a>
@@ -54,6 +54,7 @@
           <h1 class="oss-folder-title">{{.FolderTitle}}</h1>
           <nav class="oss-tree" aria-label="文件目录">{{.ContentHTML}}</nav>
         {{else}}
+          {{if .ArticleTitle}}<h1 class="oss-article-title" data-article-title>{{.ArticleTitle}}</h1>{{end}}
           {{.ContentHTML}}
         {{end}}
       </article>
@@ -67,5 +68,6 @@
   {{end}}
   {{if .FooterNotice}}<aside class="oss-notice">{{.FooterNotice}}</aside>{{end}}
   <p class="reading-status" data-copy-status role="status" aria-live="polite"></p>
+    <p class="oss-repository-link">Powered by <a href="https://github.com/helantianshen/oss-sync" target="_blank" rel="noopener noreferrer">OSS Sync</a></p>
 </body>
 </html>

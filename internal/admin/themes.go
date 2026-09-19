@@ -1,4 +1,4 @@
-﻿// 模板管理
+// 模板管理
 package admin
 
 import (
@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/blog"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/blog"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 // themesRouter 注册模板管理 API。
@@ -82,8 +82,8 @@ func (h *Handler) uploadTheme(c *gin.Context) {
 
 func (h *Handler) scaffoldTheme(c *gin.Context) {
 	var req struct {
-		Base    string `json:"base" binding:"required"`
-		Name    string `json:"name" binding:"required"`
+		Base string `json:"base" binding:"required"`
+		Name string `json:"name" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -194,4 +194,3 @@ func quoteName(name string) string {
 
 var _ = models.VaultSetting{}
 var _ = gorm.ErrRecordNotFound
-

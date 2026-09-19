@@ -1,4 +1,4 @@
-﻿// 启动更新
+// 启动更新
 package update
 
 import (
@@ -114,4 +114,3 @@ func (u *Updater) StartupHealthCheck(ctx context.Context, healthURL string, poll
 	log.Printf("[OSS] 更新后健康检查通过，服务就绪")
 	return nil
 }
-

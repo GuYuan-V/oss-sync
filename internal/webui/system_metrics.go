@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/storagequota"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/storagequota"
 )
 
 type systemMetrics struct {

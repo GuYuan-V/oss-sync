@@ -1,0 +1,113 @@
+{{define "admin-plugins"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Admin · Plugins</span>
+    <h1>{{.Layout.T "common.plugin_management"}}</h1>
+    <p class="lead">{{.Layout.T "admin.plugins_lead"}}</p>
+    <button class="button" type="button" data-modal-open="plugin-guide" aria-haspopup="dialog">{{.Layout.T "admin.plugin_guide"}}</button>
+  </div>
+</section>
+
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+{{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "admin.operation_successful"}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="gate-panel">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">Upload plugin</span>
+      <h2>{{.Layout.T "admin.upload_plugin"}}</h2>
+      <p>{{.Layout.T "admin.upload_plugin_desc"}}</p>
+    </div>
+    <form method="post" action="/dashboard/admin/plugins/upload" enctype="multipart/form-data" class="gate-form stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <label>
+        <span>{{.Layout.T "admin.plugin_package"}}</span>
+        <input type="file" name="file" accept=".zip,application/zip" required>
+        <small>{{.Layout.T "admin.plugin_package_hint"}}</small>
+      </label>
+      <button class="button button--primary" type="submit">{{.Layout.T "admin.install_plugin"}}</button>
+    </form>
+  </article>
+
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Plugin ledger</span>
+        <h2>{{.Layout.T "admin.installed_plugins"}}</h2>
+      </div>
+      <span class="ledger-count">{{len .Data.Plugins}} {{.Layout.T "admin.plugins_count"}}</span>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>{{.Layout.T "common.name"}}</th>
+            <th>{{.Layout.T "admin.plugin_version"}}</th>
+            <th>{{.Layout.T "admin.plugin_status"}}</th>
+            <th>{{.Layout.T "admin.plugin_routes"}}</th>
+            <th>{{.Layout.T "common.size"}}</th>
+            <th>{{.Layout.T "common.actions"}}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Data.Plugins}}
+          <tr>
+            <td>
+              <strong>{{.Name}}</strong>
+              <span class="plugin-id">{{.ID}}</span>
+              {{if .Description}}<small class="plugin-description">{{.Description}}</small>{{end}}
+              {{if .Associations}}<small class="plugin-association">{{$.Layout.T "admin.plugin_associated_with"}}: {{.AssociationSummary}}</small>{{end}}
+              {{if .LastError}}<small class="plugin-error" role="alert">{{.LastError}}</small>{{end}}
+            </td>
+            <td>{{.Version}}</td>
+            <td>
+               {{if .Builtin}}
+               <span class="panel-note">{{$.Layout.T "admin.plugin_builtin"}}</span>
+               {{else if .Enabled}}
+              <span class="role role--admin">{{$.Layout.T "admin.plugin_enabled"}}</span>
+              {{else}}
+              <span class="role role--user">{{$.Layout.T "admin.plugin_disabled"}}</span>
+               {{end}}
+            </td>
+            <td>{{len .Routes}}</td>
+            <td><span class="panel-note">{{.Runtime}}</span><br>{{formatBytes .PayloadSize}}</td>
+            <td class="action-cell">
+              {{if .Builtin}}
+              <span class="panel-note">{{$.Layout.T "admin.plugin_builtin"}}</span>
+              {{else if .Enabled}}
+              <form method="post" action="/dashboard/admin/plugins/{{.ID}}/disable">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <button class="text-button" type="submit">{{$.Layout.T "admin.plugin_disable"}}</button>
+              </form>
+              {{else}}
+              <form method="post" action="/dashboard/admin/plugins/{{.ID}}/enable">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <button class="text-button" type="submit">{{$.Layout.T "admin.plugin_enable"}}</button>
+              </form>
+               <form method="post" action="/dashboard/admin/plugins/{{.ID}}/delete" data-confirm="{{if .AssociationSummary}}{{$.Layout.T "admin.plugin_delete_confirm_associations" .Name .AssociationSummary}}{{else}}{{$.Layout.T "admin.plugin_delete_confirm" .Name}}{{end}}">
+                <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+                <button class="text-button text-button--danger" type="submit">{{$.Layout.T "common.delete"}}</button>
+              </form>
+              {{end}}
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="6" class="panel-empty">{{.Layout.T "admin.no_plugins"}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</div>
+
+<div class="modal theme-guide-modal" id="plugin-guide" role="dialog" aria-modal="true" aria-labelledby="plugin-guide-title">
+  <div class="modal__backdrop" data-modal-close></div>
+  <div class="modal__panel">
+    <div class="collaboration-modal__header">
+      <div><span class="eyebrow">Plugin handbook</span><h2 id="plugin-guide-title">{{.Layout.T "admin.plugin_guide"}}</h2></div>
+      <button class="text-button" type="button" data-modal-close>{{.Layout.T "common.close"}}</button>
+    </div>
+    <div class="markdown-guide">{{.Data.GuideHTML}}</div>
+  </div>
+</div>
+{{end}}

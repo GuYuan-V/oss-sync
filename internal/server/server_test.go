@@ -20,10 +20,10 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/database"
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/database"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func newTestServer(t *testing.T) (*Server, *gorm.DB, string) {

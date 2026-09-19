@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 func TestResumePendingHandoffs_CrashAfterMarkerBeforeHelperLaunch(t *testing.T) {
@@ -144,5 +144,3 @@ func TestResumePendingHandoffs_NeverActOnCorruptNonActive(t *testing.T) {
 	}
 	// ensure exe not modified
 }
-
-

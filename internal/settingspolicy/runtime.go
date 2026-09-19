@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func EffectiveForUser(db *gorm.DB, userID uint, configUploadBytes int64) (Effective, error) {

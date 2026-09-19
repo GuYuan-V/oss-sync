@@ -65,6 +65,25 @@ export type DiagnosticEvent =
       readonly hasOperationID: boolean;
       readonly operationIDValid: boolean;
       readonly operationIDLength: number;
+    }
+  | {
+      readonly kind: "sync_queue";
+      readonly at: number;
+      readonly phase: "persisted" | "resumed";
+      readonly operation: "upsert" | "delete" | "rename";
+      readonly pendingCount: number;
+    }
+  | {
+      readonly kind: "sync_run";
+      readonly at: number;
+      readonly phase: "start" | "remote" | "complete" | "failed";
+      readonly forceFull: boolean;
+      readonly cursor?: number;
+      readonly nextCursor?: number;
+      readonly remoteFiles?: number;
+      readonly pendingCount?: number;
+      readonly actionCount?: number;
+      readonly resolvedCount?: number;
     };
 
 export class Diagnostics {
@@ -184,6 +203,32 @@ function sanitizeEvent(event: DiagnosticEvent): DiagnosticEvent | null {
         hasOperationID: !!event.hasOperationID,
         operationIDValid: !!event.operationIDValid,
         operationIDLength: finiteNumber(event.operationIDLength),
+      };
+    }
+    case "sync_queue": {
+      if (event.phase !== "persisted" && event.phase !== "resumed") return null;
+      if (event.operation !== "upsert" && event.operation !== "delete" && event.operation !== "rename") return null;
+      return {
+        kind: "sync_queue",
+        at: finiteNumber(event.at),
+        phase: event.phase,
+        operation: event.operation,
+        pendingCount: finiteNumber(event.pendingCount),
+      };
+    }
+    case "sync_run": {
+      if (event.phase !== "start" && event.phase !== "remote" && event.phase !== "complete" && event.phase !== "failed") return null;
+      return {
+        kind: "sync_run",
+        at: finiteNumber(event.at),
+        phase: event.phase,
+        forceFull: !!event.forceFull,
+        ...(typeof event.cursor === "number" ? { cursor: finiteNumber(event.cursor) } : {}),
+        ...(typeof event.nextCursor === "number" ? { nextCursor: finiteNumber(event.nextCursor) } : {}),
+        ...(typeof event.remoteFiles === "number" ? { remoteFiles: finiteNumber(event.remoteFiles) } : {}),
+        ...(typeof event.pendingCount === "number" ? { pendingCount: finiteNumber(event.pendingCount) } : {}),
+        ...(typeof event.actionCount === "number" ? { actionCount: finiteNumber(event.actionCount) } : {}),
+        ...(typeof event.resolvedCount === "number" ? { resolvedCount: finiteNumber(event.resolvedCount) } : {}),
       };
     }
   }

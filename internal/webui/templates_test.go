@@ -13,8 +13,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/oss/oss-server/internal/blog"
 )
 
 var templateTranslationPattern = regexp.MustCompile(`\{\{-?\s*\.Layout\.T\s+"([a-zA-Z0-9_.]+)"`)
@@ -59,6 +57,16 @@ func TestTemplates_whenTranslationKeyLiteralUsed_hasCatalogEntry(t *testing.T) {
 		if _, exists := localeEntries[reference.Key]; !exists {
 			t.Errorf("%s references unregistered locale key %q", reference.Path, reference.Key)
 		}
+	}
+}
+
+func TestLayoutTemplate_whenRendered_identifiesRepository(t *testing.T) {
+	raw, err := webFS.ReadFile("templates/layout.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "https://github.com/helantianshen/oss-sync") {
+		t.Fatal("layout template does not identify the project repository")
 	}
 }
 
@@ -108,98 +116,6 @@ func TestTemplates_whenRenderedInSupportedLanguages_executeWithoutRawLocaleKeys(
 				}
 				assertNoRawLocaleKey(t, rendered.String())
 			})
-		}
-	}
-}
-
-func TestVaultThemeSettingsTemplate_whenPapertrail_hasLivePreviewHooks(t *testing.T) {
-	funcs := template.FuncMap{
-		"formatBytes": formatBytes,
-		"timeFmt": func(value time.Time) string {
-			if value.IsZero() {
-				return "-"
-			}
-			return value.Local().Format("2006-01-02 15:04")
-		},
-		"sub":      func(a, b int) int { return a - b },
-		"urlquery": url.QueryEscape,
-	}
-	tpl, err := template.New("x").Funcs(funcs).ParseFS(
-		webFS,
-		"templates/*.html",
-		"templates/partials/*.html",
-	)
-	if err != nil {
-		t.Fatalf("parse papertrail template: %v", err)
-	}
-
-	data := themeSettingsData{
-		VaultID:       "vault-1",
-		VaultName:     "Test Vault",
-		ThemeName:     "papertrail",
-		SettingsLabel: "papertrail",
-		Fields: []themeSettingFieldView{
-			{
-				Schema: blog.ThemeSettingField{Key: "logo_url", Label: "Logo", Type: "url", MaxLength: 2000},
-				Value:  "https://example.com/logo.png",
-			},
-			{
-				Schema: blog.ThemeSettingField{Key: "blog_name", Label: "Name", Type: "text", MaxLength: 64},
-				Value:  "Original Name",
-			},
-			{
-				Schema: blog.ThemeSettingField{Key: "description", Label: "Description", Type: "textarea", MaxLength: 120},
-				Value:  "Original description",
-			},
-			{
-				Schema: blog.ThemeSettingField{
-					Key:      "buttons",
-					Label:    "Buttons",
-					Type:     "group",
-					MaxItems: 3,
-					Fields: []blog.ThemeSettingField{
-						{Key: "label", Label: "Label", Type: "text", MaxLength: 20},
-						{Key: "url", Label: "URL", Type: "url", MaxLength: 2000},
-						{Key: "icon_url", Label: "Icon", Type: "url", MaxLength: 2000},
-					},
-				},
-				Rows: []themeSettingRowView{{Values: map[string]string{
-					"label":    "Docs",
-					"url":      "https://example.com/docs",
-					"icon_url": "https://example.com/icon.png",
-				}}},
-			},
-		},
-	}
-
-	pageData := struct {
-		Layout layoutData
-		Data   themeSettingsData
-	}{
-		Layout: layoutData{Language: defaultWebLanguage},
-		Data:   data,
-	}
-
-	var rendered bytes.Buffer
-	if err := tpl.ExecuteTemplate(&rendered, "vault-theme-settings", pageData); err != nil {
-		t.Fatalf("execute vault theme settings template: %v", err)
-	}
-
-	out := rendered.String()
-	for _, expected := range []string{
-		"data-papertrail-preview",
-		"data-papertrail-home-links",
-		"data-preview-name",
-		"data-preview-description",
-		"data-preview-logo",
-		"data-preview-field=\"blog_name\"",
-		"data-theme-setting-group-key=\"buttons\"",
-		"data-group-key=\"buttons\"",
-		"data-group-field-key=\"label\"",
-		"data-group-field-key=\"url\"",
-	} {
-		if !strings.Contains(out, expected) {
-			t.Fatalf("rendered template missing hook %q", expected)
 		}
 	}
 }
@@ -290,6 +206,7 @@ func templateSmokeFixture() map[string]any {
 		"Members":               empty,
 		"RecentDevices":         empty,
 		"RecentHistory":         empty,
+		"Plugins":               empty,
 		"RegistrationEnabled":   true,
 		"Shares":                empty,
 		"StorageUsed":           int64(0),

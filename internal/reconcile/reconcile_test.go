@@ -13,10 +13,10 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/database"
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/database"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func setupReconciler(t *testing.T) (*Reconciler, *gorm.DB, string, models.Vault) {
@@ -133,6 +133,43 @@ func TestRunRecordsAndResolvesMissingFile(t *testing.T) {
 	}
 	if err := db.First(&issue, issue.ID).Error; err != nil || !issue.ResolvedAt.Valid {
 		t.Fatalf("issue was not resolved: %+v err=%v", issue, err)
+	}
+}
+
+func TestRun_whenMissingFileBecomesDeleted_resolvesIssueAfterStorageKeyChanges(t *testing.T) {
+	// Given
+	reconciler, db, _, vault := setupReconciler(t)
+	file := storedFile(vault, "MissingThenDeleted.md", "content")
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reconciler.Run(true); err != nil {
+		t.Fatal(err)
+	}
+	var issue models.StorageIssue
+	if err := db.Where("file_id = ? AND kind = ? AND resolved_at IS NULL", file.ID, "missing").First(&issue).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&file).Updates(map[string]any{
+		"is_deleted":  true,
+		"deleted_at":  time.Now(),
+		"storage_key": filepath.ToSlash(filepath.Join("vaults", vault.ID, "recycle", "changed-key")),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// When
+	report, err := reconciler.Run(true)
+
+	// Then
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.OpenIssues != 0 {
+		t.Fatalf("open issues after delete=%d, want 0", report.OpenIssues)
+	}
+	if err := db.First(&issue, issue.ID).Error; err != nil || !issue.ResolvedAt.Valid {
+		t.Fatalf("issue was not resolved after delete: %+v err=%v", issue, err)
 	}
 }
 

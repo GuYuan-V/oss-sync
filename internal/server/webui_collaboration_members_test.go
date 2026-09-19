@@ -10,9 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/collaboration"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/collaboration"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 type webCollaborationMembersFixture struct {

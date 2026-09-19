@@ -1,4 +1,4 @@
-﻿// 主题克隆
+// 主题克隆
 package blog
 
 import (
@@ -71,6 +71,9 @@ func copyBuiltinTheme(base, targetDir string) error {
 			return nil
 		}
 		rel := strings.TrimPrefix(path, root+"/")
+		if rel == "settings.json" {
+			return nil
+		}
 		content, err := themeAssetsFS.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("读取内置模板文件: %w", err)
@@ -132,6 +135,9 @@ func copyCustomTheme(dataDir, base, targetDir string) error {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		if rel == "settings.json" {
+			return nil
+		}
 		if !safeThemeEntryPath(rel) {
 			return fmt.Errorf("基础模板包含非法路径: %s", rel)
 		}
@@ -153,4 +159,3 @@ func writeThemeCopy(targetDir, rel string, content []byte) error {
 	}
 	return nil
 }
-

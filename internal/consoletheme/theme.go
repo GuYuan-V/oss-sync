@@ -1,4 +1,4 @@
-﻿// 控制台主题
+// 控制台主题
 package consoletheme
 
 import (
@@ -7,9 +7,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -22,7 +23,6 @@ var (
 	ErrExists   = errors.New("服务器主题已存在")
 	ErrReadOnly = errors.New("内置服务器主题只读")
 	ErrNotFound = errors.New("服务器主题不存在")
-	themeNameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 )
 
 type Info struct {
@@ -33,10 +33,28 @@ type Info struct {
 }
 
 func ValidateName(name string) error {
-	if !themeNameRE.MatchString(name) {
+	if !validName(name) {
 		return errors.New("服务器主题名称只能使用字母、数字、连字符和下划线，且长度为 1–64")
 	}
 	return nil
+}
+
+func validName(name string) bool {
+	if name == "" || utf8.RuneCountInString(name) > 64 || strings.TrimSpace(name) != name {
+		return false
+	}
+	for index, r := range name {
+		if index == 0 {
+			if !unicode.IsLetter(r) && !unicode.IsNumber(r) {
+				return false
+			}
+			continue
+		}
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '-' && r != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func IsBuiltin(name string) bool {
@@ -247,4 +265,3 @@ func dirStats(dir string) (int, int64, error) {
 	})
 	return count, size, err
 }
-

@@ -17,10 +17,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/jwt"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
+	"github.com/helantianshen/oss-sync/internal/jwt"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 // Handler 持有 auth 路由所需依赖。

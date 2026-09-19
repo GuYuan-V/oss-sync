@@ -1,4 +1,4 @@
-﻿// 概览文案
+// 概览文案
 package webui
 
 func init() {
@@ -45,6 +45,7 @@ func init() {
 		"device.no_authorized_vaults":  {"未授权仓库", "No authorized vaults"},
 		"device.no_vaults":             {"暂无可授权仓库，请先创建仓库", "No vaults available for authorization. Create a vault first."},
 		"device.approve_and_configure": {"批准并配置", "Approve and configure"},
+		"device.approve_device":        {"批准设备", "Approve device"},
 		"device.edit_authorization":    {"编辑授权", "Edit authorization"},
 		"device.revoke_confirm":        {"吊销设备 %s？其同步将立即被拒绝。", "Revoke device %s? Sync will be rejected immediately."},
 		"device.no_devices":            {"暂无设备。在 Obsidian 插件中登录后，设备会出现在这里等待批准。", "No devices yet. Log in with the Obsidian plugin to see devices here awaiting approval."},
@@ -54,4 +55,3 @@ func init() {
 		"device.save_authorization":    {"保存授权", "Save authorization"},
 	})
 }
-

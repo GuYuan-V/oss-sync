@@ -1,4 +1,4 @@
-﻿// 更新候选
+// 更新候选
 package update
 
 import (
@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 // Candidate 表示一次可用的更新候选，来源于 GitHub Release。
 type Candidate struct {
-	Version     string `json:"version"`      // 规范化版本（无 v 前缀）
-	Tag         string `json:"tag"`          // 原始 tag（含 v 前缀如有）
+	Version     string `json:"version"` // 规范化版本（无 v 前缀）
+	Tag         string `json:"tag"`     // 原始 tag（含 v 前缀如有）
 	GOOS        string `json:"goos"`
 	GOARCH      string `json:"goarch"`
 	AssetName   string `json:"asset_name"`
@@ -172,4 +172,3 @@ func (c Candidate) Validate() error {
 	}
 	return nil
 }
-

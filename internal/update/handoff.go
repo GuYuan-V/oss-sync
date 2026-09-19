@@ -1,4 +1,4 @@
-﻿// 更新交接
+// 更新交接
 package update
 
 import (
@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/oss/oss-server/internal/version"
+	"github.com/helantianshen/oss-sync/internal/version"
 )
 
 // Hidden helper flag — bypasses normal config/database startup.
@@ -795,4 +795,3 @@ func relaunchOldServer(m *HandoffMarker) {
 		_ = cmd.Process.Release()
 	}
 }
-

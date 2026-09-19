@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/consoletheme"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/consoletheme"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func TestConsoleThemeSelection_loadsStylesheet_whenUserChoosesCustomTheme(t *testing.T) {

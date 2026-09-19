@@ -1,4 +1,4 @@
-﻿// 协作账户事件
+// 协作账户事件
 package syncapi
 
 import (
@@ -10,10 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/auth"
-	"github.com/oss/oss-server/internal/collaboration"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/collaboration"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 func collaborationUserTopic(userID uint) string {
@@ -163,4 +163,3 @@ func (h *Handler) requireCollaborationDevice(c *gin.Context) (*models.User, stri
 	}
 	return user, string(did), true
 }
-

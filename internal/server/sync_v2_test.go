@@ -16,8 +16,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/models"
-	"github.com/oss/oss-server/internal/recycle"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/recycle"
 )
 
 func uploadV2(
@@ -452,7 +452,7 @@ func TestSyncV2MultiVaultIsolationCASAndSharing(t *testing.T) {
 
 func TestVaultManagementCRUD(t *testing.T) {
 	t.Chdir(t.TempDir())
-	srv, db, _ := newTestServer(t)
+	srv, db, dataDir := newTestServer(t)
 	router := srv.Router()
 	token := registerAndLogin(t, router, "vault-crud", "password123")
 	defaultVault := defaultVaultIDFromAPI(t, router, token)
@@ -498,7 +498,7 @@ func TestVaultManagementCRUD(t *testing.T) {
 	if err := db.Where("vault_id = ?", secondVault).First(&backup).Error; err != nil {
 		t.Fatalf("vault backup record: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join("backups", "vaults", backup.FileName)); err != nil {
+	if _, err := os.Stat(filepath.Join(dataDir, "backups", "vaults", backup.FileName)); err != nil {
 		t.Fatalf("vault backup archive: %v", err)
 	}
 	code, _ = doJSON(

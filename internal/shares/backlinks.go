@@ -1,4 +1,4 @@
-﻿// 分享反链
+// 分享反链
 package shares
 
 import (
@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/oss/oss-server/internal/filestore"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 var wikilinkRe = regexp.MustCompile(`\[\[([^\[\]\|]+)(?:\|[^\[\]]+)?\]\]`)
@@ -101,4 +101,3 @@ var readAbsFile = func(p string) ([]byte, error) {
 func readFileBytes(p string) ([]byte, error) {
 	return os.ReadFile(p)
 }
-

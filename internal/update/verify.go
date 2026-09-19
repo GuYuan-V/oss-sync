@@ -1,4 +1,4 @@
-﻿// 更新校验
+// 更新校验
 package update
 
 import (
@@ -120,4 +120,3 @@ func swapBinary(prepared, target string) error {
 	_ = os.Remove(aside)
 	return nil
 }
-

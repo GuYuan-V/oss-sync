@@ -16,6 +16,7 @@ OSS Sync is a self-hosted alternative to Obsidian Sync. It consists of a Go (Gin
 - **Vault-based**: one account can own multiple Vaults.
 - **Device-aware**: each Obsidian client has a stable `client_id` with pending / approved / revoked states.
 - **Offline-first**: local edits are queued, merged with three-way merge, and synced with revision-based CAS.
+- **Durable queue**: pending ordinary Vault uploads are written to `.oss-sync-state.json` before transfer and resume after Obsidian restarts.
 
 ## Features
 
@@ -29,6 +30,9 @@ OSS Sync is a self-hosted alternative to Obsidian Sync. It consists of a Go (Gin
 - Collaboration on Markdown: invite / accept / revoke, real-time via SSE (fallback to long polling)
 - Vault-scoped sync strategy: `user_choice` / `short_poll` / `long_poll`
 - Console themes and blog themes as ZIP uploads
+- Device onboarding starts with a device name; approval and per-Vault authorization are separate, and the authorized Vault list refreshes automatically in plugin settings
+- WordPress-style server extensions: WASM compatibility plus administrator-trusted executable plugins with dynamic hooks, routes, middleware, admin pages, tasks, migrations, dependencies, and host RPC
+- Public Go SDK: `github.com/helantianshen/oss-sync/pkg/ossplugin` for building trusted extensions without hand-written JSON Lines
 - SQLite by default, PostgreSQL optional; periodic storage reconciliation
 
 ## Architecture
@@ -44,6 +48,7 @@ internal/
   collaboration   # invite, accept, content write, events
   history/recycle # snapshots, restore, retention
   blog            # themes, public pages
+  serverplugin    # WASM and trusted executable plugins with namespaced routes
   webui           # console pages, admin
 plugin/src        # Obsidian plugin
 ```
@@ -96,7 +101,7 @@ The official bootstrap script asks for the host port, GitHub Release source, dep
 
 After installation, run the global `oss` or `oss-sync` command to update or uninstall OSS Sync, inspect runtime and storage usage, start, stop or restart it, and change the project capacity or mapped port. Each update asks which source to use, so the accelerated URL can be changed without reinstalling. Uninstalling removes the container and commands while retaining project data by default.
 
-Running the same install command again downloads the latest Release and recreates the container while reusing its port, deployment path, and capacity setting. Legacy `oss-data` volumes remain in place and are not migrated automatically. Non-interactive installs can set `OSS_PORT`, `OSS_RELEASE_PROXY=official` (or a custom HTTPS URL prefix), `OSS_INSTALL_DIR`, `OSS_STORAGE_LIMIT_GB`, and `OSS_INSTALL_DOCKER=1`. For the global manager, set `OSS_RELEASE_SOURCE=official`, `OSS_RELEASE_SOURCE=proxy`, or `OSS_RELEASE_PROXY=https://example.com/` to select the source for an update. `OSS_IMAGE` remains an advanced override for a complete registry image such as `ghcr.io/helantianshen/oss-sync-server:0.1.12`.
+Running the same install command again downloads the latest Release and recreates the container while reusing its port, deployment path, and capacity setting. Legacy `oss-data` volumes remain in place and are not migrated automatically. Non-interactive installs can set `OSS_PORT`, `OSS_RELEASE_PROXY=official` (or a custom HTTPS URL prefix), `OSS_INSTALL_DIR`, `OSS_STORAGE_LIMIT_GB`, and `OSS_INSTALL_DOCKER=1`. For the global manager, set `OSS_RELEASE_SOURCE=official`, `OSS_RELEASE_SOURCE=proxy`, or `OSS_RELEASE_PROXY=https://example.com/` to select the source for an update. `OSS_IMAGE` remains an advanced override for a complete registry image such as `ghcr.io/helantianshen/oss-sync-server:<version>`.
 
 The default SQLite installation does not pull PostgreSQL. If Docker Hub dependencies are added manually, a complete 1Panel mirror reference such as `docker.1panel.live/library/postgres:17` can be used without changing the Release download source or the Docker daemon configuration.
 
@@ -135,7 +140,59 @@ npm run build
 # copy to vault: <vault>/.obsidian/plugins/oss-sync/
 ```
 
-Reload Obsidian → Enable *Obsidian Sync & Share* → Fill server URL, username/password → Create or bind a Vault. The plugin keeps a local ` .oss-sync-state.json` (v3) at vault root; it never uploads.
+Reload Obsidian → Enable *Obsidian Sync & Share* → Set the device name → Enter a server URL including `http://` or `https://` → Sign in. Approve the device separately in the web console, then grant Vault access. The open settings page refreshes the authorized Vault list every three seconds. The plugin keeps a local `.oss-sync-state.json` (v3) at Vault root; it is never uploaded and stores the durable pending-operation queue.
+
+## Plugins, blog templates, and console themes
+
+The extension model has one simple rule:
+
+- **Plugins own functionality**: settings, routes, hooks, data, admin pages, tasks, and integrations.
+- **Blog templates own public-page structure and style**: `template.html`, `style.css`, optional `theme.js`, and `theme.json` capabilities.
+- **Console themes own console appearance**: `theme.css`, images, and fonts.
+
+Templates and themes must not contain functional settings. Do not add `settings.json` to a blog template. Declare settings in a plugin; OSS Sync renders them in the top-level **Plugin settings** menu and stores values per Vault.
+
+### Fastest plugin workflow
+
+1. Copy [`examples/server-plugin-echo`](examples/server-plugin-echo).
+2. Change the plugin ID and handlers.
+3. Build the executable and ZIP it with `manifest.json`.
+4. Upload it from **Admin settings → Plugins**.
+
+```powershell
+cd examples/server-plugin-echo
+go build -o plugin.exe .
+Compress-Archive manifest.json,plugin.exe my-plugin.zip
+```
+
+Use the public Go SDK at `github.com/helantianshen/oss-sync/pkg/ossplugin`; it handles the JSON-lines process protocol. The short in-console guide covers settings, hooks, routes, pages, tasks, migrations, and host services. The complete reference is [`docs/server-plugins.md`](docs/server-plugins.md).
+
+Executable plugins run on the server, so their binary must match the server platform. This does not require separate plugin records: one ZIP may contain `plugin.exe`, `plugin`, and `plugin-arm64`, with `windows-amd64`, `linux-amd64`, and `linux-arm64` entries in `manifest.json`. OSS Sync automatically selects the matching entry. For the simplest setup, build only the platform used by your server.
+
+### Fastest template or theme workflow
+
+Blog template:
+
+```text
+my-template.zip
+├── template.html
+├── style.css
+├── theme.js
+├── theme.json
+└── plugin.zip   # optional functionality
+```
+
+Console theme:
+
+```text
+my-console-theme.zip
+├── theme.css
+├── images/
+├── fonts/
+└── plugin.zip   # optional functionality
+```
+
+To associate functionality, place the already-built plugin ZIP at the package root as `plugin.zip`. Uploading the template or theme automatically installs, enables, and associates the plugin. No additional association form is required. The web console includes concise **Template guide**, **Console theme guide**, and **Plugin guide** pages with copyable minimal examples.
 
 ## Configuration
 
@@ -191,6 +248,9 @@ Project conventions: Go with `gofumpt` + `golangci-lint`, TypeScript strict, `uv
 - JWT is HS256 with per-deployment random secret.
 - Sessions: web uses 24-hour HttpOnly Secure SameSite cookies + CSRF; plugin uses a 30-day device-bound Bearer JWT. Expired plugin tokens are removed locally and require a new login.
 - All mutating web requests require CSRF; all sync/collab requests require approved device + vault authorization.
+- Server plugins accept WASM packages or administrator-trusted executable packages. WASM modules receive no WASI, filesystem, network, database, or environment access and use the legacy ABI. Executable packages declare platform entrypoints and communicate over a persistent bidirectional JSON-lines protocol; they can register arbitrary hooks, routes, middleware, admin pages, tasks, migrations, and dependencies, call host data/services through RPC, and inherit the server account's filesystem, network, database, environment, and command-execution permissions. The executable host model is intentionally comparable to WordPress plugin freedom.
+- Enabled plugins may declare host-rendered settings; OSS Sync adds them to the top-level **Plugin settings** menu and stores values per Vault without allowing plugin HTML or JavaScript injection. Theme-linked settings such as Papertrail remain available outside the current Vault page and automatically select an accessible matching Vault.
+- ABI v1 exposes blog/HTML content filters, theme render filters, administrator pages, and Obsidian editor commands. Comment filtering is reserved until the server has a comment entity and renderer; arbitrary JavaScript injection remains outside the host API.
 
 ## License
 

@@ -11,10 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/oss/oss-server/internal/config"
-	"github.com/oss/oss-server/internal/deviceauth"
-	"github.com/oss/oss-server/internal/jwt"
-	"github.com/oss/oss-server/internal/models"
+	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/deviceauth"
+	"github.com/helantianshen/oss-sync/internal/jwt"
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 // ContextKey 是 gin 上下文中当前用户信息的键。
@@ -121,15 +121,23 @@ func RequireDeviceID(c *gin.Context, supplied ...string) (jwt.DeviceID, bool) {
 // Middleware 解析 Authorization 头并拒绝未认证请求。
 func Middleware(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ident, err := authenticateAny(db, cfg, c.GetHeader("Authorization"))
-		if err != nil {
-			abortUnauthorized(c, err)
+		if !Authenticate(c, db, cfg) {
 			return
 		}
-		c.Set(ContextKeyCurrentUser, ident.User)
-		c.Set(ContextKeyIdentity, ident)
 		c.Next()
 	}
+}
+
+// Authenticate applies request credentials to a Gin context without advancing its handler chain.
+func Authenticate(c *gin.Context, db *gorm.DB, cfg *config.Config) bool {
+	ident, err := authenticateAny(db, cfg, c.GetHeader("Authorization"))
+	if err != nil {
+		abortUnauthorized(c, err)
+		return false
+	}
+	c.Set(ContextKeyCurrentUser, ident.User)
+	c.Set(ContextKeyIdentity, ident)
+	return true
 }
 
 func OptionalMiddleware(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {

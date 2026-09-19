@@ -112,6 +112,33 @@ test("loads and overwrites a hidden baseline through the vault adapter", async (
   }
 });
 
+test("persists a pending upload so a fresh store resumes it", async () => {
+  const { BaselineStore, cleanup } = await loadBaselineStore();
+  try {
+    const files = new Map();
+    const adapter = {
+      async exists(path) { return files.has(path); },
+      async read(path) { return files.get(path); },
+      async write(path, raw) { files.set(path, raw); },
+    };
+    const store = new BaselineStore({ adapter });
+    await store.load();
+    store.putPending(operation("upload-1", "upsert", "Notes/Resume.md"));
+    await store.save();
+
+    const restarted = new BaselineStore({ adapter });
+    await restarted.load();
+    assert.deepEqual(restarted.pending(), [{
+      id: "upload-1",
+      kind: "upsert",
+      path: "Notes/Resume.md",
+      createdAt: 1,
+    }]);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("serializes baseline writes so an older snapshot cannot win", async () => {
   const { BaselineStore, cleanup } = await loadBaselineStore();
   try {

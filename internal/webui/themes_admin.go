@@ -1,20 +1,26 @@
-﻿// 主题管理
+// 主题管理
 package webui
 
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/oss/oss-server/internal/blog"
-	"github.com/oss/oss-server/internal/markdown"
+	"github.com/helantianshen/oss-sync/internal/blog"
+	"github.com/helantianshen/oss-sync/internal/markdown"
+	"github.com/helantianshen/oss-sync/internal/models"
+	"github.com/helantianshen/oss-sync/internal/serverplugin"
 )
 
 // themeRow 模板管理页行。
@@ -42,7 +48,11 @@ func (h *Handler) adminThemesPage(c *gin.Context) {
 	d := adminThemesData{
 		Error: c.Query("error"), Saved: c.Query("saved") == "1",
 	}
-	if source, err := webFS.ReadFile("assets/theme-guide.md"); err == nil {
+	guideName := "assets/theme-guide.en.md"
+	if h.userLang(c) == "zh" {
+		guideName = "assets/theme-guide.md"
+	}
+	if source, err := webFS.ReadFile(guideName); err == nil {
 		if guide, renderErr := markdown.RenderMarkdown(nil, string(source)); renderErr == nil {
 			d.GuideHTML = template.HTML(guide)
 		}
@@ -73,6 +83,9 @@ func (h *Handler) themeEditableFiles(name string) []themeFile {
 	}
 	files := make([]themeFile, 0, len(paths))
 	for _, path := range paths {
+		if !isEditableTextFile(path) {
+			continue
+		}
 		content, err := blog.ReadThemeFile(h.Cfg.Storage.DataDir, name, path)
 		if err != nil {
 			continue
@@ -110,11 +123,83 @@ func (h *Handler) adminThemeUpload(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/dashboard/admin/themes?error="+url.QueryEscape(h.t(c, "err.read_upload_failed")))
 		return
 	}
+	bundledPlugin, err := bundledPluginFromTheme(content)
+	if err != nil {
+		c.Redirect(http.StatusSeeOther, "/dashboard/admin/themes?error="+url.QueryEscape(err.Error()))
+		return
+	}
 	if err := blog.UploadTheme(h.Cfg.Storage.DataDir, name, bytes.NewReader(content), int64(len(content))); err != nil {
 		c.Redirect(http.StatusSeeOther, "/dashboard/admin/themes?error="+url.QueryEscape(err.Error()))
 		return
 	}
+	if bundledPlugin != nil {
+		if h.pluginManager == nil {
+			_ = os.RemoveAll(filepath.Join(h.Cfg.Storage.DataDir, "themes", name))
+			c.Redirect(http.StatusSeeOther, "/dashboard/admin/themes?error="+url.QueryEscape(h.t(c, "admin.theme_plugin_manager_unavailable")))
+			return
+		}
+		pluginInfo, err := h.pluginManager.InstallOrReuse(c.Request.Context(), bytes.NewReader(bundledPlugin), int64(len(bundledPlugin)))
+		if err != nil {
+			_ = os.RemoveAll(filepath.Join(h.Cfg.Storage.DataDir, "themes", name))
+			c.Redirect(http.StatusSeeOther, "/dashboard/admin/themes?error="+url.QueryEscape(h.t(c, "admin.theme_plugin_install_failed")))
+			return
+		}
+		if !pluginInfo.Enabled {
+			if err := h.pluginManager.Enable(c.Request.Context(), pluginInfo.ID); err != nil {
+				_ = os.RemoveAll(filepath.Join(h.Cfg.Storage.DataDir, "themes", name))
+				c.Redirect(http.StatusSeeOther, "/dashboard/admin/themes?error="+url.QueryEscape(h.t(c, "admin.theme_plugin_install_failed")))
+				return
+			}
+		}
+		association := models.ServerPluginAssociation{PluginID: pluginInfo.ID, Kind: "blog_theme", TargetID: name, TargetName: name}
+		if err := h.DB.Where("plugin_id = ? AND kind = ? AND target_id = ?", association.PluginID, association.Kind, association.TargetID).FirstOrCreate(&association).Error; err != nil {
+			_ = os.RemoveAll(filepath.Join(h.Cfg.Storage.DataDir, "themes", name))
+			c.Redirect(http.StatusSeeOther, "/dashboard/admin/themes?error="+url.QueryEscape(h.t(c, "admin.theme_plugin_install_failed")))
+			return
+		}
+	}
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/themes?saved=1")
+}
+
+func bundledPluginFromTheme(content []byte) ([]byte, error) {
+	archive, err := zip.NewReader(bytes.NewReader(content), int64(len(content)))
+	if err != nil {
+		return nil, fmt.Errorf("invalid theme ZIP: %w", err)
+	}
+	for _, entry := range archive.File {
+		if entry.Name != "plugin.zip" {
+			continue
+		}
+		if entry.UncompressedSize64 > uint64(serverplugin.MaxArchiveBytes) {
+			return nil, errors.New("bundled plugin ZIP exceeds 32 MiB")
+		}
+		reader, err := entry.Open()
+		if err != nil {
+			return nil, fmt.Errorf("open bundled plugin ZIP: %w", err)
+		}
+		plugin, readErr := io.ReadAll(io.LimitReader(reader, serverplugin.MaxArchiveBytes+1))
+		closeErr := reader.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read bundled plugin ZIP: %w", readErr)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("close bundled plugin ZIP: %w", closeErr)
+		}
+		if len(plugin) > serverplugin.MaxArchiveBytes {
+			return nil, errors.New("bundled plugin ZIP exceeds 32 MiB")
+		}
+		return plugin, nil
+	}
+	return nil, nil
+}
+
+func isEditableTextFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".html", ".htm", ".css", ".js", ".mjs", ".json", ".md", ".txt", ".svg", ".yaml", ".yml":
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *Handler) adminThemeScaffold(c *gin.Context) {
@@ -175,4 +260,3 @@ func (h *Handler) adminThemeFileSave(c *gin.Context) {
 	}
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/themes?saved=1")
 }
-

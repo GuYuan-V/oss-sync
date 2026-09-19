@@ -1,4 +1,4 @@
-﻿// 自定义片段
+// 自定义片段
 package blog
 
 import (
@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/oss/oss-server/internal/markdown"
+	"github.com/helantianshen/oss-sync/internal/markdown"
 	htmlparse "golang.org/x/net/html"
 )
 
@@ -192,4 +192,3 @@ func sanitizeCustomURL(raw string) string {
 	}
 	return parsed.String()
 }
-
