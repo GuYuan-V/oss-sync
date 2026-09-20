@@ -1,16 +1,13 @@
-// 协作跨域
+// 协作跨域。
 package syncapi
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
 
-const obsidianDesktopOrigin = "app://obsidian.md"
+	"github.com/helantianshen/oss-sync/internal/transport/http/middleware"
+)
 
+// allowObsidianDesktopOrigin 将路由声明保留在本地，实际跨域策略复用 HTTP 中间件的统一实现。
 func allowObsidianDesktopOrigin() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if c.GetHeader("Origin") == obsidianDesktopOrigin {
-			c.Header("Access-Control-Allow-Origin", obsidianDesktopOrigin)
-			c.Header("Vary", "Origin")
-		}
-		c.Next()
-	}
+	return middleware.AllowObsidianDesktopOrigin()
 }

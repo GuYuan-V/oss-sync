@@ -1,4 +1,4 @@
-package server
+package middleware
 
 import (
 	"strings"
@@ -9,7 +9,6 @@ import (
 )
 
 func TestAccessLogOmitsQueryCredentials(t *testing.T) {
-	// Given: Gin reports an EventSource path containing a query token.
 	params := gin.LogFormatterParams{
 		TimeStamp:  time.Date(2026, 8, 10, 23, 0, 0, 0, time.UTC),
 		StatusCode: 500,
@@ -19,10 +18,8 @@ func TestAccessLogOmitsQueryCredentials(t *testing.T) {
 		Path:       "/api/vaults/vault-1/collaborations/stream?token=secret-token&client_id=device-1",
 	}
 
-	// When: the access log line is formatted.
-	line := formatAccessLog(params)
+	line := FormatAccessLog(params)
 
-	// Then: the route remains visible without any query credential.
 	if strings.Contains(line, "secret-token") || strings.Contains(line, "client_id") || strings.Contains(line, "?") {
 		t.Fatalf("access log leaked query data: %q", line)
 	}
@@ -32,23 +29,17 @@ func TestAccessLogOmitsQueryCredentials(t *testing.T) {
 }
 
 func TestAccessLogOmitsSuccessfulRequests(t *testing.T) {
-	// Given
-	params := gin.LogFormatterParams{StatusCode: 200}
-
-	// When
-	line := formatAccessLog(params)
-
-	// Then
+	line := FormatAccessLog(gin.LogFormatterParams{StatusCode: 200})
 	if line != "" {
 		t.Fatalf("successful request log = %q, want empty", line)
 	}
 }
 
 func TestAccessLogLogsClientErrors(t *testing.T) {
-	if line := formatAccessLog(gin.LogFormatterParams{StatusCode: 399}); line != "" {
+	if line := FormatAccessLog(gin.LogFormatterParams{StatusCode: 399}); line != "" {
 		t.Fatalf("status 399 log = %q, want empty", line)
 	}
-	if line := formatAccessLog(gin.LogFormatterParams{StatusCode: 400, Path: "/bad-request"}); !strings.Contains(line, "/bad-request") {
+	if line := FormatAccessLog(gin.LogFormatterParams{StatusCode: 400, Path: "/bad-request"}); !strings.Contains(line, "/bad-request") {
 		t.Fatalf("status 400 log = %q, want route", line)
 	}
 }
