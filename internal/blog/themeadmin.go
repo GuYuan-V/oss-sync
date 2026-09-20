@@ -1,4 +1,4 @@
-// Package blog 模板管理服务：内置清单、ZIP 上传、脚手架、文件编辑、下载与删除。
+// 博客主题的目录、压缩包、脚手架与文件管理服务。
 package blog
 
 import (
@@ -20,7 +20,7 @@ import (
 // BuiltinThemeNames 内置只读模板。
 var BuiltinThemeNames = []string{"default", "papertrail"}
 
-// IsBuiltinTheme reports whether the theme is a built-in read-only template.
+// IsBuiltinTheme 判断主题是否为内置只读模板。
 func IsBuiltinTheme(name string) bool {
 	for _, b := range BuiltinThemeNames {
 		if name == b {
@@ -52,7 +52,7 @@ type ThemeInfo struct {
 	SupportsPublicBlog bool        `json:"supports_public_blog"`
 }
 
-// zip limits 防止解压炸弹。
+// ZIP 解压上限，用于防止解压炸弹。
 const (
 	maxZipTotalBytes  = 32 << 20 // 32 MiB 总解压上限
 	maxZipEntryBytes  = 8 << 20  // 8 MiB 单文件上限
@@ -459,7 +459,7 @@ var (
 	ErrThemeExists          = errThemeExists
 )
 
-// ThemeErrors 提供错误码判断。
+// IsThemeReadOnly 等函数提供主题错误码判断。
 func IsThemeReadOnly(err error) bool        { return errors.Is(err, errThemeReadOnly) }
 func IsThemeNotDownloadable(err error) bool { return errors.Is(err, errThemeNotDownloadable) }
 func IsThemeNotDeletable(err error) bool    { return errors.Is(err, errThemeNotDeletable) }

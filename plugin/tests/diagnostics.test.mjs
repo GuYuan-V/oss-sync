@@ -20,15 +20,12 @@ test("keeps a bounded copy of safe diagnostic events and forwards them to its si
     const forwarded = [];
     const diagnostics = new Diagnostics((event) => forwarded.push(event), 2);
 
-    // Given: a collector with a two-event capacity.
-    // When: three safe transport events are recorded and a snapshot is changed locally.
     diagnostics.record({ kind: "api", at: 1, method: "GET", status: 200, durationMs: 2 });
     diagnostics.record({ kind: "poll", at: 2, scope: "sync", changed: false, durationMs: 3 });
     diagnostics.record({ kind: "transfer", at: 3, scope: "upload", durationMs: 4, bytes: 5 });
     const snapshot = diagnostics.snapshot();
     snapshot.pop();
 
-    // Then: the oldest event is evicted, consumers receive each event, and snapshots cannot mutate storage.
     assert.equal(diagnostics.snapshot().length, 2);
     assert.equal(diagnostics.snapshot()[0].kind, "poll");
     assert.equal(forwarded.length, 3);
@@ -42,8 +39,6 @@ test("uses a closed event schema that cannot retain credentials or content", asy
   try {
     const diagnostics = new Diagnostics();
 
-    // Given: transport events from every supported category.
-    // When: their serializable snapshot is inspected.
     diagnostics.record({ kind: "sse_state", at: 1, state: "connecting" });
     const poisoned = {
       kind: "sse_event",
@@ -62,7 +57,6 @@ test("uses a closed event schema that cannot retain credentials or content", asy
     diagnostics.record({ kind: "collab_activity", at: 6, entries: 1, newestCreatedAt: "2026-08-12T00:00:00Z" });
     const serialized = JSON.stringify(diagnostics.snapshot());
 
-    // Then: the collector drops unapproved fields and retained events cannot be changed by callers.
     assert.equal(diagnostics.snapshot()[1].connectionAgeMs, 3);
     assert.equal(Object.isFrozen(diagnostics.snapshot()[1]), true);
     for (const forbidden of ["token", "password", "authorization", "content", "body", "text", "path"]) {

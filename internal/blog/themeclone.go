@@ -1,4 +1,4 @@
-// 主题克隆
+// 从现有主题创建可编辑副本。
 package blog
 
 import (
@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// ScaffoldTheme creates an editable copy of an existing built-in or custom theme.
+// ScaffoldTheme 按现有内置或自定义主题创建可编辑副本。
 func ScaffoldTheme(dataDir, base, newName string) (string, error) {
 	if err := ValidateThemeName(newName); err != nil {
 		return "", err

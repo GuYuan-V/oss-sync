@@ -1,4 +1,4 @@
-// 服务入口
+// Package main 启动 OSS Sync 服务并负责进程退出。
 package main
 
 import (
@@ -25,12 +25,12 @@ import (
 )
 
 func main() {
-	// Hidden helper mode bypasses normal config/database startup.
+	// 更新辅助进程不加载常规配置与数据库，直接执行后退出。
 	if ok, marker := update.IsHelperInvocation(); ok {
 		code := update.RunHelper(marker)
 		os.Exit(code)
 	}
-	// --version 只打印版本并退出，供更新流程校验下载的二进制。
+	// --version 命令用于校验已下载的服务端二进制版本。
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Println(version.Version)
 		return
@@ -46,13 +46,11 @@ func main() {
 		log.Fatalf("初始化更新器失败: %v", err)
 	}
 
-	// Service shutdown callback is the only post-helper-launch shutdown route.
-	// Manager is durable on DataDir for check_id lifecycle.
+	// 服务回调是辅助进程完成后的关闭信号，管理器将交接状态持久化到 DataDir，中断的启动因此可恢复。
 	var updateSvc *update.Service
 	if mgr, err := update.NewManager(cfg.Storage.DataDir); err == nil {
 		updateSvc = update.NewService(mgr, updater, cfg)
-		// Ordinary startup: safely discover durable pending markers and resume helper
-		// after validating active operation and marker safety. Covers crash-after-marker-before-helper-launch.
+		// 校验当前操作与标记后恢复未完成的交接，覆盖写标记后崩溃且尚未启动辅助进程的情况。
 		if n, err := update.ResumePendingHandoffs(updater.ExecPath()); err != nil {
 			log.Printf("[OSS] 恢复待处理更新失败: %v", err)
 		} else if n > 0 {
@@ -140,7 +138,7 @@ func main() {
 	shutdownGracefully(httpSrv, sched, db)
 }
 
-// shutdownGracefully 按“先停 scheduler、再 HTTP Shutdown、最后关 DB”的顺序优雅关闭。
+// shutdownGracefully 按定时任务、HTTP 流量、数据库的顺序停止。
 func shutdownGracefully(httpSrv *http.Server, sched *cron.Scheduler, db *gorm.DB) {
 	stopCtx, cancelStop := context.WithTimeout(context.Background(), 5*time.Second)
 	if err := sched.Stop(stopCtx); err != nil {

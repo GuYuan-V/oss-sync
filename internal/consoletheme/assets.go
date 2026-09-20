@@ -1,4 +1,4 @@
-// 控制台主题资源
+// 控制台默认主题的嵌入资源。
 package consoletheme
 
 import "embed"

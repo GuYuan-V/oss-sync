@@ -895,7 +895,6 @@ time { color: var(--muted); font-family: "IBM Plex Mono", "Cascadia Mono", monos
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
 }
-/* ============ App shell: sidebar + topbar + content ============ */
 .body--console { background: var(--canvas); }
 /* 桌面端应用壳：sidebar 和 .console 是 body 的直接子元素，
    两列 Grid 必须挂在 body 上，侧边栏固定 264px，右侧内容占满剩余空间。 */
@@ -1074,7 +1073,6 @@ body.body--console .console {
 }
 .sidebar-overlay { display: none; }
 
-/* Modal */
 .modal { position: fixed; inset: 0; z-index: 60; display: none; }
 .modal.is-open { display: block; }
 .modal__backdrop { position: absolute; inset: 0; background: rgba(10, 14, 24, .55); }
@@ -1125,7 +1123,7 @@ body.body--console .console {
 .theme-file-editor summary { padding: 12px 0; cursor: pointer; font-weight: 800; }
 .theme-file-editor form { padding: 0 0 20px; }
 
-/* Device auth summary — one-line table cell with truncated text and fixed actions */
+/* 设备授权摘要：单行表格单元，文本截断并固定操作区。 */
 .device-auth-summary {
   display: flex;
   align-items: center;
@@ -1157,7 +1155,7 @@ body.body--console .console {
   flex-shrink: 0;
 }
 
-/* Device auth modal — compact variant */
+/* 设备授权弹窗的紧凑变体。 */
 .device-auth-modal .modal__panel {
   width: min(400px, calc(100% - 32px));
   padding: 24px;
@@ -1192,7 +1190,7 @@ body.body--console .console {
   border-top: 1px solid var(--line);
 }
 
-/* Modal-scoped device form — compact within modal, avoids regressions to normal devices.html */
+/* 弹窗内的设备表单：在弹窗内保持紧凑，不影响常规 devices.html 布局。 */
 .device-auth-modal .device-auth-form {
   margin: 0;
   gap: 10px;
@@ -1204,7 +1202,7 @@ body.body--console .console {
   min-width: 0;
 }
 
-/* Modal-scoped vault checklist — scrollable when many vaults */
+/* 弹窗内的 Vault 清单：Vault 较多时可滚动。 */
 .device-auth-modal .vault-check-list {
   max-height: 240px;
   overflow-y: auto;
@@ -1292,7 +1290,6 @@ body.body--console .console {
   margin-top: 20px;
 }
 
-/* Flash */
 .flash {
   display: flex;
   align-items: center;
@@ -1307,12 +1304,11 @@ body.body--console .console {
 .flash--success { color: var(--open); background: var(--open-soft); border-color: var(--open); }
 .flash__close { border: 0; background: transparent; color: inherit; font-size: 18px; cursor: pointer; }
 
-/* Danger button */
 .button--danger { color: white; background: var(--danger-button); border-color: var(--danger-button); box-shadow: 4px 4px 0 var(--button-shadow); }
 .button--danger:hover { filter: brightness(1.1); }
 .share-url { font: 12px "IBM Plex Mono", "Cascadia Mono", monospace; overflow-wrap: anywhere; }
 
-/* ============ Dark theme overrides for hardcoded colors ============ */
+/* 暗色主题对硬编码颜色的覆盖。 */
 :root[data-theme="dark"] .ledger-rail, :root[data-theme="dark"] .login-aside { background: #0c1120; }
 :root[data-theme="dark"] .ledger-rail .eyebrow, :root[data-theme="dark"] .login-aside .eyebrow { color: #7a9aff; }
 :root[data-theme="dark"] .ledger-rail p, :root[data-theme="dark"] .login-aside p { color: #b8c3d8; }
@@ -1332,7 +1328,7 @@ body.body--console .console {
 :root[data-theme="dark"] .button--primary:hover { background: var(--cobalt-dark); }
 :root[data-theme="dark"] .button.is-active { background: var(--cobalt-dark); border-color: var(--cobalt-dark); }
 
-/* ============ Mobile drawer ============ */
+/* 窄屏（最大 900px）下的移动端布局。 */
 @media (max-width: 900px) {
   body.body--console { display: block; }
   .sidebar {
@@ -1363,7 +1359,7 @@ body.body--console .console {
   .console-topbar { gap: 10px; }
   .collaboration-article-row { grid-template-columns: 1fr; }
 }
-/* theme admin */
+/* 主题管理表单布局。 */
 .button-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .theme-setting-group { display: grid; gap: 16px; min-width: 0; padding: 20px; border: 1px solid var(--line-dark); }
 .theme-setting-rows { display: grid; gap: 16px; }

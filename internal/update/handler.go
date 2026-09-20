@@ -16,7 +16,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// Handler 持有 update 路由依赖。
+// Handler 持有更新路由所需依赖。
 type Handler struct {
 	DB  *gorm.DB
 	Cfg *config.Config
@@ -25,10 +25,10 @@ type Handler struct {
 	svc *Service
 }
 
-// NewHandler 创建 update handler。
+// NewHandler 创建更新处理器。
 func NewHandler(db *gorm.DB, cfg *config.Config, up *Updater) *Handler {
 	h := &Handler{DB: db, Cfg: cfg, up: up}
-	// Manager rooted at DataDir for durable checked candidates.
+	// Manager 落盘于 DataDir，保存已校验候选。
 	if cfg != nil && cfg.Storage.DataDir != "" && up != nil {
 		if mgr, err := NewManager(cfg.Storage.DataDir); err == nil {
 			h.mgr = mgr
@@ -71,7 +71,7 @@ func (h *Handler) getVersion(c *gin.Context) {
 	})
 }
 
-// check 通过选定更新源检查 latest release，严格校验后创建 durable Manager check_id。
+// check 按选定更新源检查最新 Release，严格校验后创建持久化的 Manager check_id。
 func (h *Handler) check(c *gin.Context) {
 	if h.mgr == nil || h.up == nil || h.svc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update service not initialized"})
@@ -140,7 +140,7 @@ func (h *Handler) trigger(c *gin.Context) {
 		DownloadSource   string `json:"download_source"`
 		DownloadProxy    string `json:"download_proxy"`
 	}
-	// 兼容两种命名
+	// 兼容下划线与驼峰两种命名。
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req.CheckID = c.Query("check_id")
 		if req.CheckID == "" {
@@ -182,7 +182,7 @@ func (h *Handler) trigger(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"ok": false, "code": "service_unavailable", "error": "update service not initialized"})
 		return
 	}
-	// 严格校验 expected version 与 candidate 版本一致，防止 stale/mismatched check_id
+	// 严格校验请求版本与候选版本一致，过期或不匹配的 check_id 直接拒绝。
 	if cand, err := h.mgr.ValidateChecked(req.CheckID); err == nil {
 		if cand.Version != req.Version {
 			c.JSON(http.StatusConflict, gin.H{"ok": false, "code": "check_mismatch", "error": "version mismatch: candidate " + cand.Version + " != expected " + req.Version})
@@ -213,7 +213,7 @@ func (h *Handler) trigger(c *gin.Context) {
 		} else if errors.Is(err, ErrInvalidVersion) || errors.Is(err, ErrInvalidAsset) || errors.Is(err, ErrInvalidSize) || errors.Is(err, ErrInvalidURL) {
 			code = http.StatusBadRequest
 		}
-		// typed unsupported platform also maps to 400
+		// 不支持平台的类型化错误同样映射为 400。
 		if errors.Is(err, ErrUnsupportedPlatform) {
 			code = http.StatusBadRequest
 		}

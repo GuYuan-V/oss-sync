@@ -1,4 +1,4 @@
-// Server update polling controller — pure bounded logic with no Obsidian dependency.
+// 服务端更新轮询控制器，逻辑纯粹且有界，不依赖 Obsidian。
 import type {
   ServerUpdateStatusResponse,
   ServerVersionInfo,
@@ -40,10 +40,9 @@ export function isTransientConnectionError(error: unknown): boolean {
     return false;
   }
   if (error instanceof OSSApiError) {
-    // 401/403 are not transient — they mean role changed.
+    // 401 与 403 表示角色变化，不属于瞬断。
     if (error.status === 401 || error.status === 403) return false;
-    // Other 5xx / Bad Gateway during restart are treated as transient by caller if needed,
-    // but explicit network errors are also transient.
+    // 其余 OSSApiError 同样在此返回 false，由调用方继续判定。
     return false;
   }
   const message = error instanceof Error ? error.message : String(error ?? "");
@@ -179,18 +178,18 @@ export class ServerUpdatePoller {
         const outcome = this.evaluateTerminal(status);
         if (outcome !== null) return outcome;
 
-        // Not terminal yet — wait and loop.
+        // 未进入终态时休眠后继续下一轮，轮询次数与总时长有上限。
       } catch (error: unknown) {
         if (isStaleRoleError(error)) {
           return { kind: "auth_error", error };
         }
         if (isTransientConnectionError(error)) {
           consecutiveTransientErrors += 1;
-          // Tolerate expected restart connection loss — continue bounded polling.
-          // If we see many transient errors in a row, still bounded by attempts/duration.
+          // 重启期间连接中断属于预期情况，继续有界轮询。
+          // 连续瞬断仍受尝试次数与总时长上限约束。
         } else {
-          // Non-transient API error: treat as transient for polling unless it's terminal condition.
-          // But 5xx BadGateway etc during restart should also be tolerated as transient.
+          // 非瞬断的 API 错误在轮询中同样计为可容忍错误，继续等待。
+          // 重启期间的 5xx 错误同样继续轮询。
           const rawStatus = (error as { status?: unknown })?.status;
           const statusNum = typeof rawStatus === "number" ? rawStatus : error instanceof OSSApiError ? error.status : undefined;
           const is5xx = typeof statusNum === "number" && statusNum >= 500;
@@ -198,13 +197,13 @@ export class ServerUpdatePoller {
           if (is5xx) {
             consecutiveTransientErrors += 1;
           } else if (is4xx) {
-            // 4xx other than 401/403 — surface as failed attempt but continue polling for bounded retries
+            // 除 401/403 外的 4xx 计为失败尝试，仍在有界次数内继续轮询。
             consecutiveTransientErrors += 1;
           } else {
             consecutiveTransientErrors += 1;
           }
         }
-        // If max transient errors not bounded, attempts/duration will bound.
+        // 瞬断次数无单独上限，由尝试次数与总时长兜底。
       }
 
       if (this.aborted || signal?.aborted) break;
@@ -221,7 +220,7 @@ export class ServerUpdatePoller {
     const state = status.state;
     const phase = lastUpdate?.phase ?? state;
 
-    // Validate terminal operation status/version: terminal when state/phase is done/failed/up_to_date.
+    // 终态判定依据 state 或 phase 是否为 done、failed 或 up_to_date。
     const isTerminal =
       isTerminalServerState(state) ||
       isTerminalServerState(phase) ||
@@ -231,21 +230,20 @@ export class ServerUpdatePoller {
           isTerminalServerState(lastUpdate.state)));
 
     if (!isTerminal) {
-      // Also consider version change as terminal success even if helper hasn't reported done yet but version flipped.
+      // 版本一致且 state 为 done 时直接视为成功。
       if (versionMatches && state === "done") return { kind: "success", version: status.version, status };
       return null;
     }
 
-    // Terminal — distinguish success/rollback/failure by version + ok flag.
+    // 终态下按版本号与 ok 标记区分成功、回滚与失败。
     if (versionMatches && (lastUpdate?.ok === true || state === "done" || phase === "done")) {
       return { kind: "success", version: status.version, status };
     }
 
     if (!versionMatches && (state === "failed" || lastUpdate?.state === "failed" || phase === "failed")) {
       const error = lastUpdate?.error ?? `server update failed (state=${state})`;
-      // Heuristic for rollback: failed but version remains old.
+      // 回滚的启发式判定：已失败且版本号仍为旧版本。
       if (lastUpdate?.code === "failed" || state === "failed") {
-        // If version did not change, it's rolled_back or failed.
         if (normalizeVersion(status.version) !== expected) {
           return { kind: "rolled_back", versionBefore: this.opts.expectedVersion, currentVersion: status.version, status };
         }
@@ -261,7 +259,7 @@ export class ServerUpdatePoller {
       return { kind: "failed", state, error, status };
     }
 
-    // up_to_date or idle with version mismatch implies no update happened — treat as failed if expected newer.
+    // state 为 up_to_date 时视为未发生更新，按失败返回。
     if (state === "up_to_date") {
       return { kind: "failed", state, error: lastUpdate?.error ?? "already up to date", status };
     }
@@ -270,7 +268,6 @@ export class ServerUpdatePoller {
       return { kind: "success", version: status.version, status };
     }
 
-    // Fallback: terminal but unmatched.
     return { kind: "failed", state, error: lastUpdate?.error ?? `terminal state=${state} phase=${phase}`, status };
   }
 }

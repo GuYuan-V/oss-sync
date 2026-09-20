@@ -1,4 +1,4 @@
-// 定时清理
+// 墓碑、临时文件与快照的定时清理。
 package cron
 
 import (
@@ -209,7 +209,7 @@ func (c *Cleanup) purgeOrphansForVault(userID uint, vaultID string, now time.Tim
 
 	grace := 24 * time.Hour
 	for _, a := range attachments {
-		// 已进入 revision 协议的附件必须走同步删除，确保其他设备收到墓碑。
+		// 已进入 Revision 协议的附件必须走同步删除，确保其他设备收到墓碑。
 		if a.Revision > 0 {
 			continue
 		}

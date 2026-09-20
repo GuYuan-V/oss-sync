@@ -160,7 +160,7 @@ func TestDeviceVaultAuthorizationScopesAccess(t *testing.T) {
 	if code, _ = approveAs(t, router, userToken, "scope-dev", []string{vaultA}, nil); code != http.StatusOK {
 		t.Fatalf("approve scope-dev: %d", code)
 	}
-	// Re-login to get token reflecting approved status
+	// 重新登录，使 token 携带已批准状态。
 	code, login2 := loginAsDevice(t, router, "scope-user", "password123", "scope-dev", "Scope Device")
 	if code == http.StatusOK {
 		devToken = login2["token"].(string)
@@ -298,7 +298,7 @@ func TestAdminCanApproveAnotherUsersDevice(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("admin approve: %d", code)
 	}
-	// Re-login to get approved device token
+	// 重新登录，拿到批准态设备 token。
 	code2, login2 := loginAsDevice(t, router, "member-x", "password123", "member-dev", "Member PC")
 	if code2 == http.StatusOK {
 		login = login2
@@ -348,7 +348,7 @@ func TestSelfPasswordChangeReturnsFreshToken(t *testing.T) {
 		t.Fatalf("register: %d", code)
 	}
 	token := reg["token"].(string)
-	// Create a device for vault access
+	// 建一个设备，用于访问仓库。
 	code, devLogin := loginAsDevice(t, router, "self-change", "password123", "self-dev", "Self Device")
 	if code != http.StatusOK {
 		t.Fatalf("device login: %d %v", code, devLogin)
@@ -381,11 +381,11 @@ func TestSelfPasswordChangeReturnsFreshToken(t *testing.T) {
 	if code != http.StatusOK || body["token"] == "" {
 		t.Fatalf("change password: %d %v", code, body)
 	}
-	// 旧 token 失效
+	// 旧 token 失效。
 	if code, _ = doJSON(t, router, http.MethodGet, "/api/vaults", token, nil); code != http.StatusUnauthorized {
 		t.Fatalf("old token after password change: %d", code)
 	}
-	// New password can login device and access vault
+	// 新密码可登录设备并访问仓库。
 	code, newDevLogin := loginAsDevice(t, router, "self-change", "new-pass-123", "self-dev", "Self Device")
 	if code != http.StatusOK {
 		t.Fatalf("new device login: %d %v", code, newDevLogin)

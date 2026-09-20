@@ -14,7 +14,6 @@ import {
 } from "./helpers/collaboration-file-sync-loader.mjs";
 
 test("pending is saved before API call with exact {content,baseRevision,operationID}", async () => {
-  // Given: synced collaboration entry with ancestor baseText "old".
   const win = installWindowFake();
   globalThis.__ossNotices = [];
   const { mod, cleanup } = await loadSyncModules();
@@ -40,13 +39,11 @@ test("pending is saved before API call with exact {content,baseRevision,operatio
     };
     const sync = createSync(mod, { baseline, vault, api, now: () => FIXED_NOW, createOperationID: () => FIXED_ID });
 
-    // When: local file is edited and debounced upload flushes.
     sync.handleLocalEdit("协作oss/owner/Shared.md");
     assert.equal(win.timers.size, 1);
     win.flush();
     await uploadCalled.promise;
 
-    // Then: upload uses exact CAS payload and pending was persisted before the call.
     assert.equal(uploads.length, 1);
     assert.equal(uploads[0].vaultId, "vault-1");
     assert.equal(uploads[0].fileId, 42);
@@ -65,7 +62,6 @@ test("pending is saved before API call with exact {content,baseRevision,operatio
 });
 
 test("success clears pending and advances baseline to uploaded content", async () => {
-  // Given: collaboration entry with ancestor baseText "old".
   const win = installWindowFake();
   globalThis.__ossNotices = [];
   const { mod, cleanup } = await loadSyncModules();
@@ -89,12 +85,10 @@ test("success clears pending and advances baseline to uploaded content", async (
       createOperationID: () => FIXED_ID,
     });
 
-    // When: edit succeeds.
     sync.handleLocalEdit("协作oss/owner/Shared.md");
     win.flush();
     await changedCalled.promise;
 
-    // Then: pending cleared, revision/hash advanced, baseText becomes uploaded content.
     const entry = baseline.getCollaboration("vault-1", 42);
     assert.equal(entry.pending, null);
     assert.equal(entry.serverRevision, 8);
@@ -110,7 +104,6 @@ test("success clears pending and advances baseline to uploaded content", async (
 });
 
 test("failure keeps pending and preserves ancestor baseText", async () => {
-  // Given: entry with ancestor baseText "old".
   const win = installWindowFake();
   globalThis.__ossNotices = [];
   const { mod, cleanup } = await loadSyncModules();
@@ -123,12 +116,10 @@ test("failure keeps pending and preserves ancestor baseText", async () => {
     const api = { collabUpload: async () => { uploadCalled.resolve(); throw new Error("network"); } };
     const sync = createSync(mod, { baseline, vault, api, now: () => FIXED_NOW, createOperationID: () => FIXED_ID });
 
-    // When: upload fails.
     sync.handleLocalEdit("协作oss/owner/Shared.md");
     win.flush();
     await uploadCalled.promise;
 
-    // Then: pending remains and baseText still ancestor "old" (not overwritten).
     const entry = baseline.getCollaboration("vault-1", 42);
     assert.notEqual(entry.pending, null);
     assert.equal(entry.pending.id, FIXED_ID);

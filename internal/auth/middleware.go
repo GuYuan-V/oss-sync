@@ -1,7 +1,4 @@
-// Package auth 提供用户注册、登录和请求鉴权。
-//
-// Middleware 同时支持 Bearer JWT 与 Basic 认证。
-// 任何 handler 用 auth.RequireUser(c) 取当前用户。
+// Package auth 提供账号认证与请求身份辅助，Bearer 与 Basic 凭据解析为同一种请求身份。
 package auth
 
 import (
@@ -17,10 +14,10 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// ContextKey 是 gin 上下文中当前用户信息的键。
+// ContextKeyCurrentUser 在 Gin 上下文中存已认证用户。
 const ContextKeyCurrentUser = "oss.current_user"
 
-// ContextKeyIdentity 是携带用户与可选设备身份的上下文键。
+// ContextKeyIdentity 在 Gin 上下文中存已认证用户与可选设备绑定。
 const ContextKeyIdentity = "oss.auth_identity"
 
 var (
@@ -30,7 +27,7 @@ var (
 	errUserNotFound = errors.New("user not found")
 )
 
-// Identity 在请求上下文中携带已认证用户与可选的设备绑定。
+// Identity 为认证中间件建立的请求身份。
 type Identity struct {
 	User     *models.User
 	DeviceID jwt.DeviceID
@@ -38,7 +35,7 @@ type Identity struct {
 	Claims   *jwt.Claims
 }
 
-// CurrentUser 从 gin 上下文取出当前已认证用户。未认证返回 nil。
+// CurrentUser 返回已认证用户，匿名请求返回 nil。
 func CurrentUser(c *gin.Context) *models.User {
 	v, ok := c.Get(ContextKeyCurrentUser)
 	if !ok {
@@ -48,7 +45,7 @@ func CurrentUser(c *gin.Context) *models.User {
 	return u
 }
 
-// CurrentIdentity 从上下文取出完整身份（用户 + 可选设备）。
+// CurrentIdentity 返回完整的已认证身份，不存在时返回 nil。
 func CurrentIdentity(c *gin.Context) *Identity {
 	v, ok := c.Get(ContextKeyIdentity)
 	if !ok {
@@ -58,7 +55,7 @@ func CurrentIdentity(c *gin.Context) *Identity {
 	return id
 }
 
-// CurrentDeviceID 取出当前请求的设备绑定（若有）。
+// CurrentDeviceID 返回请求附带的设备绑定。
 func CurrentDeviceID(c *gin.Context) (jwt.DeviceID, bool) {
 	id := CurrentIdentity(c)
 	if id == nil || !id.HasDID {
@@ -67,7 +64,7 @@ func CurrentDeviceID(c *gin.Context) (jwt.DeviceID, bool) {
 	return id.DeviceID, true
 }
 
-// RequireUser 守卫：未认证返 401，已认证返回 user。
+// RequireUser 在无已认证用户时以 401 中断请求。
 func RequireUser(c *gin.Context) (*models.User, bool) {
 	u := CurrentUser(c)
 	if u == nil {
@@ -77,7 +74,7 @@ func RequireUser(c *gin.Context) (*models.User, bool) {
 	return u, true
 }
 
-// RequireAdmin 守卫：要求当前用户是管理员。
+// RequireAdmin 要求已认证用户为 admin；未登录返回 401，非 admin 返回 403。
 func RequireAdmin(c *gin.Context) (*models.User, bool) {
 	u := CurrentUser(c)
 	if u == nil {
@@ -91,12 +88,8 @@ func RequireAdmin(c *gin.Context) (*models.User, bool) {
 	return u, true
 }
 
-// RequireDeviceID 校验当前请求的设备绑定并与 supplied 比较。
-// 仅返回 claim 里的身份：缺失返回 401 device_identity_required，
-// 提供的 ID 非法或不一致返回 401 device_identity_mismatch，
-// 均设置 WWW-Authenticate 头。
-// 每一个非空 supplied 都必须与绑定一致；空字符串被忽略，
-// 无非空 supplied 时直接返回绑定。
+// RequireDeviceID 按令牌设备绑定校验传入的客户端 ID。缺绑定返回 device_identity_required，
+// 非法或不一致返回 device_identity_mismatch 并设置 WWW-Authenticate。
 func RequireDeviceID(c *gin.Context, supplied ...string) (jwt.DeviceID, bool) {
 	did, ok := CurrentDeviceID(c)
 	if !ok {
@@ -118,7 +111,7 @@ func RequireDeviceID(c *gin.Context, supplied ...string) (jwt.DeviceID, bool) {
 	return did, true
 }
 
-// Middleware 解析 Authorization 头并拒绝未认证请求。
+// Middleware 认证请求，失败时中断后续链路。
 func Middleware(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !Authenticate(c, db, cfg) {
@@ -128,7 +121,7 @@ func Middleware(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// Authenticate applies request credentials to a Gin context without advancing its handler chain.
+// Authenticate 应用请求凭据但不推进 Gin 链路。
 func Authenticate(c *gin.Context, db *gorm.DB, cfg *config.Config) bool {
 	ident, err := authenticateAny(db, cfg, c.GetHeader("Authorization"))
 	if err != nil {
@@ -140,6 +133,7 @@ func Authenticate(c *gin.Context, db *gorm.DB, cfg *config.Config) bool {
 	return true
 }
 
+// OptionalMiddleware 仅在携带凭据时认证请求。
 func OptionalMiddleware(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
@@ -158,6 +152,7 @@ func OptionalMiddleware(db *gorm.DB, cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
+// abortUnauthorized 按固定格式写未授权响应。
 func abortUnauthorized(c *gin.Context, err error) {
 	body := gin.H{"error": "unauthorized: " + err.Error()}
 	if errors.Is(err, jwt.ErrExpired) {

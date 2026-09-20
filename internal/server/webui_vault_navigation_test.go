@@ -7,7 +7,6 @@ import (
 )
 
 func TestWebConsoleVaultSidebar_whenVaultOpen_identifiesVaultAndLinksSections(t *testing.T) {
-	// Given
 	t.Chdir(t.TempDir())
 	srv, _, _ := newTestServer(t)
 	router := srv.Router()
@@ -15,10 +14,8 @@ func TestWebConsoleVaultSidebar_whenVaultOpen_identifiesVaultAndLinksSections(t 
 	vaultID := defaultVaultIDFromAPI(t, router, token)
 	session, csrf := webLogin(t, router, "nav-owner", "password123")
 
-	// When
 	page := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID, nil, session, csrf)
 
-	// Then
 	if page.Code != http.StatusOK {
 		t.Fatalf("vault page status = %d, want %d", page.Code, http.StatusOK)
 	}

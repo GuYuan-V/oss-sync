@@ -1,4 +1,4 @@
-// 配置加载
+// Package config 提供服务端配置的加载、覆盖与校验。
 package config
 
 import (
@@ -13,7 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config 是后端运行配置，按 OSS_ENV 加载开发或生产配置文件。
+// Config 是按 OSS_ENV 选定的有效运行时配置。
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
@@ -46,8 +46,7 @@ type AuthConfig struct {
 	JWTTTLHours        int    `yaml:"jwt_ttl_hours"`
 	WebSessionTTLHours int    `yaml:"web_session_ttl_hours"`
 	DeviceJWTTTLHours  int    `yaml:"device_jwt_ttl_hours"`
-	// AllowAnonymousRegistration 只用于初始化新数据库中的注册开关。
-	// 初始化后以数据库中的 SystemSetting 为准。
+	// AllowAnonymousRegistration 仅用于初始化新数据库，已有数据库以 SystemSetting 落盘值为准。
 	AllowAnonymousRegistration bool `yaml:"allow_anonymous_registration"`
 }
 
@@ -59,39 +58,29 @@ type SyncConfig struct {
 	OrphanFileGraceHours   int `yaml:"orphan_file_grace_hours"`
 }
 
-// UpdateConfig 配置服务端自动更新（仅管理员手动触发）。
+// UpdateConfig 控制管理员触发的版本检查与更新。
 type UpdateConfig struct {
-	// GitHubRepo 是发布仓库，格式 owner/repo。
+	// GitHubRepo 为 owner/repo 形式的发布仓库。
 	GitHubRepo string `yaml:"github_repo"`
-	// DownloadSource 是更新检查与文件下载源：official / proxy / custom。
+	// DownloadSource 选择 official、proxy 或 custom 下载源。
 	DownloadSource string `yaml:"download_source"`
-	// DownloadProxy 是 custom 源使用的 HTTPS 地址前缀。
+	// DownloadProxy 为 custom 源使用的 HTTPS 前缀。
 	DownloadProxy string `yaml:"download_proxy"`
-	// TimeoutSeconds 是 GitHub 请求的超时秒数，0 表示使用默认值 15，边界 5..120。
+	// TimeoutSeconds 为 GitHub 请求超时（秒），0 表示使用 15 秒。
 	TimeoutSeconds int `yaml:"timeout_seconds"`
-	// UpdateTimeoutSeconds 是整次更新流程的超时秒数，0 表示使用默认值 600，边界 30..1800。
+	// UpdateTimeoutSeconds 为整次更新超时（秒），0 表示使用 600 秒。
 	UpdateTimeoutSeconds int `yaml:"update_timeout_seconds"`
-	// CheckTTLSeconds 是检查结果缓存 TTL 秒数，0 表示使用默认值 3600，边界 60..86400。
+	// CheckTTLSeconds 控制版本检查结果缓存（秒），0 表示使用 3600 秒。
 	CheckTTLSeconds int `yaml:"check_ttl_seconds"`
-	// CheckLimit 是检查更新接口的限流次数，0 表示使用默认值 6，边界 1..100。
+	// CheckLimit 控制版本检查次数，0 表示使用 6 次。
 	CheckLimit int `yaml:"check_limit"`
-	// CheckWindowSeconds 是限流时间窗口秒数，0 表示使用默认值 60，边界 10..3600。
+	// CheckWindowSeconds 控制检查限流窗口（秒），0 表示使用 60 秒。
 	CheckWindowSeconds int `yaml:"check_window_seconds"`
 }
 
-// Load 读取与 OSS_ENV 对应的配置文件并合并环境变量覆盖。
-//
-// OSS_ENV 取值：dev（默认）/ prod。对应 configs/config.<env>.yaml。
-// 配置文件查找路径：configs/config.<env>.yaml（相对于工作目录）。
-// 以下字段支持环境变量覆盖：
-//   - OSS_ALLOW_ANONYMOUS_REGISTRATION
-//   - OSS_DB_DRIVER / OSS_DB_DSN
-//   - OSS_SERVER_HOST / OSS_SERVER_PORT
-//   - OSS_STORAGE_DIR
-//   - OSS_STORAGE_MAX_TOTAL_SIZE_MB
-//   - OSS_WEB_SESSION_TTL_HOURS / OSS_DEVICE_JWT_TTL_HOURS
-//   - OSS_UPDATE_GITHUB_REPO
-//   - OSS_UPDATE_DOWNLOAD_SOURCE / OSS_UPDATE_DOWNLOAD_PROXY
+// Load 按 OSS_ENV 读取配置文件并应用环境变量覆盖。
+// OSS_ENV 仅接受 dev（默认）或 prod，对应文件为 configs/config.<env>.yaml。
+// 支持覆盖数据库、服务端、存储、认证与更新字段。
 func Load() (*Config, error) {
 	env := os.Getenv("OSS_ENV")
 	if env == "" {
@@ -310,7 +299,7 @@ func isValidRepoPart(p string) bool {
 		}
 		return false
 	}
-	// 不允许以 . 或 - 开头/结尾
+	// 不允许以 . 或 - 开头/结尾。
 	if p[0] == '.' || p[0] == '-' || p[len(p)-1] == '.' || p[len(p)-1] == '-' {
 		return false
 	}
@@ -414,8 +403,8 @@ func Env() string {
 	return e
 }
 
-// SaveDatabaseConfig stores database startup settings in the active YAML file.
-// It never changes the database connection of the current process.
+// SaveDatabaseConfig 将数据库启动配置写入当前环境对应的 YAML 文件。
+// SaveDatabaseConfig 不改变当前进程已建立的数据库连接。
 func SaveDatabaseConfig(driver, dsn string) error {
 	driver = strings.ToLower(strings.TrimSpace(driver))
 	dsn = strings.TrimSpace(dsn)

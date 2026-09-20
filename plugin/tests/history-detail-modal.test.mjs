@@ -43,8 +43,6 @@ test("history detail shows three actions, a folded previous diff, and a current 
       canRestore: true,
     });
 
-    // Given: a text history entry without an eligible previous snapshot.
-    // When: its detail modal is opened and compared with the current note.
     modal.onOpen();
     await new Promise((resolve) => setImmediate(resolve));
     const previous = modal.contentEl.querySelectorAll(".oss-history-compare-previous")[0];
@@ -59,7 +57,6 @@ test("history detail shows three actions, a folded previous diff, and a current 
     modal.contentEl.querySelectorAll(".oss-history-compare-current")[0].click();
     await new Promise((resolve) => setImmediate(resolve));
 
-    // Then: previous and current comparisons use the server-provided folded diff.
     assert.deepEqual(detailCalls, [[12, "last"], [12, "current"]]);
     assert.equal(modal.contentEl.querySelectorAll(".oss-diff-preview").length, 1);
     assert.equal(modal.contentEl.querySelectorAll(".oss-history-compare-current")[0].hasClass("is-active"), true);

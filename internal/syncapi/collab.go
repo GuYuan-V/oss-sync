@@ -118,7 +118,7 @@ func (h *Handler) CollabList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"collaborations": out})
 }
 
-// CollabInbox lists collaborations received by the authenticated user across Vaults.
+// CollabInbox 列出当前用户收到的跨仓库协作关系。
 func (h *Handler) CollabInbox(c *gin.Context) {
 	u, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
@@ -244,7 +244,7 @@ func (h *Handler) CollabRevoke(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// CollabLeave lets an accepted collaborator actively end their collaboration.
+// CollabLeave 供已接受的协作者主动结束协作。
 func (h *Handler) CollabLeave(c *gin.Context) {
 	u, _, ok := h.requireCollaborationDevice(c)
 	if !ok {

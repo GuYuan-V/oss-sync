@@ -201,7 +201,6 @@ func TestWebConsoleVaultSettingsCustomFragmentsAreBoundedOnSave(t *testing.T) {
 }
 
 func TestWebConsoleVaultSettingsHidesCustomFragmentsFromParticipants(t *testing.T) {
-	// Given
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
@@ -221,13 +220,11 @@ func TestWebConsoleVaultSettingsHidesCustomFragmentsFromParticipants(t *testing.
 	}
 	participantSession, participantCSRF := webLogin(t, router, "fragment-participant", "password123")
 
-	// When
 	page := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/settings", nil, participantSession, participantCSRF)
 	response := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings", url.Values{
 		"theme_name": {"default"}, "custom_header": {"participant must not save this"},
 	}, participantSession, participantCSRF)
 
-	// Then
 	if page.Code != http.StatusOK || strings.Contains(page.Body.String(), `name="custom_header"`) {
 		t.Fatalf("participant settings page exposed custom fragments: status=%d body=%s", page.Code, page.Body)
 	}
@@ -244,7 +241,6 @@ func TestWebConsoleVaultSettingsHidesCustomFragmentsFromParticipants(t *testing.
 }
 
 func TestWebConsoleVaultSettingsForbidCustomFragmentsWhenPolicyDisabled(t *testing.T) {
-	// Given
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
@@ -267,7 +263,6 @@ func TestWebConsoleVaultSettingsForbidCustomFragmentsWhenPolicyDisabled(t *testi
 	}
 	setCustomFragmentsEnabledForTest(t, db, false)
 
-	// When
 	res := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings", url.Values{
 		"theme_name":       {"default"},
 		"recycle_bin_days": {"0"},
@@ -276,7 +271,6 @@ func TestWebConsoleVaultSettingsForbidCustomFragmentsWhenPolicyDisabled(t *testi
 		"custom_footer":    {"FORGED FOOTER"},
 	}, session, csrf)
 
-	// Then
 	if res.Code != http.StatusSeeOther || !strings.Contains(res.Header().Get("Location"), "saved=1") {
 		t.Fatalf("save settings with disabled policy should still succeed: %d %q", res.Code, res.Header().Get("Location"))
 	}
@@ -297,7 +291,6 @@ func TestWebConsoleVaultSettingsForbidCustomFragmentsWhenPolicyDisabled(t *testi
 }
 
 func TestWebConsoleVaultSettingsForbidForgedCustomFragmentsFromParticipantsWhenPolicyDisabled(t *testing.T) {
-	// Given
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
@@ -306,7 +299,7 @@ func TestWebConsoleVaultSettingsForbidForgedCustomFragmentsFromParticipantsWhenP
 	ownerToken := registerAndLogin(t, router, "forged-participant-owner", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, ownerToken)
 
-	// Seed historical fragments while policy is enabled.
+	// 策略启用期间先写入历史片段。
 	ownerSession, ownerCSRF := webLogin(t, router, "forged-participant-owner", "password123")
 	seed := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings", url.Values{
 		"theme_name":       {"default"},
@@ -320,7 +313,7 @@ func TestWebConsoleVaultSettingsForbidForgedCustomFragmentsFromParticipantsWhenP
 	}
 	setCustomFragmentsEnabledForTest(t, db, false)
 
-	// Add a participant member.
+	// 加一个参与者成员。
 	code, _ := doJSON(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
 		"username": "forged-participant", "password": "password123",
 	})
@@ -334,7 +327,7 @@ func TestWebConsoleVaultSettingsForbidForgedCustomFragmentsFromParticipantsWhenP
 	}
 	participantSession, participantCSRF := webLogin(t, router, "forged-participant", "password123")
 
-	// When: participant attempts to forge custom fragments while policy is disabled.
+	// 参与者在策略关闭时伪造自定义片段。
 	res := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings", url.Values{
 		"theme_name":       {"default"},
 		"recycle_bin_days": {"0"},
@@ -346,7 +339,7 @@ func TestWebConsoleVaultSettingsForbidForgedCustomFragmentsFromParticipantsWhenP
 		t.Fatalf("participant forged payload should be rejected: %d %q", res.Code, res.Header().Get("Location"))
 	}
 
-	// Then: stored history fragments should remain unchanged.
+	// 已存历史片段应保持不变。
 	var setting models.VaultSetting
 	if err := db.Where("vault_id = ?", vaultID).First(&setting).Error; err != nil {
 		t.Fatal(err)
@@ -363,7 +356,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 
 	ownerToken := registerAndLogin(t, router, "files-owner", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, ownerToken)
-	// files-user 参与者授权
+	// 为 files-user 办参与者授权。
 	code, memberLogin := doJSON(t, router, http.MethodPost, "/api/auth/register", "",
 		map[string]string{"username": "files-user", "password": "password123"})
 	if code != http.StatusOK {
@@ -415,7 +408,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 		t.Fatalf("preview: %d body=%q", preview.Code, preview.Body.String())
 	}
 
-	// Markdown 预览页面渲染 HTML，而不是返回原始 Markdown 文本。
+	// Markdown 预览页渲染 HTML，不直接返回原始 Markdown 文本。
 	markdownPreview := doForm(t, router, http.MethodGet,
 		"/dashboard/vaults/"+vaultID+"/files/preview?path=Notes%2FA.md", nil, session, csrf)
 	if markdownPreview.Code != http.StatusOK ||
@@ -483,7 +476,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 	if !strings.Contains(tomb.StorageKey, "recycle") {
 		t.Fatalf("storage key not recycled: %s", tomb.StorageKey)
 	}
-	// 历史记录包含 delete 与设备名"网页控制台"。
+	// 历史记录含 delete 动作与设备名“网页控制台”。
 	var hist models.FileHistory
 	if err := db.Where("vault_id = ? AND file_path = ? AND action = ?", vaultID, "Notes/A.md", "delete").
 		Order("id desc").First(&hist).Error; err != nil {
@@ -535,14 +528,14 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 	if err != nil || string(content) != "# Hello\n\n- [x] Finished\n- [ ] Next" {
 		t.Fatalf("restored content: %q err=%v", content, err)
 	}
-	// 历史记录 restore 校验
+	// 校验 restore 历史记录。
 	var restoreHist models.FileHistory
 	if err := db.Where("vault_id = ? AND file_path = ? AND action = ?", vaultID, "Notes/A.md", "restore").
 		Order("id desc").First(&restoreHist).Error; err != nil {
 		t.Fatal(err)
 	}
 
-	// 分享：创建、切换 allow_copy、取消。
+	// 分享创建、切换 allow_copy 与取消。
 	share := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/shares",
 		url.Values{"target_path": {"Notes/A.md"}}, session, csrf)
 	if share.Code != http.StatusSeeOther {
@@ -735,7 +728,7 @@ func TestWebConsoleVaultSettingsAllowOwnerToSelectTheme(t *testing.T) {
 }
 
 func TestWebConsolePluginSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing.T) {
-	// Given: a vault uses the Papertrail plugin and the user fills every kind of plugin setting.
+	// 仓库启用 Papertrail 插件，用户填全各类插件设置。
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
@@ -747,7 +740,7 @@ func TestWebConsolePluginSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing
 	}
 	session, csrf := webLogin(t, router, "theme-settings-owner", "password123")
 
-	// When: URL validation rejects the submitted Logo URL.
+	// URL 校验拒绝提交的 Logo URL。
 	response := doForm(t, router, http.MethodPost, "/dashboard/plugins/papertrail-settings/settings", url.Values{
 		"vault_id":               {vaultID},
 		"setting_blog_name":      {"Draft blog"},
@@ -758,7 +751,7 @@ func TestWebConsolePluginSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing
 		"group_buttons_icon_url": {"/icon.svg"},
 	}, session, csrf)
 
-	// Then: the plugin error page keeps every submitted value instead of redirecting to empty persisted data.
+	// 插件错误页保留全部提交值，不回退到空的已存数据。
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid theme settings status=%d, want 400; body=%s", response.Code, response.Body)
 	}
@@ -770,19 +763,19 @@ func TestWebConsolePluginSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing
 }
 
 func TestWebConsolePersistsAccountLanguagePreference(t *testing.T) {
-	// Given: an authenticated web-console user with the default Chinese preference.
+	// 已登录网页控制台用户保持中文默认偏好。
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	registerAndLogin(t, router, "language-owner", "password123")
 	session, csrf := webLogin(t, router, "language-owner", "password123")
 
-	// When: the user chooses English in account settings.
+	// 用户在账号设置中选择英文。
 	response := doForm(t, router, http.MethodPost, "/dashboard/account/language", url.Values{
 		"web_language": {"en"},
 	}, session, csrf)
 
-	// Then: the account preference persists and controls the next page render.
+	// 账号偏好持久化，并决定下一次页面渲染。
 	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != "/dashboard/account?settings_saved=1#language" {
 		t.Fatalf("save language: status=%d location=%q", response.Code, response.Header().Get("Location"))
 	}
@@ -978,8 +971,8 @@ func doFormRaw(
 
 var _ = gin.Mode
 
-// TestWebConsoleDeviceAuthorizationWorkflow 覆盖设备页：pending 先批准，
-// approved 再单独整体替换授权，设备名称保持批准时的值。
+// TestWebConsoleDeviceAuthorizationWorkflow 覆盖设备页，pending 先批准，
+// approved 再整体替换授权，设备名称保持批准时的值。
 func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -1189,8 +1182,8 @@ func TestAdminCanApproveDeviceWithoutVault(t *testing.T) {
 	}
 }
 
-// TestWebConsoleDeviceListsExcludeRevokedDevices 覆盖吊销后的设备只保留在审计数据中，
-// 不再出现在用户或管理员的可操作设备列表及计数中。
+// TestWebConsoleDeviceListsExcludeRevokedDevices 覆盖吊销后设备只保留在审计数据中，
+// 用户与管理员可操作列表及计数均不再出现。
 func TestWebConsoleDeviceListsExcludeRevokedDevices(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -1241,8 +1234,8 @@ func TestWebConsoleDeviceListsExcludeRevokedDevices(t *testing.T) {
 	}
 }
 
-// TestAdminDeviceAuthorizationRejectsInaccessibleVault 覆盖管理员为跨用户设备
-// 授权时，目标用户无权访问的仓库必须被拒绝，而不是仅因仓库存在就放行。
+// TestAdminDeviceAuthorizationRejectsInaccessibleVault 覆盖管理员为跨用户设备授权的场景，
+// 目标用户无权访问的仓库必须被拒绝，不因仓库存在而放行。
 func TestAdminDeviceAuthorizationRejectsInaccessibleVault(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -1277,7 +1270,7 @@ func TestAdminDeviceAuthorizationRejectsInaccessibleVault(t *testing.T) {
 		t.Fatalf("member device approval must succeed before vault authorization: %d %q", approve.Code, approve.Header().Get("Location"))
 	}
 
-	// member-b 的仓库是 owner-a 的仓库：管理员不能为 member 设备授权 owner 的仓库。
+	// 管理员不能为 member 设备授权 owner 仓库。
 	denied := doForm(t, router, http.MethodPost, "/dashboard/admin/devices/member-dev/authorize",
 		url.Values{
 			"user_id":   {strconv.FormatUint(uint64(member.ID), 10)},
@@ -1295,7 +1288,7 @@ func TestAdminDeviceAuthorizationRejectsInaccessibleVault(t *testing.T) {
 		t.Fatalf("inaccessible vault must not be persisted, got %d rows", deniedCount)
 	}
 
-	// 管理员授权 member 自己可访问的仓库：成功。
+	// 管理员为 member 自己可访问的仓库授权成功。
 	allowed := doForm(t, router, http.MethodPost, "/dashboard/admin/devices/member-dev/authorize",
 		url.Values{
 			"user_id":   {strconv.FormatUint(uint64(member.ID), 10)},

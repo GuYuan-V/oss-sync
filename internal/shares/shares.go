@@ -1,4 +1,4 @@
-// 分享管理
+// Package shares 提供公开分享的创建与管理接口。
 package shares
 
 import (

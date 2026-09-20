@@ -11,8 +11,8 @@ import (
 	"github.com/helantianshen/oss-sync/internal/auth"
 )
 
-// consoleHeadingPages 覆盖全部 20 个已登录控制台模板，断言标题标签契约：
-// 布局顶栏和页面标题使用 h1，面板标题使用 h2；视觉字号由 CSS 独立控制。
+// TestConsoleHeadingHierarchy 覆盖全部 20 个已登录控制台模板，断言标题标签契约。
+// 布局顶栏和页面标题使用 h1，面板标题使用 h2，视觉字号由 CSS 独立控制。
 func TestConsoleHeadingHierarchy(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)

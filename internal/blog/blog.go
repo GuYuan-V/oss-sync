@@ -1,8 +1,4 @@
-// Package blog 提供公开分享页面和主题资源：
-//
-//   - GET /p/:share_id          单篇分享渲染
-//   - GET /p/:share_id/*subpath 文件夹分享（subpath 空→目录树；命中文件→渲染）
-//   - GET /themes/:theme/*      静态主题资源
+// Package blog 提供公开 Vault 目录、分享笔记与主题资源的渲染。
 package blog
 
 import (
@@ -40,7 +36,7 @@ type Handler struct {
 	pluginHooks PluginHookRunner
 }
 
-// PluginHookRunner is the minimal host contract used by blog rendering.
+// PluginHookRunner 描述博客渲染所需的宿主插件钩子契约。
 type PluginHookRunner interface {
 	ApplyHook(context.Context, string, PluginHookPayload) (string, error)
 }
@@ -53,7 +49,7 @@ type PluginHookPayload struct {
 	Settings map[string]any `json:"settings,omitempty"`
 }
 
-// SetPluginHooks connects trusted server-plugin hooks to blog rendering.
+// SetPluginHooks 接入受信服务端插件钩子，供博客渲染调用。
 func (h *Handler) SetPluginHooks(runner PluginHookRunner) {
 	h.pluginHooks = runner
 }
@@ -79,7 +75,7 @@ func (h *Handler) Register(r *gin.Engine) {
 // shareResolver 实现 markdown.LinkResolver。
 // 索引按文件名匹配分享；同名时使用最近创建的分享。
 type shareResolver struct {
-	index map[string]string // basename(无 .md) -> share_id
+	index map[string]string // 键为去掉 .md 后缀的文件名，值为 share_id。
 }
 
 var _ markdown.LinkResolver = (*shareResolver)(nil)
@@ -278,8 +274,7 @@ func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
 				return
 			}
 		}
-		// An invalid or incomplete custom theme must not make a published note
-		// unavailable. Fall back to the built-in page and assets instead.
+		// 自定义主题无效或不完整时不得影响已发布笔记，回退到内置页面与资源。
 		p.ThemeName = "default"
 		p.ThemeBaseURL = "/themes/default"
 	}
@@ -510,9 +505,7 @@ func htmlEscape(s string) string {
 	return template.HTMLEscapeString(s)
 }
 
-// likePrefix escapes SQL LIKE metacharacters before adding the only wildcard
-// we intend: descendants of the selected folder. Both SQLite and PostgreSQL
-// understand the explicit backslash ESCAPE clause used by callers.
+// likePrefix 转义 SQL LIKE 元字符后只追加一个通配符，用于匹配所选目录的后代。调用方的反斜杠 ESCAPE 子句同时适用于 SQLite 与 PostgreSQL。
 func likePrefix(prefix string) string {
 	replacer := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_")
 	return replacer.Replace(prefix) + "%"

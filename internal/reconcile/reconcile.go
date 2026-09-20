@@ -1,4 +1,4 @@
-// 存储对账
+// Package reconcile 对比数据库元数据与磁盘内容并记录修复问题。
 package reconcile
 
 import (

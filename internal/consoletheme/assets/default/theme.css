@@ -1,13 +1,13 @@
 /*
- * OSS Sync console theme override.
- * This built-in default intentionally preserves the application's base styles.
- * Add token overrides or selectors below when working in an editable copy.
+ * OSS Sync 控制台主题覆盖文件。
+ * 内置 default 主题刻意保持应用基础样式不变。
+ * 在可编辑副本中，可在下方添加变量覆盖或选择器。
  */
 
 :root {
-  /* Example: --cobalt: #3159d9; */
+  /* 示例：--cobalt: #3159d9; */
 }
 
 :root[data-theme="dark"] {
-  /* Example: --cobalt: #7a9aff; */
+  /* 示例：--cobalt: #7a9aff; */
 }

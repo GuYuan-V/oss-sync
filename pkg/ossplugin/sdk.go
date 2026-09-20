@@ -1,4 +1,4 @@
-// Package ossplugin is the public Go SDK for trusted OSS Sync extensions.
+// Package ossplugin 为受信 OSS Sync 扩展提供公开 Go SDK。
 package ossplugin
 
 import (

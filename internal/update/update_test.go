@@ -41,21 +41,21 @@ func TestSelectAsset(t *testing.T) {
 		t.Error("expected error for unsupported platform with multiple assets")
 	}
 
-	// exact match required: even single asset must match expected name
+	// 要求精确匹配，单个资产也不得回退。
 	single := []Asset{{Name: "oss-server.bin"}}
 	if _, err := selectAsset(single, "v1.0.0", "linux", "amd64"); err == nil {
 		t.Error("expected error for asset name mismatch, single-asset fallback must not be accepted")
 	}
-	// empty assets
+	// 空资产列表。
 	if _, err := selectAsset(nil, "v1.0.0", "linux", "amd64"); err == nil {
 		t.Error("expected error for empty assets")
 	}
-	// asset mismatch: name contains platform substring but not exact
+	// 名称含平台子串但非精确命名。
 	legacy := []Asset{{Name: "oss-server-linux-amd64-v1.0.0.tar.gz"}}
 	if _, err := selectAsset(legacy, "v1.0.0", "linux", "amd64"); err == nil {
 		t.Error("legacy permissive name should not be accepted; exact AssetName required")
 	}
-	// version mismatch
+	// 版本不一致。
 	if _, err := selectAsset(assets, "v2.0.0", "linux", "amd64"); err == nil {
 		t.Error("expected error for version mismatch")
 	}
@@ -644,7 +644,7 @@ func TestTriggerRestart_CallsCallbackOnce(t *testing.T) {
 	u.SetOnUpdated(func() { calls <- struct{}{} })
 	u.TriggerRestart()
 	u.TriggerRestart()
-	<-calls // 第一次回调
+	<-calls // 接收第一次回调。
 	select {
 	case <-calls:
 		t.Error("callback should fire only once")

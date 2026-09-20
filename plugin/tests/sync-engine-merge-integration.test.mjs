@@ -9,7 +9,6 @@ async function shaHex(bytes) {
 }
 function tStub(key){ return key; }
 
-// Helpers for vault mocking
 function makeVault(initial = new Map()) {
   const files = new Map(initial);
   const folders = new Set();
@@ -51,8 +50,7 @@ function makeVault(initial = new Map()) {
   return vault;
 }
 
-// upload/download/adopt baseText capture via baselineFromAcknowledgement is tested already via primitive file,
-// but integration: engine upload success stores baseText including empty
+// 引擎上传成功后经 baselineFromAcknowledgement 落库 baseText，含空文本。
 test("sync-engine upload success captures acknowledged baseText via baselineFromAcknowledgement", async () => {
   const vault = makeVault(new Map([["note.md", {bytes:enc("hello"), mtime:1000}]]));
   const api = {
@@ -80,7 +78,6 @@ test("sync-engine upload success captures acknowledged baseText via baselineFrom
   const { SyncEngine, cleanup } = await loadSyncEngine();
   try{
     const engine=new SyncEngine(app, api, baseline, plugin);
-    // prepare localMeta manually
     const localHash=await shaHex(enc("hello"));
     const action={ kind:"upload", path:"note.md", local:{path:"note.md", hash:localHash, size:5, mtime:1000}, baseRevision:1, operationID:"op1" };
     await engine.applyAction("v1", action);
@@ -88,7 +85,6 @@ test("sync-engine upload success captures acknowledged baseText via baselineFrom
     assert.ok(entry);
     assert.equal(entry.baseText, "hello");
     assert.equal(entry.serverRevision,2);
-    // empty text
     vault._files.set("empty.md", {bytes:enc(""), mtime:1001});
     const h2=await shaHex(enc(""));
     const api2={ async uploadV2(v,t){ const hh=await shaHex(new Uint8Array(t.content)); return {path:t.path,type:"markdown",hash:hh,size:0,mtime:2001,revision:3,deleted:false}; } };
@@ -98,7 +94,6 @@ test("sync-engine upload success captures acknowledged baseText via baselineFrom
     assert.ok(e2);
     assert.equal(e2.baseText, "");
     assert.ok("baseText" in e2);
-    // binary should omit baseText
     vault._files.set("image.png", {bytes:enc("binarycontent"), mtime:1002});
     const h3=await shaHex(enc("binarycontent"));
     const api3={ async uploadV2(v,t){ const hh=await shaHex(new Uint8Array(t.content)); return {path:t.path,type:"attachment",hash:hh,size:13,mtime:2002,revision:4,deleted:false}; } };
@@ -131,18 +126,15 @@ test("planActions emits reconcile for both-changed live files but delete/edit re
     };
     const plugin={ settings:{ syncPoisonObsidianFiles:false, syncIntervalSec:3, remotePollIntervalSec:30 }, t:tStub };
     const engine=new SyncEngine({vault}, {}, baseline, plugin);
-    // both-changed live: local changed (hash diff), remote changed (revision 2 diff)
     const remoteLive={ path:"note.md", type:"markdown", hash:await shaHex(enc("remote changed")), size:14, mtime:30, revision:2, deleted:false };
     const actions=await engine.planActions(false, new Map([["note.md", remoteLive]]), []);
     assert.equal(actions.length,1);
     assert.equal(actions[0].kind, "reconcile");
-    // delete/edit should remain conflict: local deleted, remote changed
     const vault2={ getAbstractFileByPath:()=>null, getFiles:()=>[] };
     const engine2=new SyncEngine({vault: vault2}, {}, baseline, plugin);
     const remoteLive2={ path:"note.md", type:"markdown", hash:await shaHex(enc("remote2")), size:7, mtime:31, revision:3, deleted:false };
     const actions2=await engine2.planActions(false, new Map([["note.md", remoteLive2]]), []);
     assert.equal(actions2[0].kind, "conflict");
-    // remote tombstone vs local edit => conflict
     const remoteDel={ path:"note.md", type:"markdown", hash:"", size:0, mtime:32, revision:4, deleted:true };
     const engine3=new SyncEngine({vault}, {}, baseline, plugin);
     const actions3=await engine3.planActions(false, new Map([["note.md", remoteDel]]), []);
@@ -162,7 +154,6 @@ test("planActions reconcile for no-baseline mismatch, adopt still not reconcile 
     const remote={ path:"new.md", type:"markdown", hash:await shaHex(enc("remote")), size:6, mtime:20, revision:1, deleted:false };
     const acts=await engine.planActions(false, new Map([["new.md", remote]]), []);
     assert.equal(acts[0].kind, "reconcile");
-    // identical hashes should adopt, not reconcile
     const h=await shaHex(enc("same"));
     const file2={__tfile:true, path:"same.md", content:enc("same").buffer, stat:{mtime:10,size:4}};
     const vault2={ getAbstractFileByPath(p){return p==="same.md"?file2:null;}, async readBinary(f){return f.content;}, getFiles:()=>[file2]};
@@ -173,13 +164,11 @@ test("planActions reconcile for no-baseline mismatch, adopt still not reconcile 
   } finally { await cleanup(); }
 });
 
-// Resolver direct tests
 test("resolver clean text merge call ordering/persistence and success state", async () => {
   const { module: resolverMod, cleanup: rc } = await loadModule("src/ordinary-sync-conflict-resolver.ts");
   const { module: faMod, cleanup: fc } = await loadModule("src/ordinary-sync-file-access.ts");
   try{
     assert.ok(resolverMod.OrdinarySyncConflictResolver);
-    // setup vault and baseline
     globalThis.window={ setTimeout:(fn)=>{ fn(); return 1; }, clearTimeout:()=>{} };
     const vault=makeVault(new Map([["note.md", {bytes:enc("a\nb\nc\nd"), mtime:10}]]));
     const baselineStore=new Map();
@@ -220,10 +209,7 @@ test("resolver clean text merge call ordering/persistence and success state", as
       now:()=>999,
     };
     const baseText="a\nb\nc\nd";
-    // baseText is original, local is "A\nb\nc\nd", remote is "a\nb\nc\nD" -> merge should be "A\nb\nc\nD"
-    // setup baseline with baseText
     baselineStore.set("note.md", { serverRevision:1, serverHash:await shaHex(enc("a\nb\nc\nd")), serverDeleted:false, localHash:await shaHex(enc("A\nb\nc\nd")), localMTime:10, localSize:7, baseText });
-    // put local changed
     vault._files.set("note.md", {bytes:enc("A\nb\nc\nd"), mtime:10});
     const localHash=await shaHex(enc("A\nb\nc\nd"));
     const remoteMeta={ path:"note.md", type:"markdown", hash:await shaHex(enc("a\nb\nc\nD")), size:7, mtime:30, revision:2, deleted:false };
@@ -232,7 +218,6 @@ test("resolver clean text merge call ordering/persistence and success state", as
     const result=await resolver.resolve({ path:"note.md", expectedHash:localHash, remote:remoteMeta });
     assert.equal(uploadCalls,1);
     assert.ok(saveCalls>=2);
-    // pending cleared after success
     assert.equal(pending.length,0);
     const final=baselineStore.get("note.md");
     assert.equal(final.baseText, "A\nb\nc\nD");
@@ -271,7 +256,6 @@ test("resolver overlapping text conflict: no write/no upload/modal for markdown"
         conflictCalled=true;
         assert.equal(path,"note.md");
         assert.equal(remote.type,"markdown");
-        // ensure local bytes untouched
         const cur=vault._files.get("note.md").bytes;
         assert.deepEqual(cur, enc("a\nX\nc"));
       },
@@ -320,19 +304,16 @@ test("resolver binary sibling exact + remote canonical + pending sibling", async
     const localHash=await shaHex(localBytes);
     const resolver=new resolverMod.OrdinarySyncConflictResolver(deps);
     await resolver.resolve({path:"image.png", expectedHash:localHash, remote:{path:"image.png", type:"attachment", hash:await shaHex(remoteBytes), size:4, mtime:30, revision:2, deleted:false}});
-    // sibling created
     const siblingPath="image_conflict_2024-01-02T03-04-05-006Z.png";
     const sib=vault._files.get(siblingPath);
     assert.ok(sib);
     assert.deepEqual(sib.bytes, localBytes);
-    // canonical installed remote
     const canon=vault._files.get("image.png");
     assert.deepEqual(canon.bytes, remoteBytes);
     const entry=baselineStore.get("image.png");
     assert.equal(entry.serverHash, await shaHex(remoteBytes));
     assert.equal(entry.baseText, undefined);
     assert.equal("baseText" in entry, false);
-    // sibling pending
     assert.equal(pending.length,1);
     assert.equal(pending[0].path, siblingPath);
   } finally { await rc(); await fc(); }
@@ -367,7 +348,7 @@ test("resolver local mutation guard leaves canonical untouched and records confl
       createOperationID:()=>"id",
       now:()=>1,
     };
-    const expectedHash=await shaHex(enc("old local")); // stale expected, but current is mutated
+    const expectedHash=await shaHex(enc("old local")); // 预期哈希取旧值，正本已变更，用于触发 stale 分支。
     const resolver=new resolverMod.OrdinarySyncConflictResolver(deps);
     await resolver.resolve({path:"note.md", expectedHash, remote:{path:"note.md", type:"markdown", hash:await shaHex(enc("remote")), size:6, mtime:30, revision:2, deleted:false}});
     assert.equal(conflictCalled,true);
@@ -392,7 +373,7 @@ test("resolver upload-time 409 uses fresh ID and authoritative revision", async 
       removePendingForPath:(p)=>{ pending=pending.filter(o=>o.path!==p); },
     };
     let pending=[{id:"old-pending", kind:"upsert", path:"note.md", createdAt:1}];
-    // mimic real BaselineStore putPending filtering by path
+    // 按真实 BaselineStore 语义按路径去重后写入 pending。
     baseline.putPending = (op)=>{ pending = pending.filter(o=> o.path!==op.path && o.oldPath!==op.path); pending.push(op); };
     const deps={
       vaultId:"v1",
@@ -414,7 +395,6 @@ test("resolver upload-time 409 uses fresh ID and authoritative revision", async 
     const resolver=new resolverMod.OrdinarySyncConflictResolver(deps);
     const localHash=await shaHex(enc("A\nb\nc\nd"));
     await resolver.resolve({path:"note.md", expectedHash:localHash, remote:{path:"note.md", type:"markdown", hash:await shaHex(enc("a\nb\nc\nD")), size:7, mtime:30, revision:5, deleted:false}});
-    // fresh ID persisted then cleared on success - old pending should be replaced
     assert.equal(pending.length,0);
   } finally { await rc(); await fc(); }
 });
@@ -461,7 +441,6 @@ test("resolver second 409 bounded no third upload pending retained", async () =>
     assert.equal(uploadAttempts,1);
     assert.equal(pending.length,1);
     assert.equal(pending[0].id,"fresh-id-3");
-    // ensure not thrown
     assert.ok(res);
   } finally { await rc(); await fc(); }
 });

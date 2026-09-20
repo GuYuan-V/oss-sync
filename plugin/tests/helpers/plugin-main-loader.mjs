@@ -1,4 +1,4 @@
-// Derived from existing esbuild obsidian loaders; bundles plugin/src/main.ts with an expanded Obsidian stub.
+// 基于已有 esbuild Obsidian 加载器打包 plugin/src/main.ts，并扩展 Obsidian 桩。
 import { mkdtemp, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";

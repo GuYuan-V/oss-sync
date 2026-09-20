@@ -1,4 +1,4 @@
-// 认证设置
+// 持久化的认证设置。
 package auth
 
 import (

@@ -13,7 +13,7 @@ const maxRegistrations = 1024
 
 var extensionNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9._:/-]{0,127}$`)
 
-// ExtensionRegistration is the executable plugin's runtime contribution to the host.
+// ExtensionRegistration 是可执行插件在运行时向宿主提供的能力声明。
 type ExtensionRegistration struct {
 	Hooks        []RegisteredHook         `json:"hooks,omitempty"`
 	Routes       []RegisteredRoute        `json:"routes,omitempty"`

@@ -23,13 +23,12 @@ func writeLockFile(t *testing.T, root string, pid int) {
 
 func TestNewManager_LockAcquisitionFailure(t *testing.T) {
 	root := t.TempDir()
-	// hold file lock with live PID (current process)
+	// 以当前进程持有文件锁。
 	release, err := acquireFileLock(root)
 	if err != nil {
 		t.Fatalf("initial acquire: %v", err)
 	}
-	// Note: keep lock held; do not defer release until after test
-	// Attempt NewManager should fail to acquire within deadline
+	// 测试期间保持持有，结束前不释放；NewManager 应在超时内获取失败。
 	start := time.Now()
 	_, err = NewManager(root)
 	elapsed := time.Since(start)
@@ -39,15 +38,13 @@ func TestNewManager_LockAcquisitionFailure(t *testing.T) {
 	if elapsed < 400*time.Millisecond {
 		t.Logf("warning: NewManager failed fast (elapsed %v), may not have waited for lock timeout", elapsed)
 	}
-	// Ensure second IssueChecked also fails (via Manager that already exists? Create m via bypassing lock for setup)
-	// Use existing manager without lock: create manager manually bypassing NewManager's lock by direct struct
-	// Instead test acquireFileLock directly fails
+	// 活跃锁持有期间直接再取锁同样应失败。
 	_, err = acquireFileLock(root)
 	if err == nil {
 		t.Error("second acquireFileLock should fail while live lock held")
 	}
 	release()
-	// after release, NewManager should succeed
+	// 释放后 NewManager 应成功。
 	m, err := NewManager(root)
 	if err != nil {
 		t.Fatalf("NewManager after release: %v", err)
@@ -59,10 +56,10 @@ func TestNewManager_LockAcquisitionFailure(t *testing.T) {
 
 func TestNewManager_StaleLockRecovery(t *testing.T) {
 	root := t.TempDir()
-	// write stale lock with dead PID (very unlikely to exist)
+	// 写入极不可能存在的死亡 PID 构造陈旧锁。
 	const deadPID = 999999
 	writeLockFile(t, root, deadPID)
-	// verify isProcessAlive correctly reports dead
+	// 先确认该 PID 在本平台确实判死。
 	if isProcessAlive(deadPID) {
 		t.Skip("dead PID unexpectedly considered alive on this platform, skipping stale recovery test")
 	}
@@ -73,18 +70,16 @@ func TestNewManager_StaleLockRecovery(t *testing.T) {
 	if m == nil {
 		t.Fatal("expected manager")
 	}
-	// lock file should have been replaced with live PID, not stale dead PID
+	// 陈旧锁应被替换，残留文件不得仍归属死亡 PID。
 	data, err := os.ReadFile(filepath.Join(root, ".update_state.lock"))
 	if err == nil {
-		// If file still exists, it should be held by NewManager's critical section then released – after NewManager returns, lock should be gone
-		// acquireFileLock in NewManager releases after return, so file should not exist after success
-		// But if still exists, ensure it's not dead PID
+		// NewManager 在临界区持有锁并在返回时释放；若文件仍存在，必须不是死亡 PID。
 		var cur lockMeta
 		if json.Unmarshal(data, &cur) == nil && cur.PID == deadPID {
 			t.Errorf("stale lock with dead PID still present after recovery")
 		}
 	}
-	// after recovery, normal operation should work
+	// 恢复后正常签发应可用。
 	c := testCandidate("1.2.3")
 	if _, err := m.IssueChecked(c, time.Minute); err != nil {
 		t.Fatalf("IssueChecked after stale recovery: %v", err)
@@ -93,9 +88,9 @@ func TestNewManager_StaleLockRecovery(t *testing.T) {
 
 func TestNewManager_NonStealingActiveLock(t *testing.T) {
 	root := t.TempDir()
-	// Create a lock held by live PID (current)
+	// 以当前进程 PID 构造活跃锁。
 	writeLockFile(t, root, os.Getpid())
-	// Attempt to acquire should not steal; should fail after timeout
+	// 不得窃取活跃锁，应超时失败。
 	start := time.Now()
 	_, err := acquireFileLock(root)
 	elapsed := time.Since(start)
@@ -105,7 +100,7 @@ func TestNewManager_NonStealingActiveLock(t *testing.T) {
 	if elapsed < 400*time.Millisecond {
 		t.Logf("acquire failed fast, elapsed %v", elapsed)
 	}
-	// Ensure lock file still exists and still belongs to live owner (not deleted)
+	// 失败后锁文件仍存在且仍归属原持有者。
 	data, err := os.ReadFile(filepath.Join(root, ".update_state.lock"))
 	if err != nil {
 		t.Fatalf("live lock file should still exist after failed steal attempt: %v", err)
@@ -117,9 +112,9 @@ func TestNewManager_NonStealingActiveLock(t *testing.T) {
 	if cur.PID != os.Getpid() {
 		t.Errorf("live lock PID changed after failed steal: got %d want %d", cur.PID, os.Getpid())
 	}
-	// Cleanup for other tests
+	// 清理锁文件。
 	_ = os.Remove(filepath.Join(root, ".update_state.lock"))
-	// Now NewManager should succeed after lock removed
+	// 锁移除后 NewManager 应成功。
 	m, err := NewManager(root)
 	if err != nil {
 		t.Fatalf("NewManager after active lock removed: %v", err)

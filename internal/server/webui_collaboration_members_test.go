@@ -63,14 +63,11 @@ func newWebCollaborationMembersFixture(t *testing.T) webCollaborationMembersFixt
 }
 
 func TestWebConsoleCollaborationMembers_whenOpened_groupsAcceptedArticlesByCollaborator(t *testing.T) {
-	// Given
 	fixture := newWebCollaborationMembersFixture(t)
 
-	// When
 	page := doForm(t, fixture.router, http.MethodGet,
 		"/dashboard/vaults/"+fixture.vault.ID+"/members", nil, fixture.session, fixture.csrf)
 
-	// Then
 	if page.Code != http.StatusOK {
 		t.Fatalf("members page status = %d, want %d", page.Code, http.StatusOK)
 	}
@@ -90,7 +87,6 @@ func TestWebConsoleCollaborationMembers_whenOpened_groupsAcceptedArticlesByColla
 }
 
 func TestWebConsoleCollaborationMembers_whenSelectedRevoked_scopesRowsToVaultAndCollaborator(t *testing.T) {
-	// Given
 	fixture := newWebCollaborationMembersFixture(t)
 	other := models.Collaboration{
 		VaultID: "other-vault", FileID: fixture.rows[0].FileID,
@@ -101,7 +97,6 @@ func TestWebConsoleCollaborationMembers_whenSelectedRevoked_scopesRowsToVaultAnd
 		t.Fatal(err)
 	}
 
-	// When
 	response := doForm(t, fixture.router, http.MethodPost,
 		"/dashboard/vaults/"+fixture.vault.ID+"/members/"+
 			strconv.FormatUint(uint64(fixture.collaborator.ID), 10)+"/collaborations/revoke",
@@ -110,7 +105,6 @@ func TestWebConsoleCollaborationMembers_whenSelectedRevoked_scopesRowsToVaultAnd
 			strconv.FormatUint(uint64(other.ID), 10),
 		}}, fixture.session, fixture.csrf)
 
-	// Then
 	if response.Code != http.StatusSeeOther {
 		t.Fatalf("selected revoke status = %d, want %d", response.Code, http.StatusSeeOther)
 	}
@@ -120,16 +114,13 @@ func TestWebConsoleCollaborationMembers_whenSelectedRevoked_scopesRowsToVaultAnd
 }
 
 func TestWebConsoleCollaborationMembers_whenAllRevoked_revokesEveryAcceptedArticle(t *testing.T) {
-	// Given
 	fixture := newWebCollaborationMembersFixture(t)
 
-	// When
 	response := doForm(t, fixture.router, http.MethodPost,
 		"/dashboard/vaults/"+fixture.vault.ID+"/members/"+
 			strconv.FormatUint(uint64(fixture.collaborator.ID), 10)+"/collaborations/revoke",
 		url.Values{"all": {"1"}}, fixture.session, fixture.csrf)
 
-	// Then
 	if response.Code != http.StatusSeeOther {
 		t.Fatalf("all revoke status = %d, want %d", response.Code, http.StatusSeeOther)
 	}

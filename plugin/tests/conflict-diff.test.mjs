@@ -6,7 +6,7 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-// Bundles the pure diff module so the test drives the real exported function.
+// 打包纯 diff 模块，使测试驱动真实导出函数。
 async function loadConflictDiff() {
   const dir = await mkdtemp(join(tmpdir(), "oss-conflict-diff-"));
   const outfile = join(dir, "conflict-diff.mjs");
@@ -24,16 +24,13 @@ async function loadConflictDiff() {
   };
 }
 
-// Row helpers — change rows carry raw `text` (no "-"/"+" markers; the renderer
-// adds those later), omitted rows carry a `count`.
+// 行辅助函数：变更行携带原始 `text`（不带 -/+ 标记，由渲染侧补充），省略行携带 `count`。
 const ctx = (text) => ({ kind: "context", text });
 const rem = (text) => ({ kind: "removed", text });
 const add = (text) => ({ kind: "added", text });
 const omit = (count) => ({ kind: "omitted", count });
 const lines = (...ls) => ls.join("\n");
 
-// Shared runner: each fixture is Given (local/remote content), When
-// (buildConflictDiff is called), Then (the exact row sequence is asserted).
 async function runCases(cases) {
   const { buildConflictDiff, cleanup } = await loadConflictDiff();
   try {

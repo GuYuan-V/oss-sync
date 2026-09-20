@@ -32,7 +32,6 @@ func newRuntimePolicyDB(t *testing.T) *gorm.DB {
 }
 
 func TestEffectiveForUser_whenPreferencesExceedCeilings_clampsEveryValue(t *testing.T) {
-	// Given
 	db := newRuntimePolicyDB(t)
 	if err := db.Create(&models.SystemSetting{
 		ID: 1, MaxLongPollWaitSec: 20, MaxSyncDebounceSec: 60, MaxRecycleBinDays: 90,
@@ -47,10 +46,8 @@ func TestEffectiveForUser_whenPreferencesExceedCeilings_clampsEveryValue(t *test
 		t.Fatalf("create user settings: %v", err)
 	}
 
-	// When
 	effective, err := EffectiveForUser(db, 7, 2000)
 
-	// Then
 	if err != nil {
 		t.Fatalf("EffectiveForUser: %v", err)
 	}
@@ -64,7 +61,6 @@ func TestEffectiveForUser_whenPreferencesExceedCeilings_clampsEveryValue(t *test
 }
 
 func TestEffectiveForVault_whenVaultExists_resolvesOwnerPreferences(t *testing.T) {
-	// Given
 	db := newRuntimePolicyDB(t)
 	if err := db.Create(&models.SystemSetting{ID: 1, MaxLongPollWaitSec: 20}).Error; err != nil {
 		t.Fatalf("create system settings: %v", err)
@@ -76,10 +72,8 @@ func TestEffectiveForVault_whenVaultExists_resolvesOwnerPreferences(t *testing.T
 		t.Fatalf("create vault: %v", err)
 	}
 
-	// When
 	effective, err := EffectiveForVault(db, "vault-policy", 2000)
 
-	// Then
 	if err != nil {
 		t.Fatalf("EffectiveForVault: %v", err)
 	}
@@ -89,20 +83,16 @@ func TestEffectiveForVault_whenVaultExists_resolvesOwnerPreferences(t *testing.T
 }
 
 func TestCustomFragmentsEnabled_whenMissingSystemSetting_returnsFalse(t *testing.T) {
-	// Given
 	db := newRuntimePolicyDB(t)
 
-	// When
 	enabled := CustomFragmentsEnabled(db)
 
-	// Then
 	if enabled {
 		t.Fatalf("enabled = %v, want false", enabled)
 	}
 }
 
 func TestCustomFragmentsEnabled_whenSystemSettingIsEnabled_returnsTrue(t *testing.T) {
-	// Given
 	db := newRuntimePolicyDB(t)
 	if err := db.Create(&models.SystemSetting{
 		ID: 1, RegistrationEnabled: true, CustomFragmentsEnabled: true,
@@ -110,26 +100,21 @@ func TestCustomFragmentsEnabled_whenSystemSettingIsEnabled_returnsTrue(t *testin
 		t.Fatalf("create system settings: %v", err)
 	}
 
-	// When
 	enabled := CustomFragmentsEnabled(db)
 
-	// Then
 	if !enabled {
 		t.Fatalf("enabled = %v, want true", enabled)
 	}
 }
 
 func TestCustomFragmentsEnabled_whenDatabaseError_returnsFalse(t *testing.T) {
-	// Given
 	db := newRuntimePolicyDB(t)
 	if err := db.Migrator().DropTable(&models.SystemSetting{}); err != nil {
 		t.Fatalf("drop system_settings: %v", err)
 	}
 
-	// When
 	enabled := CustomFragmentsEnabled(db)
 
-	// Then
 	if enabled {
 		t.Fatalf("enabled = %v, want false", enabled)
 	}

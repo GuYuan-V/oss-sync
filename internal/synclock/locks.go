@@ -1,4 +1,4 @@
-// 同步锁
+// Package synclock 提供进程内 Vault 锁与路径锁。
 package synclock
 
 import "sync"

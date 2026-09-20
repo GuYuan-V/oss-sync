@@ -1,9 +1,5 @@
-// Package update 提供服务端自动更新能力：对比 GitHub Release、下载并原子替换
-// 当前二进制，然后请求进程优雅退出（先停 cron、再 HTTP Shutdown、再关 DB），
-// 由 supervisor 以新二进制重新拉起。重启后通过 StartupHealthCheck 自检，
-// 未就绪时自动回滚到备份二进制。
-//
-// 更新只由管理员手动触发，不存在任何后台自动拉取。
+// Package update 提供发布检查、下载校验、服务端二进制原子替换，以及 helper 交接与回滚。
+// 更新仅由管理员触发，不执行后台轮询。
 package update
 
 import (
@@ -25,31 +21,31 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// Options 覆盖 Updater 的默认行为，主要用于测试。
+// Options 覆盖 Updater 默认值，主要供可重复测试使用。
 type Options struct {
-	// GitHubRepo 覆盖配置中的发布仓库，格式 owner/repo。
+	// GitHubRepo 覆盖配置中的 owner 与 repo。
 	GitHubRepo string
-	// GitHubToken 覆盖环境变量 OSS_GITHUB_TOKEN。
+	// GitHubToken 覆盖 OSS_GITHUB_TOKEN。
 	GitHubToken string
-	// APIBase 覆盖 GitHub API 地址（默认 https://api.github.com），仅供测试。
+	// APIBase 覆盖 GitHub API 地址。
 	APIBase string
-	// DownloadSource 覆盖配置中的更新源：official / proxy / custom。
+	// DownloadSource 选择 official、proxy 或 custom 下载源。
 	DownloadSource string
-	// DownloadProxy 覆盖配置中的自定义 HTTPS 地址前缀。
+	// DownloadProxy 覆盖自定义 HTTPS 前缀。
 	DownloadProxy string
-	// ExecPath 覆盖当前可执行文件路径（默认 os.Executable）。
+	// ExecPath 覆盖可执行文件路径，空值表示使用 os.Executable。
 	ExecPath string
-	// HTTPClient 覆盖 GitHub 请求使用的 HTTP 客户端（默认带超时的客户端）。
+	// HTTPClient 覆盖发布元数据请求所用的客户端。
 	HTTPClient *http.Client
-	// Verifier 校验下载后的二进制；默认检查可执行格式并运行 --version。
+	// Verifier 校验下载二进制与其报告的版本。
 	Verifier func(path, wantVersion string) error
-	// Pin 指定必须更新到的目标 tag（可带可不带 v 前缀）。
+	// Pin 将更新限定到单个规范化后的发布 tag。
 	Pin string
-	// SkipTLSVerify 允许跳过 HTTPS 证书校验，便于本地测试与自签名场景。
+	// SkipTLSVerify 允许受控测试中使用自签名 HTTPS 端点。
 	SkipTLSVerify bool
 }
 
-// Updater 是更新流程的所有者。同一实例同时只有一次更新在进行。
+// Updater 持有更新状态机，同一时刻仅允许一次更新运行。
 type Updater struct {
 	gh           *GitHubClient
 	exe          string
@@ -58,7 +54,7 @@ type Updater struct {
 	running      atomic.Bool
 	restartFired atomic.Bool
 
-	stateMu     sync.Mutex // 保护 lastCheck / lastUpdate
+	stateMu     sync.Mutex // 保护 lastCheck 与 lastUpdate 快照。
 	lastCheck   *CheckResult
 	lastUpdate  *UpdateResult
 	updatePhase OperationState
@@ -83,7 +79,7 @@ const (
 	updatePhaseUpToDate     = StateUpToDate
 )
 
-// NewUpdater 构造更新器。当前二进制路径默认取 os.Executable()。
+// NewUpdater 创建更新器并解析可执行文件路径。
 func NewUpdater(cfg *config.Config, opts ...Options) (*Updater, error) {
 	opt := Options{}
 	if len(opts) > 0 {
@@ -155,13 +151,12 @@ func cloneWithRepo(cfg *config.Config, repo string) *config.Config {
 	return &cp
 }
 
-// SetOnUpdated 注册“更新完成，请求优雅重启”的回调，只会被调用一次。
+// SetOnUpdated 注册请求优雅重启的一次性回调。
 func (u *Updater) SetOnUpdated(fn func()) {
 	u.onUpdated = fn
 }
 
-// TriggerRestart 在响应写回之后异步触发重启回调，避免阻塞 HTTP 响应。
-// 回调至多触发一次。
+// TriggerRestart 在响应可写后异步触发重启回调，并抑制重复触发。
 func (u *Updater) TriggerRestart() {
 	if u.onUpdated == nil || !u.restartFired.CompareAndSwap(false, true) {
 		return
@@ -172,9 +167,7 @@ func (u *Updater) TriggerRestart() {
 	}()
 }
 
-// CheckUpdate 对比当前版本与 GitHub latest release，并记录检查状态。
-// 使用 internal/version 严格比较，malformed/prerelease 已在 fetchLatest 层被拒绝；
-// 当前为开发版本时视为始终有可用更新（若上游为稳定版本）。
+// CheckUpdate 比较当前版本与最新 Release，并为状态接口保存结果副本，开发版本同样接受稳定 Release。
 func (u *Updater) CheckUpdate(ctx context.Context) (*CheckResult, error) {
 	release, err := u.gh.fetchLatestFrom(ctx, u.source, u.proxy)
 	if err != nil && !errors.Is(err, ErrNoRelease) {
@@ -198,7 +191,7 @@ func (u *Updater) CheckUpdate(ctx context.Context) (*CheckResult, error) {
 	cp := *res
 	u.lastCheck = &cp
 	u.stateMu.Unlock()
-	// return a copy distinct from the stored one to preserve immutability
+	// 返回与存储快照不同的副本，保持不可变语义。
 	rcp := *res
 	return &rcp, nil
 }
@@ -221,8 +214,8 @@ func isReleaseNewerThanCurrent(releaseTag, current string) bool {
 	return cmp > 0
 }
 
-// Update 执行完整更新流程：查询 Release → 选择资产 → 下载校验 → 备份 → 原子替换。
-// 成功后由调用方决定何时 TriggerRestart。
+// Update 执行发布选择、下载校验、备份与原子替换。
+// 何时调用 TriggerRestart 由调用方在成功响应后决定。
 func (u *Updater) Update(ctx context.Context) *UpdateResult {
 	if !u.running.CompareAndSwap(false, true) {
 		return &UpdateResult{

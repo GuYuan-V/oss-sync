@@ -11,7 +11,6 @@ import (
 func TestOverviewTemplate_whenRendered_showsHomeMetricsAndDestinations(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	tpl, err := template.New("web").Funcs(template.FuncMap{
 		"formatBytes": formatBytes,
 		"timeFmt": func(value time.Time) string {
@@ -55,7 +54,6 @@ func TestOverviewTemplate_whenRendered_showsHomeMetricsAndDestinations(t *testin
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Given
 			data := struct {
 				Layout layoutData
 				Data   map[string]any
@@ -79,13 +77,11 @@ func TestOverviewTemplate_whenRendered_showsHomeMetricsAndDestinations(t *testin
 				},
 			}
 
-			// When
 			var rendered bytes.Buffer
 			if err := tpl.ExecuteTemplate(&rendered, "overview", data); err != nil {
 				t.Fatalf("render overview template: %v", err)
 			}
 
-			// Then
 			page := rendered.String()
 			for _, want := range tt.wantFragments {
 				if !strings.Contains(page, want) {
@@ -116,10 +112,8 @@ func TestUsagePercent_whenInputsVary_clampsToValidRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// When
 			got := usagePercent(tt.used, tt.total)
 
-			// Then
 			if got != tt.want {
 				t.Fatalf("usagePercent(%v, %v) = %v, want %v", tt.used, tt.total, got, tt.want)
 			}
@@ -130,14 +124,11 @@ func TestUsagePercent_whenInputsVary_clampsToValidRange(t *testing.T) {
 func TestCPUUsage_whenSamplesAdvance_calculatesSystemBusyTime(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	previous := cpuSample{total: 1_000, idle: 700, at: time.Unix(0, 0)}
 	current := cpuSample{total: 1_400, idle: 900, at: time.Unix(1, 0)}
 
-	// When
 	got := cpuUsage(previous, current)
 
-	// Then
 	if got <= 0 || got > 100 {
 		t.Fatalf("cpuUsage() = %v, want a valid non-zero percentage", got)
 	}

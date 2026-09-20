@@ -187,7 +187,7 @@ func dynamicPathParams(pattern, requestPath string) (bool, map[string]string) {
 	return len(patternParts) == len(requestParts), params
 }
 
-// PluginAdminPage is the web-console menu projection of a registered admin page.
+// PluginAdminPage 是已注册管理页在 Web 控制台菜单中的投影。
 type PluginAdminPage struct {
 	PluginID string
 	Slug     string

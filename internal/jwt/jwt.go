@@ -1,7 +1,4 @@
-// Package jwt 提供最小化 HS256 JWT 实现。
-//
-// 仅支持签发/解析 HS256 + claim 标准 iat/exp/sub。
-// 不引入第三方库（golang-jwt 等），保持依赖精简。
+// Package jwt 实现服务端使用的最小 HS256 令牌格式，不依赖第三方 JWT 库完成签发与解析。
 package jwt
 
 import (
@@ -20,15 +17,15 @@ var (
 	ErrExpired      = errors.New("jwt token expired")
 )
 
-// DeviceID 是设备标识的强类型别名。
+// DeviceID 为强类型的客户端设备标识。
 type DeviceID string
 
-// Claims 是 JWT 的负载。
+// Claims 为 API 与 Web 认证共用的 JWT 载荷。
 type Claims struct {
 	UserID   uint   `json:"uid"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
-	// TokenVersion 用于密码修改后使旧 token 失效。
+	// TokenVersion 使改密前签发的令牌失效。
 	TokenVersion uint     `json:"tv"`
 	DeviceID     DeviceID `json:"did,omitempty"`
 	IssuedAt     int64    `json:"iat"`
@@ -40,7 +37,7 @@ type header struct {
 	Typ string `json:"typ"`
 }
 
-// Sign 用 HS256 签发一个 token，ttl 控制过期时间。
+// Sign 按指定有效期签发 HS256 令牌。
 func Sign(secret string, claims Claims, ttl time.Duration) (string, error) {
 	if secret == "" {
 		return "", errors.New("jwt secret is empty")
@@ -62,7 +59,7 @@ func Sign(secret string, claims Claims, ttl time.Duration) (string, error) {
 	return signingInput + "." + sig, nil
 }
 
-// Parse 解析并校验签名、过期时间。
+// Parse 校验 HS256 令牌签名并检查是否过期。
 func Parse(secret, token string) (*Claims, error) {
 	if secret == "" {
 		return nil, errors.New("jwt secret is empty")
@@ -71,7 +68,7 @@ func Parse(secret, token string) (*Claims, error) {
 	if len(parts) != 3 {
 		return nil, ErrInvalidToken
 	}
-	// 纵深防御：解析 header 并拒绝 alg != "HS256" 的 token。
+	// 仅接受 HS256，其余算法一律拒绝。
 	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
 		return nil, ErrInvalidToken
@@ -108,7 +105,7 @@ func hmacSha256(secret, input string) string {
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// MustSign 仅供测试用：出错直接 panic。
+// MustSign 为签发失败时直接 panic 的测试辅助函数。
 func MustSign(secret string, claims Claims, ttl time.Duration) string {
 	t, err := Sign(secret, claims, ttl)
 	if err != nil {

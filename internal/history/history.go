@@ -1,7 +1,5 @@
-// Package history 提供文件版本快照、修改记录和文本 diff。
-//
-// 快照以 gzip 形式存放在 data/vaults/<vault>/history/ 下，
-// 数据库仅保存元数据。create 操作不生成快照。
+// Package history 在 Vault 数据根目录下保存文件修订与 gzip 快照。
+// 其中 create 事件仅记录元数据，快照元数据由数据库保存。
 package history
 
 import (
@@ -20,14 +18,14 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// Actor 描述一次写入操作的操作者信息。
+// Actor 标识产生历史条目的账号与设备。
 type Actor struct {
 	Username   string
 	DeviceName string
 	ClientID   string
 }
 
-// 操作类型常量。
+// History 动作取值持久化于 FileHistory.Action。
 const (
 	ActionCreate  = "create"
 	ActionModify  = "modify"
@@ -36,22 +34,22 @@ const (
 	ActionRename  = "rename"
 )
 
-// Dir 返回某仓库的历史快照目录。
+// Dir 返回 Vault 历史目录。
 func Dir(dataDir, vaultID string) string {
 	return filepath.Join(dataDir, "vaults", vaultID, "history")
 }
 
-// ContentKey 由快照哈希生成稳定存储键。
+// ContentKey 返回由哈希派生的稳定快照键。
 func ContentKey(vaultID, hash string) string {
 	return filepath.ToSlash(filepath.Join("vaults", vaultID, "history", hash+".gz"))
 }
 
-// DiskPath 返回快照在磁盘上的绝对路径。
+// DiskPath 将快照键解析为数据目录下的磁盘路径。
 func DiskPath(dataDir, contentKey string) string {
 	return filepath.Join(dataDir, filepath.FromSlash(contentKey))
 }
 
-// StoreSnapshot 将 contentPath 压缩为 gzip 快照，返回存储键、哈希和大小。
+// StoreSnapshot 压缩正文并返回快照键、哈希与字节数。
 func StoreSnapshot(dataDir, vaultID, contentPath string) (string, string, int64, error) {
 	src, err := os.Open(contentPath)
 	if err != nil {
@@ -92,8 +90,8 @@ func StoreSnapshot(dataDir, vaultID, contentPath string) (string, string, int64,
 	return key, hash, written, nil
 }
 
-// Record 记录一次修改历史。contentPath 为空表示无快照（create）。
-// db 可为事务，保证 revision 与快照元数据一致性。
+// Record 写入历史元数据与可选快照。
+// 传入事务内数据库时，修订与快照元数据保持一致提交。
 func Record(db *gorm.DB, dataDir, vaultID string, actor Actor, action, filePath, prevPath, contentPath string, revision int64) error {
 	if filePath == "" {
 		return nil
@@ -125,7 +123,7 @@ func Record(db *gorm.DB, dataDir, vaultID string, actor Actor, action, filePath,
 	return db.Create(&row).Error
 }
 
-// ReadSnapshot 读取快照内容（解压）。返回 nil 表示无快照。
+// ReadSnapshot 解压快照，键为空或快照缺失时返回空内容。
 func ReadSnapshot(dataDir, contentKey string) ([]byte, error) {
 	if contentKey == "" {
 		return nil, nil
@@ -146,7 +144,7 @@ func ReadSnapshot(dataDir, contentKey string) ([]byte, error) {
 	return io.ReadAll(gz)
 }
 
-// IsText 依据扩展名判断快照是否可作文本 diff。
+// IsText 判断路径是否可做文本 diff。
 func IsText(path string) bool {
 	lower := strings.ToLower(path)
 	for _, ext := range []string{".md", ".txt", ".json", ".yaml", ".yml", ".css", ".js", ".html", ".csv", ".xml", ".ts", ".go"} {
@@ -157,7 +155,7 @@ func IsText(path string) bool {
 	return false
 }
 
-// DiffLines 返回 old -> new 的简易逐行 diff（- 为旧行，+ 为新行）。
+// DiffLines 返回从旧内容到新内容的行级 diff。
 func DiffLines(oldContent, newContent []byte) []string {
 	oldLines := splitLines(oldContent)
 	newLines := splitLines(newContent)
@@ -216,20 +214,19 @@ func lcsDiff(oldLines, newLines []string) []string {
 	return out
 }
 
-// CleanupVault 删除某仓库的全部历史快照文件。
+// CleanupVault 删除指定 Vault 的全部快照文件。
 func CleanupVault(dataDir, vaultID string) error {
 	return os.RemoveAll(Dir(dataDir, vaultID))
 }
 
-// CleanupExpired 删除超过保留期的文件历史记录及其快照文件。
-// retentionDays 为 0 时不清理。删除快照文件前会确认没有其他记录引用同一 ContentKey。
+// CleanupExpired 删除过期历史记录与无人引用的快照。
+// 保留天数小于等于 0 时不清理，文件删除失败时保留数据库记录以便重试。
 func CleanupExpired(db *gorm.DB, dataDir, vaultID string, retentionDays int, now time.Time) error {
 	if retentionDays <= 0 {
 		return nil
 	}
 	cutoff := now.AddDate(0, 0, -retentionDays)
 
-	// 查找过期的历史记录。
 	var expired []models.FileHistory
 	if err := db.Where("vault_id = ? AND created_at < ?", vaultID, cutoff).
 		Find(&expired).Error; err != nil {
@@ -239,7 +236,6 @@ func CleanupExpired(db *gorm.DB, dataDir, vaultID string, retentionDays int, now
 		return nil
 	}
 
-	// 收集待删除的 ContentKey，检查是否被未过期记录引用。
 	keysToDelete := make(map[string]struct{})
 	for _, h := range expired {
 		if h.ContentKey == "" {
@@ -265,8 +261,7 @@ func CleanupExpired(db *gorm.DB, dataDir, vaultID string, retentionDays int, now
 		}
 	}
 
-	// 先删除无引用的快照文件，全部成功后再删数据库记录。
-	// 若文件删除失败，DB 行保留，下次 cron 可重试，避免孤儿快照永久泄漏。
+	// 先删除无人引用的快照文件再删数据库记录，删除失败时保留记录等待下次定时重试。
 	for k := range keysToDelete {
 		diskPath := DiskPath(dataDir, k)
 		if err := os.Remove(diskPath); err != nil && !os.IsNotExist(err) {
@@ -274,7 +269,6 @@ func CleanupExpired(db *gorm.DB, dataDir, vaultID string, retentionDays int, now
 		}
 	}
 
-	// 删除数据库记录。
 	ids := make([]uint, len(expired))
 	for i, h := range expired {
 		ids[i] = h.ID

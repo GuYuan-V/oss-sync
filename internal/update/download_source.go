@@ -8,7 +8,7 @@ import (
 
 const defaultReleaseProxy = "https://gh-proxy.com/"
 
-// resolveUpdateURL applies a selected source to a GitHub API or Release URL.
+// resolveUpdateURL 把选定的下载源应用于 GitHub API 或 Release 地址。
 func resolveUpdateURL(rawURL, source, customProxy string) (string, error) {
 	switch strings.TrimSpace(source) {
 	case "", "official":
@@ -30,8 +30,8 @@ func resolveUpdateURL(rawURL, source, customProxy string) (string, error) {
 	}
 }
 
-// resolveDownloadURL applies the selected source to a Release asset URL.
-// The original digest and size remain authoritative after download.
+// resolveDownloadURL 把选定的下载源应用于 Release 资产地址。
+// 下载后仍以原始 digest 与 size 为准。
 func resolveDownloadURL(assetURL, source, customProxy string) (string, error) {
 	return resolveUpdateURL(assetURL, source, customProxy)
 }

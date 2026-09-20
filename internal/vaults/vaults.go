@@ -1,4 +1,4 @@
-// 仓库服务
+// Package vaults 提供 Vault、成员与删除接口。
 package vaults
 
 import (
@@ -250,8 +250,7 @@ func (h *Handler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, h.toOut(vault, role))
 }
 
-// Delete first writes a ZIP archive below the persistent data directory, then permanently
-// removes the Vault, shares, membership data, revisions and stored content.
+// Delete 先在持久化数据目录下写入 ZIP 归档，再永久删除 Vault、分享、成员数据、修订与存储内容。
 func (h *Handler) Delete(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {

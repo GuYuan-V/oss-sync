@@ -1,4 +1,4 @@
-// 存储路径
+// Package filestore 定义 Vault 内容的安全存储键与磁盘路径。
 package filestore
 
 import (

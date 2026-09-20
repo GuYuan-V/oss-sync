@@ -1,4 +1,4 @@
-// 博客资源
+// 公开博客主题使用的嵌入资源。
 package blog
 
 import (

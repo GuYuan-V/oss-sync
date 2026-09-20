@@ -1,4 +1,4 @@
-// Package webui 提供统一登录、注册和带侧边栏的网页控制台。
+// Package webui 提供登录页面、控制台与管理员视图的渲染。
 package webui
 
 import (
@@ -72,7 +72,7 @@ type layoutData struct {
 	PluginAdminPages []serverplugin.PluginAdminPage
 	CurrentVault     *vaultNav // 进入仓库页后为当前仓库导航
 	Flash            string
-	FlashKind        string // success / error
+	FlashKind        string // success 或 error。
 	ConsoleThemeName string
 	Language         string
 	ContentHTML      template.HTML
@@ -226,7 +226,7 @@ func (h *Handler) Register(r *gin.Engine) {
 		adminGroup.POST("/backups/:id/delete", h.deleteBackup)
 	}
 
-	// 旧 /admin 路由重定向兼容，不再提供服务页面。
+	// 旧 /admin 路由保留重定向，统一指向控制台与登录入口。
 	r.GET("/admin/login", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/login")
 	})
@@ -460,9 +460,7 @@ func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 	}
 }
 
-// hasAccessibleTheme reports whether the current user can access at least one
-// Vault using the requested blog theme. Built-in theme settings are global
-// navigation entries, so they must not depend on the current Vault page.
+// hasAccessibleTheme 判断当前用户是否可访问至少一个使用目标博客主题的仓库。内置主题设置为全局导航入口，不依赖当前仓库页面。
 func (h *Handler) hasAccessibleTheme(u *models.User, themeName string) bool {
 	var count int64
 	query := h.DB.Model(&models.VaultSetting{}).

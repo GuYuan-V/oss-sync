@@ -13,7 +13,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/config"
 )
 
-// Middleware invokes registered executable plugin middleware around host requests.
+// Middleware 在宿主请求前后触发已注册的可执行插件中间件。
 func (m *Manager) Middleware(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		originalWriter := c.Writer

@@ -42,10 +42,10 @@ func newServiceTestManager(t *testing.T) (*Manager, *Updater, *config.Config, st
 	return mgr, up, cfg, exePath
 }
 
-// helpers for service tests (avoid collision with existing helpers)
+// service 测试辅助函数，与 update_test 中同名辅助区分。
 func makeTarGzForService(t *testing.T, entries map[string][]byte) []byte {
 	t.Helper()
-	// reuse existing helper from update_test
+	// 调用 update_test 中的 makeTarGz。
 	return makeTarGz(t, entries)
 }
 func makeZipForService(t *testing.T, entries map[string][]byte) []byte {
@@ -59,13 +59,13 @@ func digestOfService(t *testing.T, b []byte) string {
 
 func TestService_StartHelperUpdate_SuccessSignalsShutdown(t *testing.T) {
 	mgr, up, cfg, exePath := newServiceTestManager(t)
-	// create checked candidate
+	// 构造已校验候选。
 	cand := newCheckedForHelperService(t, mgr)
 	svc := NewService(mgr, up, cfg)
 	called := make(chan struct{}, 1)
 	svc.SetOnShutdown(func() { called <- struct{}{} })
 
-	// mock helper launch success (prevent real helper spawn)
+	// 桩 helper 启动成功，不拉起真实进程。
 	origLaunch := launchHelperFn
 	launchHelperFn = func(string, string) error { return nil }
 	defer func() { launchHelperFn = origLaunch }()
@@ -82,13 +82,13 @@ func TestService_StartHelperUpdate_SuccessSignalsShutdown(t *testing.T) {
 	if op == nil || op.Candidate.Version != "9.9.9" {
 		t.Fatalf("op version %v", op)
 	}
-	// shutdown should be signaled async after helper launch
+	// helper 启动成功后应异步触发关闭回调。
 	select {
 	case <-called:
 	case <-time.After(1 * time.Second):
 		t.Fatal("shutdown not signaled after helper launch success")
 	}
-	// verify exe still old? helper not yet run swap, but staging done
+	// helper 尚未执行替换，可执行文件保持旧版本，仅暂存完成。
 	if _, err := os.Stat(exePath); err != nil {
 		t.Fatalf("exe missing: %v", err)
 	}
@@ -127,13 +127,10 @@ func TestService_StartHelperUpdate_UsesManagerCheckedCandidate(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected check_not_found")
 	}
-	// expired candidate
+	// 覆盖过期候选分支。
 	cand := newCheckedForHelperService(t, mgr)
-	// manually expire
 	mgr2, _ := NewManager(mgr.root)
-	// IssueChecked with short ttl already done; expire by sleeping
-	// Instead create expired by direct state manipulation: simplest test expired via ValidateChecked after time
-	// Use a new manager with ttl 1ms
+	// 以 1 毫秒有效期签发并等待过期，再触发即得过期错误。
 	cc, _ := mgr2.IssueChecked(*mustNewCandidateForService(t, "9.9.10"), 1*time.Millisecond)
 	time.Sleep(5 * time.Millisecond)
 	_, err = svc.StartHelperUpdate(ctx, cc.ID, "", "")
@@ -157,7 +154,7 @@ func newCheckedForHelperService(t *testing.T, mgr *Manager) string {
 		serveContent = content
 	}
 	digest := digestOfService(t, serveContent)
-	// serve via loopback httptest so download succeeds without external network
+	// 经 loopback httptest 提供下载，不依赖外部网络。
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", strconv.Itoa(len(serveContent)))
 		_, _ = w.Write(serveContent)

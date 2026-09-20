@@ -28,7 +28,7 @@ func TestNewCandidate_MalformedVersion(t *testing.T) {
 			t.Errorf("NewCandidate should fail for malformed version %q", v)
 		}
 	}
-	// Also Validate on manually constructed candidate with bad version
+	// 以下手工构造非法版本，覆盖 Validate 分支。
 	c := validCandidate()
 	c.Version = "bad"
 	if err := c.Validate(); err == nil {
@@ -40,31 +40,30 @@ func TestNewCandidate_MalformedVersion(t *testing.T) {
 		t.Error("Validate should fail for version with 4 parts")
 	}
 	c = validCandidate()
-	c.Version = "v1.2.3" // not normalized
+	c.Version = "v1.2.3" // 含 v 前缀，未规范化。
 	if err := c.Validate(); err == nil {
 		t.Error("Validate should fail for version with v prefix")
 	}
 }
 
 func TestCandidate_AssetMismatch(t *testing.T) {
-	// Correct version but wrong asset name
+	// 版本正确但资产名错误。
 	c := validCandidate()
-	c.AssetName = "oss-server_1.2.3_linux_amd64.zip" // wrong ext for linux
+	c.AssetName = "oss-server_1.2.3_linux_amd64.zip" // linux 要求 tar.gz，后缀错误。
 	if err := c.Validate(); err == nil {
 		t.Error("Validate should fail for asset name mismatch (ext)")
 	}
 	c = validCandidate()
-	c.AssetName = "oss-server_9.9.9_linux_amd64.tar.gz" // version mismatch
+	c.AssetName = "oss-server_9.9.9_linux_amd64.tar.gz" // 资产内版本与候选版本不一致。
 	if err := c.Validate(); err == nil {
 		t.Error("Validate should fail for asset name version mismatch")
 	}
 	c = validCandidate()
-	c.AssetName = "oss-server-linux-amd64-v1.2.3.tar.gz" // legacy permissive should fail
+	c.AssetName = "oss-server-linux-amd64-v1.2.3.tar.gz" // 旧宽松命名必须拒绝。
 	if err := c.Validate(); err == nil {
 		t.Error("Validate should fail for legacy permissive name")
 	}
-	// NewCandidate should generate exact name; passing mismatched manual asset not applicable, but NewCandidate internally generates exact, so test via Validate as above is enough
-	// Also test NewCandidate with unsupported platform
+	// NewCandidate 内部生成精确资产名，此处仅覆盖 Validate；另覆盖不支持平台。
 	if _, err := newTestCandidate("v1.2.3", "freebsd", "amd64", "https://example.com/a", "https://example.com/r", 100); err == nil {
 		t.Error("NewCandidate should fail for unsupported platform")
 	}
@@ -110,7 +109,7 @@ func TestCandidate_NonHTTPSURL(t *testing.T) {
 			t.Errorf("NewCandidate should fail for urls %q %q", tc.assetURL, tc.releaseURL)
 		}
 	}
-	// Validate also
+	// 同一组输入覆盖 Validate。
 	for _, tc := range cases {
 		c := validCandidate()
 		c.AssetURL = tc.assetURL
@@ -119,7 +118,7 @@ func TestCandidate_NonHTTPSURL(t *testing.T) {
 			t.Errorf("Validate should fail for urls %q %q", tc.assetURL, tc.releaseURL)
 		}
 	}
-	// Do not guess GitHub domains: any https host is accepted, not only github.com
+	// 不限定 GitHub 域名，任意 https 主机均可接受。
 	c := validCandidate()
 	c.AssetURL = "https://my-custom-host.example.net/files/oss-server_1.2.3_linux_amd64.tar.gz"
 	c.ReleaseURL = "https://my-custom-host.example.net/releases/v1.2.3"
@@ -136,12 +135,11 @@ func TestCandidate_PlatformIdentity(t *testing.T) {
 	if c.GOOS != "darwin" || c.GOARCH != "arm64" {
 		t.Errorf("platform identity not stored: %s/%s", c.GOOS, c.GOARCH)
 	}
-	// Changing platform should make Validate fail due to asset name mismatch
+	// 仅改平台会导致资产名失配，Validate 应失败。
 	c.GOOS = "linux"
 	if err := c.Validate(); err == nil {
 		t.Error("changing platform without updating asset name should fail")
 	}
-	// Correct asset for new platform
 	exp, _ := AssetName("v1.2.3", "linux", "arm64")
 	c.GOOS = "linux"
 	c.GOARCH = "arm64"
@@ -149,7 +147,7 @@ func TestCandidate_PlatformIdentity(t *testing.T) {
 	if err := c.Validate(); err != nil {
 		t.Errorf("after fixing asset name for new platform, Validate should pass, got %v", err)
 	}
-	// Ensure current runtime platform not assumed; candidate must carry explicit platform
+	// 候选必须自带平台信息，不得隐式使用当前运行平台。
 	_ = runtime.GOOS
 }
 

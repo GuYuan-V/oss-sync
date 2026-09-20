@@ -492,7 +492,6 @@ func TestPublicBlogRoutesDoNotRenderCustomFragmentsWhenPolicyDisabled(t *testing
 }
 
 func TestPublicHomeListsPublishedVaultsWithoutLegacySelection(t *testing.T) {
-	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	token := registerAndLogin(t, router, "public-directory-owner", "password123")
@@ -507,10 +506,8 @@ func TestPublicHomeListsPublishedVaultsWithoutLegacySelection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// When
 	home := doForm(t, router, http.MethodGet, "/", nil, nil)
 
-	// Then
 	if home.Code != http.StatusOK ||
 		!strings.Contains(home.Body.String(), "公开笔记") ||
 		!strings.Contains(home.Body.String(), "按 Vault 发布的博客") ||

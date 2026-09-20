@@ -85,7 +85,7 @@ export default class OSSPlugin extends Plugin {
   private readonly diagnostics = new Diagnostics((event) => {
     if (this.settings.diagnosticsEnabled) {
       console.log("[oss-sync]", event.kind, JSON.stringify(event));
-      // 同时用 warn 级别确保在过滤 debug 的控制台也能看到关键协作失败
+      // 同时用 warn 级别输出，确保过滤 debug 的控制台仍可见关键协作失败。
       if (event.kind === "api_error" || event.kind === "collab_upload_attempt") {
         console.warn("[oss-sync]", event.kind, JSON.stringify(event));
       }
@@ -266,7 +266,7 @@ export default class OSSPlugin extends Plugin {
             new Notice(this.t("sync.error", { error: this.localizedError(error) }));
           });
         }
-        // 管理员自动检查更新，有新版本时用 Notice 提示
+        // 管理员自动检查更新，有新版本时用 Notice 提示。
         if (this.isAdmin()) {
           void this.autoCheckUpdates();
         }
@@ -363,7 +363,7 @@ export default class OSSPlugin extends Plugin {
     } else {
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
     }
-    // Passwords from older plugin versions are never retained after loading.
+    // 旧版本遗留的密码在加载后不保留。
     this.settings.password = "";
     if (!this.settings.clientId) {
       this.settings.clientId = createClientID();
@@ -436,9 +436,9 @@ export default class OSSPlugin extends Plugin {
       at: Date.now(),
       enabled,
     });
-    // 立即输出 runtime_info 以便控制台可关联版本
+    // 立即输出 runtime_info 以便控制台可关联版本。
     this.emitRuntimeInfo();
-    // 输出一条测试事件，确保控制台可见
+    // 输出一条测试事件，确保控制台可见。
     this.diagnostics.record({
       kind: "collab_upload_attempt",
       at: Date.now(),
@@ -462,7 +462,7 @@ export default class OSSPlugin extends Plugin {
     if (!hasOrdinary && !hasCollab) return;
     this.conflictWarningLast.set(key, now);
     new Notice(this.t("notice.conflictEditWarning", { path: key }), 6000);
-    // 自动揭示侧边栏，帮助用户第一时间发现
+    // 自动揭示侧边栏，帮助用户第一时间发现。
     void this.activateSidebar().catch(() => {});
   }
 
@@ -553,7 +553,7 @@ export default class OSSPlugin extends Plugin {
   }
 
   createServerUpdatePoller(opts: ServerUpdatePollerOptions): ServerUpdatePoller {
-    // Ensure previous poller is cleaned up — bounded, no leaked timers.
+    // 先清理旧轮询器，避免计时器泄漏。
     this.serverUpdatePoller?.dispose();
     const poller = new ServerUpdatePoller(
       {
@@ -718,7 +718,7 @@ export default class OSSPlugin extends Plugin {
       item.setTitle(this.t(existing ? "menu.unshare" : "menu.share"));
       item.setIcon(existing ? "x" : "share");
     } catch {
-      // Keep the default share action when the current share state cannot load.
+      // 分享状态加载失败时保留默认分享操作。
     }
   }
 
@@ -870,7 +870,7 @@ export default class OSSPlugin extends Plugin {
         plugin_id: pluginID,
         command_id: hook.id ?? "",
       });
-      // The response was computed from this document snapshot. Never replace newer edits.
+      // 响应基于调用时的文档快照计算，不覆盖其后产生的新编辑。
       if (editor.getValue() !== content || view?.file !== file || file?.path !== path) {
         new Notice(this.t("notice.pluginCommandDocumentChanged"));
         return;

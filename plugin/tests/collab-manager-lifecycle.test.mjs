@@ -54,7 +54,6 @@ async function settle() {
 }
 
 test("starts once and performs one immediate refresh", async () => {
-  // Given
   globalThis.window = globalThis;
   globalThis.EventSource = FakeEventSource;
   FakeEventSource.instances = [];
@@ -63,12 +62,10 @@ test("starts once and performs one immediate refresh", async () => {
     const fixture = createHarness();
     const manager = new module.CollabManager({ vault: {} }, fixture.api, fixture.plugin, () => {});
 
-    // When
     manager.start();
     manager.start();
     await settle();
 
-    // Then
     assert.equal(fixture.refreshes(), 1);
     assert.equal(FakeEventSource.instances.length, 1);
     manager.stop();
@@ -79,7 +76,6 @@ test("starts once and performs one immediate refresh", async () => {
 
 for (const event of ["invited", "revoked"]) {
   test(`${event} refreshes collaboration data without regular sync`, async () => {
-    // Given
     globalThis.window = globalThis;
     globalThis.EventSource = FakeEventSource;
     FakeEventSource.instances = [];
@@ -90,11 +86,9 @@ for (const event of ["invited", "revoked"]) {
       manager.start();
       await settle();
 
-      // When
       FakeEventSource.instances[0].listeners.get(event)();
       await settle();
 
-      // Then
       assert.equal(fixture.refreshes(), 2);
       assert.deepEqual(fixture.syncCalls, []);
       manager.stop();
@@ -105,7 +99,6 @@ for (const event of ["invited", "revoked"]) {
 }
 
 test("stop closes the stream and reports disconnected", async () => {
-  // Given
   globalThis.window = globalThis;
   globalThis.EventSource = FakeEventSource;
   FakeEventSource.instances = [];
@@ -116,10 +109,8 @@ test("stop closes the stream and reports disconnected", async () => {
     manager.start();
     const source = FakeEventSource.instances[0];
 
-    // When
     manager.stop();
 
-    // Then
     assert.equal(source.closed, true);
     assert.equal(manager.isRunning(), false);
     assert.equal(manager.getTransportStatus(), "sidebar.collabDisconnected");

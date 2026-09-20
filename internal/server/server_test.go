@@ -161,7 +161,6 @@ func intToStr(n int64) string {
 }
 
 func TestLegacyUpload_whenUserUploadPreferenceTightensAdminCeiling_rejectsOversizedContent(t *testing.T) {
-	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	token := registerAndLogin(t, router, "legacy-upload-limit", "password123")
@@ -172,10 +171,8 @@ func TestLegacyUpload_whenUserUploadPreferenceTightensAdminCeiling_rejectsOversi
 		t.Fatalf("set upload preference: %v", err)
 	}
 
-	// When
 	code, body := uploadRawFile(t, router, token, "Notes/Large.md", "123456", 1700000000000)
 
-	// Then
 	if code != http.StatusRequestEntityTooLarge {
 		t.Errorf("oversized legacy upload: status=%d body=%v, want 413", code, body)
 	}

@@ -1,10 +1,7 @@
-// Package auth 提供用户注册、登录和请求鉴权。
+// Package auth 提供账号端点与请求身份认证，支持 Bearer 与 Basic 两种凭据。
 //
-//	POST /api/auth/register  注册（由数据库开关控制匿名普通用户注册）
-//	POST /api/auth/login      登录，返回 JWT
-//
-// Middleware 同时支持 Bearer JWT 与 Basic 认证。
-// 任何 handler 用 auth.RequireUser(c) 取当前用户。
+//	POST /api/auth/register 按数据库策略注册账号。
+//	POST /api/auth/login 返回 API 令牌。
 package auth
 
 import (
@@ -23,7 +20,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// Handler 持有 auth 路由所需依赖。
+// Handler 持有认证路由所需的依赖。
 type Handler struct {
 	DB            *gorm.DB
 	Cfg           *config.Config
@@ -31,12 +28,12 @@ type Handler struct {
 	registerLimit *AttemptLimiter
 }
 
-// NewHandler 创建 auth handler。
+// NewHandler 创建带端点限流的认证处理器。
 func NewHandler(db *gorm.DB, cfg *config.Config) *Handler {
 	return &Handler{DB: db, Cfg: cfg, loginLimit: NewAttemptLimiter(8, time.Minute), registerLimit: NewAttemptLimiter(5, time.Minute)}
 }
 
-// Register 在 gin 引擎上挂载 auth 路由组。
+// Register 挂载认证与账号路由。
 func (h *Handler) Register(r *gin.Engine) {
 	g := r.Group("/api/auth")
 	{
@@ -69,14 +66,13 @@ type AuthResponse struct {
 	UserID    uint   `json:"user_id"`
 	Username  string `json:"username"`
 	Role      string `json:"role"`
-	// DeviceStatus 仅在插件登录时返回：pending / approved / revoked。
+	// DeviceStatus 仅在插件设备待审批时返回。
 	DeviceStatus string `json:"device_status,omitempty"`
-	// DeviceName 服务端确认的设备名称。
+	// DeviceName 为服务端确认的设备名。
 	DeviceName string `json:"device_name,omitempty"`
 }
 
-// RegisterUser 处理 POST /api/auth/register。
-// 匿名请求只能在数据库注册开关开启时创建普通用户；管理员始终可以创建用户。
+// RegisterUser 处理账号创建。匿名注册只能创建普通用户，首个账号或 admin 调用除外。
 func (h *Handler) RegisterUser(c *gin.Context) {
 	if !h.registerLimit.Allow("register:" + c.ClientIP()) {
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many registration attempts; try again later"})
@@ -111,7 +107,7 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 			})
 			return
 		}
-		// 原子化首注判定与创建，避免并发产生多个 admin（跨 web/API 入口）。
+		// 首账号角色分配跨 Web 与 API 入口串行化。
 		u, err = CreateAccountForAnonymousRegistration(h.DB, req.Username, req.Password)
 		if err != nil {
 			if IsUsernameTakenError(err) {
@@ -186,7 +182,7 @@ func (h *Handler) Status(c *gin.Context) {
 	})
 }
 
-// Login 处理 POST /api/auth/login。
+// Login 处理 POST /api/auth/login，设备登录时登记设备并返回绑定令牌。
 func (h *Handler) Login(c *gin.Context) {
 	if !h.loginLimit.Allow("login:" + c.ClientIP()) {
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many login attempts; try again later"})
@@ -256,8 +252,7 @@ func (h *Handler) Login(c *gin.Context) {
 	})
 }
 
-// DeviceStatus 处理 GET /api/auth/device-status?client_id=xxx。
-// 插件在设备待授权期间每 5 秒轮询该接口。
+// DeviceStatus 供插件客户端轮询设备审批状态。
 func (h *Handler) DeviceStatus(c *gin.Context) {
 	did, ok := RequireDeviceID(c, c.Query("client_id"), c.GetHeader(deviceauth.ClientIDHeader))
 	if !ok {
@@ -279,15 +274,14 @@ func (h *Handler) DeviceStatus(c *gin.Context) {
 	})
 }
 
-// changePasswordRequest 修改自己的密码请求体。
+// changePasswordRequest 为已登录改密路由的请求体。
 type changePasswordRequest struct {
 	OldPassword     string `json:"old_password" binding:"required"`
 	NewPassword     string `json:"new_password" binding:"required"`
 	ConfirmPassword string `json:"confirm_password" binding:"required"`
 }
 
-// ChangePassword 处理 POST /api/account/password。
-// 校验旧密码后更新密码并递增 token 版本；返回新 token 供调用方继续会话。
+// ChangePassword 处理 POST /api/account/password，旧 token 版本失效后返回替换令牌。
 func (h *Handler) ChangePassword(c *gin.Context) {
 	u, ok := RequireUser(c)
 	if !ok {

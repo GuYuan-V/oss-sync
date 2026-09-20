@@ -1,4 +1,4 @@
-// 仪表盘
+// 控制台仪表盘渲染与指标接口。
 package webui
 
 import (

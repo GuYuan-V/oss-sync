@@ -9,7 +9,6 @@ import (
 func TestResolve_whenPreferencesExceedLimits_clampsToAdministratorCeilings(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	system := models.SystemSetting{
 		DefaultRecycleBinDays: 30,
 		MaxLongPollWaitSec:    20,
@@ -26,10 +25,8 @@ func TestResolve_whenPreferencesExceedLimits_clampsToAdministratorCeilings(t *te
 		UploadSizeBytes:       100 << 20,
 	}
 
-	// When
 	policy := Resolve(system, user, 100<<20)
 
-	// Then
 	if policy.LongPollWaitSec != 20 {
 		t.Errorf("long poll wait = %d, want 20", policy.LongPollWaitSec)
 	}
@@ -50,16 +47,13 @@ func TestResolve_whenPreferencesExceedLimits_clampsToAdministratorCeilings(t *te
 func TestResolve_whenPreferencesAreUnset_usesSafeDefaultsAndInheritedLimits(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	system := models.SystemSetting{
 		DefaultRecycleBinDays: 45,
 		MaxVaultStorageBytes:  5 << 30,
 	}
 
-	// When
 	policy := Resolve(system, models.UserSetting{}, 100<<20)
 
-	// Then
 	if policy.LongPollWaitSec != 30 || policy.SyncDebounceSec != 3 {
 		t.Errorf("poll/debounce = %d/%d, want 30/3", policy.LongPollWaitSec, policy.SyncDebounceSec)
 	}
@@ -77,7 +71,6 @@ func TestResolve_whenPreferencesAreUnset_usesSafeDefaultsAndInheritedLimits(t *t
 func TestValidatePreferences_whenValueExceedsLimit_returnsError(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	limits := Limits{
 		LongPollWaitSec:   20,
 		SyncDebounceSec:   60,
@@ -87,10 +80,8 @@ func TestValidatePreferences_whenValueExceedsLimit_returnsError(t *testing.T) {
 	}
 	preferences := Preferences{LongPollWaitSec: 21}
 
-	// When
 	err := ValidatePreferences(preferences, limits)
 
-	// Then
 	if err == nil {
 		t.Fatal("ValidatePreferences returned nil, want ceiling error")
 	}

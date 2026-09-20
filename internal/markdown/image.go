@@ -1,4 +1,4 @@
-// Markdown 图片处理
+// 图片嵌入与附件地址解析。
 package markdown
 
 import (

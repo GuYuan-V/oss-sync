@@ -20,7 +20,6 @@ import (
 )
 
 func TestUpdateUser_whenRoleAndQuotaChange_returnsPersistedValues(t *testing.T) {
-	// Given
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "admin.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		t.Fatalf("open database: %v", err)
@@ -62,10 +61,8 @@ func TestUpdateUser_whenRoleAndQuotaChange_returnsPersistedValues(t *testing.T) 
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
 
-	// When
 	router.ServeHTTP(recorder, request)
 
-	// Then
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("update user status = %d body=%s", recorder.Code, recorder.Body.String())
 	}

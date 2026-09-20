@@ -14,7 +14,6 @@ import (
 func TestParseAdminSystemInput_whenValuesAreWithinHardLimits_convertsMegabytesToBytes(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	form := url.Values{
 		"sync_mode":                {"long_poll"},
 		"default_recycle_bin_days": {"30"},
@@ -27,10 +26,8 @@ func TestParseAdminSystemInput_whenValuesAreWithinHardLimits_convertsMegabytesTo
 		"custom_fragments_enabled": {"on"},
 	}
 
-	// When
 	input, err := parseAdminSystemInput(form, 100<<20)
 
-	// Then
 	if err != nil {
 		t.Fatalf("parse admin system input: %v", err)
 	}
@@ -54,7 +51,6 @@ func TestParseAdminSystemInput_whenValuesAreWithinHardLimits_convertsMegabytesTo
 func TestParseAdminSystemInput_whenDefaultRecycleExceedsCeiling_returnsError(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	form := url.Values{
 		"sync_mode":                {"user_choice"},
 		"default_recycle_bin_days": {"91"},
@@ -65,10 +61,8 @@ func TestParseAdminSystemInput_whenDefaultRecycleExceedsCeiling_returnsError(t *
 		"max_upload_size_mb":       {"50"},
 	}
 
-	// When
 	_, err := parseAdminSystemInput(form, 100<<20)
 
-	// Then
 	if err == nil {
 		t.Fatal("parseAdminSystemInput returned nil, want recycle ceiling error")
 	}
@@ -77,7 +71,6 @@ func TestParseAdminSystemInput_whenDefaultRecycleExceedsCeiling_returnsError(t *
 func TestAdminSystemTemplate_whenRendered_exposesAdministratorCeilingControls(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	tpl, err := template.New("web").Funcs(template.FuncMap{
 		"formatBytes": formatBytes,
 		"timeFmt":     func(value time.Time) string { return value.Format("2006-01-02 15:04") },
@@ -104,13 +97,11 @@ func TestAdminSystemTemplate_whenRendered_exposesAdministratorCeilingControls(t 
 		},
 	}
 
-	// When
 	var rendered bytes.Buffer
 	if err := tpl.ExecuteTemplate(&rendered, "admin-system", data); err != nil {
 		t.Fatalf("render admin system template: %v", err)
 	}
 
-	// Then
 	page := rendered.String()
 	for _, field := range []string{
 		"custom_fragments_enabled",

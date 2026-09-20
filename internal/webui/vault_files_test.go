@@ -12,7 +12,6 @@ import (
 func TestVaultFilesTemplate_whenRendered_exposesManagementAndPerFileHistoryLinks(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	tpl, err := template.New("web").Funcs(template.FuncMap{"formatBytes": formatBytes}).
 		ParseFS(webFS, "templates/vault_files.html")
 	if err != nil {
@@ -36,13 +35,11 @@ func TestVaultFilesTemplate_whenRendered_exposesManagementAndPerFileHistoryLinks
 		},
 	}
 
-	// When
 	var rendered bytes.Buffer
 	if err := tpl.ExecuteTemplate(&rendered, "vault-files", data); err != nil {
 		t.Fatalf("render vault files template: %v", err)
 	}
 
-	// Then
 	wantLinks := []string{
 		`href="/dashboard/vaults/vault-1/shares"`,
 		`href="/dashboard/vaults/vault-1/recycle"`,
@@ -58,17 +55,14 @@ func TestVaultFilesTemplate_whenRendered_exposesManagementAndPerFileHistoryLinks
 }
 
 func TestBuildVaultFileBrowser_whenViewingRoot_listsDirectFilesAndFolders(t *testing.T) {
-	// Given
 	files := []models.File{
 		{Path: "# OpenCode Cli.md", Type: "markdown", Size: 12},
 		{Path: "Rust/Rust.md", Type: "markdown", Size: 24},
 		{Path: "Rust/Notes/guide.md", Type: "markdown", Size: 36},
 	}
 
-	// When
 	browser := buildVaultFileBrowser(files, "")
 
-	// Then
 	if len(browser.Files) != 1 || browser.Files[0].Name != "# OpenCode Cli.md" {
 		t.Fatalf("root files = %#v, want only the direct root file", browser.Files)
 	}
@@ -81,17 +75,14 @@ func TestBuildVaultFileBrowser_whenViewingRoot_listsDirectFilesAndFolders(t *tes
 }
 
 func TestBuildVaultFileBrowser_whenViewingNestedFolder_listsChildrenAndBreadcrumbs(t *testing.T) {
-	// Given
 	files := []models.File{
 		{Path: "Rust/Rust.md", Type: "markdown", Size: 24},
 		{Path: "Rust/Notes/guide.md", Type: "markdown", Size: 36},
 		{Path: "Rustacean.md", Type: "markdown", Size: 48},
 	}
 
-	// When
 	browser := buildVaultFileBrowser(files, "Rust")
 
-	// Then
 	if len(browser.Files) != 1 || browser.Files[0].Name != "Rust.md" {
 		t.Fatalf("folder files = %#v, want Rust.md", browser.Files)
 	}

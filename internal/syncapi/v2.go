@@ -233,7 +233,7 @@ func (h *Handler) V2Ack(c *gin.Context) {
 		h.writeDeviceAuthError(c, err)
 		return
 	}
-	// Use claim for operation scope
+	// 以鉴权结论为准设置操作归属，避免客户端伪造。
 	req.ClientID = string(did)
 
 	vaultLock := h.vaultLock(vault.ID)
@@ -828,8 +828,8 @@ func (h *Handler) V2Rename(c *gin.Context) {
 			return errRevisionConflict
 		}
 
-		// os.Rename 在事务内执行；若进程在 rename 后、commit 前崩溃，
-		// reconcile cron 负责修复磁盘与数据库的不一致。
+		// os.Rename 在事务内执行；若进程在 rename 后、提交前崩溃，
+		// 定时对账按磁盘与数据库的实际状态修复。
 		oldDisk = h.fileDiskPath(oldFile)
 		newKey := filestore.VaultStorageKey(vault.ID, req.NewPath)
 		newDisk = filepath.Join(h.Cfg.Storage.DataDir, filepath.FromSlash(newKey))
@@ -1021,7 +1021,7 @@ func historySnapshotReserve(path string) int64 {
 	if err != nil || !info.Mode().IsRegular() {
 		return 0
 	}
-	// gzip worst-case overhead is small; reserve the source size plus 1 MiB.
+	// gzip 膨胀上限较小，按源文件大小另加 1 MiB 预留。
 	return info.Size() + 1<<20
 }
 

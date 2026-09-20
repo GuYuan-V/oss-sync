@@ -14,7 +14,6 @@ import (
 func TestParseUserPreferences_whenValuesAreWithinCeilings_convertsMegabytesToBytes(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	limits := settingspolicy.Limits{
 		LongPollWaitSec: 20, SyncDebounceSec: 60, RecycleBinDays: 90,
 		VaultStorageBytes: 10 << 30, UploadSizeBytes: 50 << 20,
@@ -27,10 +26,8 @@ func TestParseUserPreferences_whenValuesAreWithinCeilings_convertsMegabytesToByt
 		"upload_size_mb":           {"25"},
 	}
 
-	// When
 	preferences, err := parseUserPreferences(form, limits)
 
-	// Then
 	if err != nil {
 		t.Fatalf("parse user preferences: %v", err)
 	}
@@ -45,7 +42,6 @@ func TestParseUserPreferences_whenValuesAreWithinCeilings_convertsMegabytesToByt
 func TestParseUserPreferences_whenValueExceedsAdministratorCeiling_returnsError(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	limits := settingspolicy.Limits{
 		LongPollWaitSec: 20, SyncDebounceSec: 60, RecycleBinDays: 90,
 		VaultStorageBytes: 10 << 30, UploadSizeBytes: 50 << 20,
@@ -58,10 +54,8 @@ func TestParseUserPreferences_whenValueExceedsAdministratorCeiling_returnsError(
 		"upload_size_mb":           {"25"},
 	}
 
-	// When
 	_, err := parseUserPreferences(form, limits)
 
-	// Then
 	if err == nil {
 		t.Fatal("parseUserPreferences returned nil, want ceiling error")
 	}
@@ -73,7 +67,6 @@ func TestParseUserPreferences_whenValueExceedsAdministratorCeiling_returnsError(
 func TestAccountTemplate_whenRendered_exposesConstrainedPreferenceControls(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	tpl, err := template.New("web").Funcs(template.FuncMap{
 		"timeFmt": func(value time.Time) string { return value.Format("2006-01-02 15:04") },
 	}).ParseFS(webFS, "templates/account.html")
@@ -94,13 +87,11 @@ func TestAccountTemplate_whenRendered_exposesConstrainedPreferenceControls(t *te
 		},
 	}
 
-	// When
 	var rendered bytes.Buffer
 	if err := tpl.ExecuteTemplate(&rendered, "account", data); err != nil {
 		t.Fatalf("render account template: %v", err)
 	}
 
-	// Then
 	page := rendered.String()
 	for _, field := range []string{
 		"long_poll_wait_sec",
@@ -123,7 +114,6 @@ func TestAccountTemplate_whenRendered_exposesConstrainedPreferenceControls(t *te
 func TestAccountTemplate_whenRenderedWithEnglish_exposesEnglishCopy(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	tpl, err := template.New("web").Funcs(template.FuncMap{
 		"timeFmt": func(value time.Time) string { return value.Format("2006-01-02 15:04") },
 	}).ParseFS(webFS, "templates/account.html")
@@ -144,13 +134,11 @@ func TestAccountTemplate_whenRenderedWithEnglish_exposesEnglishCopy(t *testing.T
 		},
 	}
 
-	// When
 	var rendered bytes.Buffer
 	if err := tpl.ExecuteTemplate(&rendered, "account", data); err != nil {
 		t.Fatalf("render account template: %v", err)
 	}
 
-	// Then
 	page := rendered.String()
 	if !strings.Contains(page, "Sync and storage preferences") {
 		t.Error("en render missing Sync and storage preferences")

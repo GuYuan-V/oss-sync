@@ -327,8 +327,7 @@ func TestPublicHomeEmptyStateLinksItsLayoutStyles(t *testing.T) {
 		t.Fatalf("empty public directory: status=%d body=%s", home.Code, home.Body.String())
 	}
 
-	// 页面引用的样式表必须包含占位页实际使用的布局类，
-	// 否则首页会以浏览器默认样式呈现（无布局的裸 HTML）。
+	// 样式表须包含占位页实际布局类，否则首页退化为浏览器默认样式。
 	match := regexp.MustCompile(`href="([^"]+\.css(?:\?[^"]*)?)"`).FindStringSubmatch(home.Body.String())
 	if len(match) != 2 {
 		t.Fatalf("no stylesheet link found in home page: %s", home.Body.String())

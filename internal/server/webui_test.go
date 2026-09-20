@@ -194,7 +194,6 @@ func TestAdminSystemControlsRegistration(t *testing.T) {
 func TestAdminSystemSyncMode_whenSaved_persistsGlobalPolicy(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	if _, err := auth.CreateAccount(db, "sync-admin", "admin-password-123", "admin"); err != nil {
@@ -204,10 +203,8 @@ func TestAdminSystemSyncMode_whenSaved_persistsGlobalPolicy(t *testing.T) {
 	form := validAdminSystemForm()
 	form.Set("sync_mode", "long_poll")
 
-	// When
 	response := doForm(t, router, http.MethodPost, "/dashboard/admin/system", form, session, csrf)
 
-	// Then
 	if response.Code != http.StatusSeeOther {
 		t.Fatalf("save system sync mode: status=%d body=%s", response.Code, response.Body)
 	}

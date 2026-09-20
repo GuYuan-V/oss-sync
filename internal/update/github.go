@@ -49,10 +49,10 @@ type Asset struct {
 	Digest             string `json:"digest"`
 }
 
-// GitHubClient 封装对 GitHub API 的请求：超时、可选 Token、限流。
+// GitHubClient 封装 GitHub API 请求，内置超时、可选 Token 与限流。
 type GitHubClient struct {
 	http    *http.Client
-	apiBase string // 测试中可指向本地 mock 服务
+	apiBase string // 测试时可指向本地模拟服务。
 	owner   string
 	repo    string
 	token   string
@@ -137,9 +137,8 @@ func (c *GitHubClient) fetchLatest(ctx context.Context) (*Release, error) {
 		return nil, fmt.Errorf("解析 GitHub 响应失败: %w", err)
 	}
 	if err := validateRelease(&rel); err != nil {
-		// 按契约，malformed / prerelease / draft 均视为无可用 Release
-		// 若为稳定版本校验失败，返回可被调用方识别为 github_error 的包装错误
-		// 但保持 ErrNoRelease 语义以免将草稿误判为可用更新
+		// 格式错误、prerelease 与 draft 均视为无可用 Release。
+		// 稳定版本校验失败时包装 ErrNoRelease 返回，调用方按 github_error 处理，草稿不会被误判为可用更新。
 		if errors.Is(err, ErrInvalidVersion) {
 			return nil, fmt.Errorf("%w: %v", ErrNoRelease, err)
 		}
@@ -148,7 +147,7 @@ func (c *GitHubClient) fetchLatest(ctx context.Context) (*Release, error) {
 	return &rel, nil
 }
 
-// validateRelease 对 Release 执行严格校验：不可变 ID、稳定 tag、draft/prerelease 拒绝。
+// validateRelease 严格校验 Release：不可变 ID、稳定 tag，拒绝 draft 与 prerelease。
 func validateRelease(rel *Release) error {
 	if rel == nil {
 		return ErrNoRelease
@@ -175,7 +174,7 @@ func validateRelease(rel *Release) error {
 	return nil
 }
 
-// selectAsset 为当前平台挑选可下载资产：仅接受与 AssetName 精确匹配的资产，且要求唯一、含有效 sha256 digest。
+// selectAsset 按当前平台挑选可下载资产：仅接受与 AssetName 精确匹配的唯一资产，且须携带有效 sha256 digest。
 func selectAsset(assets []Asset, tag, goos, goarch string) (*Asset, error) {
 	if len(assets) == 0 {
 		return nil, errors.New("该 Release 没有可下载的资产")
@@ -184,7 +183,7 @@ func selectAsset(assets []Asset, tag, goos, goarch string) (*Asset, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Normalize tag for strict version check: tag must be stable.
+	// 规范化 tag 并要求其为稳定版本。
 	sv, err := version.Parse(tag)
 	if err != nil {
 		return nil, newUpdateError(CodeInvalidVersion, fmt.Sprintf("invalid tag %q", tag), err)
@@ -230,7 +229,7 @@ func selectAsset(assets []Asset, tag, goos, goarch string) (*Asset, error) {
 	if a.URL != "" && !isValidAssetURL(a.URL) {
 		return nil, newUpdateError(CodeInvalidURL, fmt.Sprintf("asset %q url must be https, got %q", expected, a.URL), ErrInvalidURL)
 	}
-	// 生产环境要求 https；测试环境允许 http loopback，最终下载层会二次校验并拒绝 downgrade
+	// 生产环境要求 https；测试环境允许 http loopback，最终下载层会二次校验并拒绝降级。
 	if a.BrowserDownloadURL != "" && !isHTTPSURL(a.BrowserDownloadURL) && !isLoopbackURL(a.BrowserDownloadURL) {
 		return nil, newUpdateError(CodeInvalidURL, fmt.Sprintf("asset %q browser_download_url must be https, got %q", expected, a.BrowserDownloadURL), ErrInvalidURL)
 	}

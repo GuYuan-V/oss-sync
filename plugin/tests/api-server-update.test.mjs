@@ -165,7 +165,7 @@ test("server update check and trigger use JWT client headers (not direct GitHub)
     client.setToken("jwt");
     await client.getServerVersion();
     const req = globalThis.__ossRequests[0];
-    // Must use existing JWT API client — Authorization header present, no GitHub URL
+    // 经已有 JWT 客户端请求后端，须携带 Authorization 且不经过 GitHub。
     assert.ok(req.headers.Authorization?.startsWith("Bearer "));
     assert.doesNotMatch(req.url, /github\.com/);
   } finally {

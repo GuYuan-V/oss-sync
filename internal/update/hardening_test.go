@@ -24,13 +24,13 @@ func mustDigest(b []byte) string {
 	return "sha256:" + hex.EncodeToString(h[:])
 }
 
-// helpers for hardened tests
+// hardeningAssetName 按当前平台生成期望资产名。
 func hardeningAssetName(tag string) string {
 	n, _ := AssetName(tag, runtime.GOOS, runtime.GOARCH)
 	return n
 }
 
-// Test malformed semver tag is rejected
+// 非法 semver tag 必须被拒绝。
 func TestHardening_MalformedSemverRejected(t *testing.T) {
 	malformed := []string{"", "v", "1.2", "01.2.3", "1.02.3", "not-semver", "1.2.3-01", "v1.2.3.4.5"}
 	for _, tag := range malformed {
@@ -39,22 +39,20 @@ func TestHardening_MalformedSemverRejected(t *testing.T) {
 		if err == nil {
 			t.Errorf("selectAsset should fail for malformed tag %q", tag)
 		}
-		// also version.Parse should fail
+		// version.Parse 同样应失败；部分 tag 已在 selectAsset 经 AssetName 失败，此处无需断言。
 		if _, err := version.Parse(tag); err == nil && tag != "" {
-			// some tags like "v" will fail inside selectAsset via AssetName
 		}
-		// validateRelease should reject
+		// validateRelease 同样应拒绝；空 tag 属于 ErrNoRelease，此处仅断言非空非法 tag 必须失败。
 		rel := Release{ID: 1, TagName: tag, Draft: false, Prerelease: false, HTMLURL: "https://example.com/releases/tag/" + tag, Assets: assets}
 		if err := validateRelease(&rel); err == nil && tag != "" {
-			// empty tag is ErrNoRelease which is considered error; but we check malformed should be error
 			t.Errorf("validateRelease should fail for malformed tag %q, got nil", tag)
 		}
 	}
 }
 
-// Test prerelease and draft rejected
+// 预发布与草稿必须被拒绝。
 func TestHardening_PrereleaseDraftRejected(t *testing.T) {
-	// prerelease tag via validateRelease
+	// 经 validateRelease 覆盖预发布 tag。
 	rel := Release{ID: 1, TagName: "v1.2.3-alpha.1", Draft: false, Prerelease: false}
 	if err := validateRelease(&rel); err == nil {
 		t.Error("validateRelease should reject prerelease tag")
@@ -67,7 +65,7 @@ func TestHardening_PrereleaseDraftRejected(t *testing.T) {
 	if err := validateRelease(&rel3); !isErrNoRelease(err) {
 		t.Errorf("prerelease flag should be ErrNoRelease, got %v", err)
 	}
-	// selectAsset should reject prerelease tag
+	// selectAsset 同样拒绝预发布 tag。
 	assets := []Asset{{ID: 1, Name: "oss-server_1.2.3-alpha.1_linux_amd64.tar.gz", Size: 100, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", BrowserDownloadURL: "https://example.com/a.tar.gz"}}
 	if _, err := selectAsset(assets, "v1.2.3-alpha.1", "linux", "amd64"); err == nil {
 		t.Error("selectAsset should reject prerelease tag")
@@ -78,16 +76,16 @@ func isErrNoRelease(err error) bool {
 	return err != nil && strings.Contains(err.Error(), ErrNoRelease.Error())
 }
 
-// Test missing/duplicate asset
+// 缺失与重复资产必须失败。
 func TestHardening_MissingDuplicateAsset(t *testing.T) {
 	tag := "v1.2.3"
 	expected, _ := AssetName(tag, "linux", "amd64")
-	// missing
+	// 资产缺失。
 	assets := []Asset{{ID: 1, Name: "other-asset.tar.gz", Size: 100, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", BrowserDownloadURL: "https://example.com/other.tar.gz"}}
 	if _, err := selectAsset(assets, tag, "linux", "amd64"); err == nil {
 		t.Error("should fail for missing asset")
 	}
-	// duplicate
+	// 同名资产重复。
 	dup := []Asset{
 		{ID: 1, Name: expected, Size: 100, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", BrowserDownloadURL: "https://example.com/a.tar.gz"},
 		{ID: 2, Name: expected, Size: 100, Digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", BrowserDownloadURL: "https://example.com/b.tar.gz"},
@@ -97,7 +95,7 @@ func TestHardening_MissingDuplicateAsset(t *testing.T) {
 	}
 }
 
-// Test malformed / missing digest
+// digest 缺失或格式非法必须失败。
 func TestHardening_DigestVariants(t *testing.T) {
 	tag := "v1.2.3"
 	expected, _ := AssetName(tag, "linux", "amd64")
@@ -125,11 +123,11 @@ func TestHardening_DigestVariants(t *testing.T) {
 	}
 }
 
-// Test wrong digest/size via httptest download
+// 经 httptest 下载覆盖 digest 错误与大小错误。
 func TestHardening_WrongDigestSize(t *testing.T) {
 	content := fakeExecBytes()
 	correctDigest := mustDigest(wrapContentIfArchiveForTest(content, hardeningAssetName("v9.9.9")))
-	// wrong digest case
+	// 错误 digest 分支。
 	t.Run("wrong digest", func(t *testing.T) {
 		up := newMockUpstreamWithDigest(t, "v9.9.9", content, "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 		exePath := filepath.Join(t.TempDir(), "oss-server")
@@ -143,7 +141,7 @@ func TestHardening_WrongDigestSize(t *testing.T) {
 		}
 		_ = correctDigest
 	})
-	// wrong size
+	// 错误大小分支。
 	t.Run("wrong size", func(t *testing.T) {
 		up := newMockUpstreamWithWrongSize(t, "v9.9.9", content)
 		exePath := filepath.Join(t.TempDir(), "oss-server")
@@ -161,8 +159,8 @@ func TestHardening_WrongDigestSize(t *testing.T) {
 func wrapContentIfArchiveForTest(content []byte, assetName string) []byte {
 	l := strings.ToLower(assetName)
 	if strings.HasSuffix(l, ".tar.gz") || strings.HasSuffix(l, ".tgz") {
-		// need to mimic wrapContentIfArchive but without t
-		return content // simplified: digest of serveContent vs raw not critical for this test's wrong case
+		// 与 wrapContentIfArchive 对齐的简化实现，错误分支不依赖精确 digest 计算。
+		return content
 	}
 	return content
 }
@@ -203,7 +201,7 @@ func newMockUpstreamWithWrongSize(t *testing.T, tag string, content []byte) *moc
 	})
 	mux.HandleFunc("/repos/fake/oss-sync/releases/latest", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// declare size larger than actual
+		// 声明大小大于实际，用于覆盖大小不一致分支。
 		fmt.Fprintf(w,
 			`{"id":1001,"tag_name":%q,"html_url":%q,"draft":false,"prerelease":false,"assets":[{"id":2001,"name":%q,"browser_download_url":%q,"size":%d,"digest":%q}]}`,
 			tag, srv.URL+"/releases/tag/"+tag, assetName, srv.URL+downloadPath, len(serveContent)+100, digest)
@@ -213,14 +211,14 @@ func newMockUpstreamWithWrongSize(t *testing.T, tag string, content []byte) *moc
 	return &mockUpstream{srv: srv}
 }
 
-// Test unsafe redirect (downgrade) and token leakage
+// 非安全重定向与 Token 泄露必须被拦截。
 func TestHardening_UnsafeRedirectAndTokenLeakage(t *testing.T) {
 	content := fakeExecBytes()
 	assetName := hardeningAssetName("v9.9.9")
 	serveContent := wrapContentIfArchive(t, assetName, content)
 	digest := mustDigest(serveContent)
 
-	// Setup second server that records Authorization header
+	// 第二个服务端记录 Authorization 头，用于判定跨站泄露。
 	var leaked bool
 	var secondSrv *httptest.Server
 	secondMux := http.NewServeMux()
@@ -234,7 +232,7 @@ func TestHardening_UnsafeRedirectAndTokenLeakage(t *testing.T) {
 	secondSrv = httptest.NewServer(secondMux)
 	t.Cleanup(secondSrv.Close)
 
-	// First server redirects to second server (cross-host)
+	// 第一个服务端跨站重定向到第二个服务端。
 	var firstSrv *httptest.Server
 	firstMux := http.NewServeMux()
 	firstMux.HandleFunc("/downloads/"+assetName, func(w http.ResponseWriter, r *http.Request) {
@@ -253,7 +251,6 @@ func TestHardening_UnsafeRedirectAndTokenLeakage(t *testing.T) {
 	if err := os.WriteFile(exePath, []byte("old"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Set token
 	t.Setenv("OSS_GITHUB_TOKEN", "secret-token-123")
 	cfg := testCfg()
 	u, err := NewUpdater(cfg, Options{
@@ -265,24 +262,21 @@ func TestHardening_UnsafeRedirectAndTokenLeakage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// ensure token is picked up (newGitHubClient reads env)
+	// newGitHubClient 从环境变量读取 Token，此处显式赋值保证生效。
 	u.gh.token = "secret-token-123"
 	res := u.Update(context.Background())
-	// Update may succeed via redirect, but token must not leak
+	// 重定向本身可成功，但 Token 不得泄露。
 	if leaked {
 		t.Error("Authorization token leaked to cross-host redirect")
 	}
-	// The redirect itself should succeed if same scheme (http loopback) – we allow it, but token stripped
-	// If it failed due to downgrade logic, res would be failed; both are acceptable as long as no leakage
+	// 同协议 loopback 重定向允许通过且剥离 Token；降级失败亦可接受，只要不泄露。
 	if res.OK && leaked {
 		t.Error("leaked token on success")
 	}
 
-	// Downgrade test: https -> http should be rejected
+	// 降级场景：https 跳 http 必须拒绝。
 	t.Run("downgrade rejected", func(t *testing.T) {
-		// Simulate https initial URL redirecting to http
-		// Since httptest is http, we simulate by having CheckRedirect see https->http
-		// We can directly test clientWithSafeRedirect logic
+		// httptest 只有 http，直接以 https 起始构造 CheckRedirect 输入。
 		client := &http.Client{}
 		safe := clientWithSafeRedirect(client, "https://api.github.com")
 		req, _ := http.NewRequest(http.MethodGet, "http://example.com/a", nil)
@@ -299,10 +293,10 @@ func mustParseURL(s string) *url.URL {
 	return u
 }
 
-// Test platform assets rejection – asset for different platform should not be selected
+// 平台不匹配的资产必须被拒绝。
 func TestHardening_PlatformAssetRejection(t *testing.T) {
 	tag := "v1.2.3"
-	// Release contains only windows asset but we request linux
+	// Release 仅含 windows 资产，请求 linux 时必须失败。
 	windowsAsset, _ := AssetName(tag, "windows", "amd64")
 	assets := []Asset{{ID: 1, Name: windowsAsset, Size: 100, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", BrowserDownloadURL: "https://example.com/a.zip"}}
 	if _, err := selectAsset(assets, tag, "linux", "amd64"); err == nil {
@@ -310,7 +304,7 @@ func TestHardening_PlatformAssetRejection(t *testing.T) {
 	}
 }
 
-// Test fetchLatest via httptest for draft/prerelease/malformed
+// 经 httptest 覆盖 fetchLatest 对草稿、预发布与非法 tag 的拒绝。
 func TestHardening_FetchLatestRejections(t *testing.T) {
 	cases := []struct {
 		name string

@@ -29,7 +29,7 @@ func isProcessAlive(pid int) bool {
 	}
 	h, _, err := procOpenProcess.Call(uintptr(processQueryLimitedInformation), uintptr(0), uintptr(uint32(pid)))
 	if h == 0 {
-		// OpenProcess failed – process does not exist or access denied
+		// 打开进程失败，视为进程不存在或无权访问。
 		if err != nil && err.Error() != "The operation completed successfully." {
 			return false
 		}
@@ -39,7 +39,7 @@ func isProcessAlive(pid int) bool {
 	var exitCode uint32
 	r, _, _ := procGetExitCodeProcess.Call(h, uintptr(unsafe.Pointer(&exitCode)))
 	if r == 0 {
-		return true // conservative: assume alive if can't query
+		return true // 查询失败时保守地视为存活。
 	}
 	return exitCode == stillActive
 }

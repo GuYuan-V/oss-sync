@@ -1,5 +1,4 @@
-// Package vaultaccess centralizes Vault authorization so every API uses the
-// same owner / manager / participant rules.
+// Package vaultaccess 集中 Vault 鉴权，各接口统一应用 owner、manager、participant 与管理员规则。
 package vaultaccess
 
 import (
@@ -31,8 +30,7 @@ func CanDelete(role string) bool {
 	return role == RoleOwner || role == RoleAdmin
 }
 
-// Resolve returns an active Vault and the caller's role. A missing membership
-// is intentionally reported as not found to avoid exposing Vault IDs.
+// Resolve 返回有效 Vault 与调用方角色，无成员关系时按未找到返回，避免泄露 Vault ID。
 func Resolve(db *gorm.DB, userID uint, vaultID string) (models.Vault, string, error) {
 	var vault models.Vault
 	if err := db.Where("id = ?", vaultID).First(&vault).Error; err != nil {

@@ -1,6 +1,6 @@
 package models
 
-// ServerPluginAssociation links a trusted plugin to the theme that bundled it.
+// ServerPluginAssociation 将受信插件与其所属主题关联。
 type ServerPluginAssociation struct {
 	PluginID   string `gorm:"primaryKey;size:64"`
 	Kind       string `gorm:"primaryKey;size:32"`

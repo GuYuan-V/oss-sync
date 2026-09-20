@@ -1,4 +1,4 @@
-// Package markdown 提供博客渲染使用的 Goldmark 扩展。
+// Package markdown 提供公开渲染用的 Goldmark 扩展。
 package markdown
 
 import (
@@ -15,7 +15,7 @@ import (
 	"github.com/yuin/goldmark/util"
 )
 
-// Wikilink 是 Obsidian 风格的 [[链接文字]] AST 节点。
+// Wikilink 是 Obsidian [[link]] 行内 AST 节点。
 type Wikilink struct {
 	gast.BaseInline
 	RawText string
@@ -36,7 +36,7 @@ func (n *Wikilink) Dump(source []byte, level int) {
 	gast.DumpHelper(n, source, level, m, nil)
 }
 
-// KindWikilink 是 Wikilink 节点的 AST kind。
+// KindWikilink 标识 Goldmark AST 中的 Wikilink 节点。
 var KindWikilink = gast.NewNodeKind("Wikilink")
 
 type wikilinkParser struct{}
@@ -49,7 +49,7 @@ func (p *wikilinkParser) Trigger() []byte {
 	return []byte{'['}
 }
 
-// Parse 解析单行 Obsidian 双链，无法匹配时交回 Goldmark 处理。
+// Parse 识别单行 Obsidian wikilink，其余输入交由 Goldmark 处理。
 func (p *wikilinkParser) Parse(parent gast.Node, block text.Reader, pc parser.Context) gast.Node {
 	line, segment := block.PeekLine()
 	if len(line) < 2 || line[0] != '[' || line[1] != '[' {
@@ -78,9 +78,8 @@ type wikilinkHTMLRenderer struct {
 	resolver LinkResolver
 }
 
-// LinkResolver 把双链文字解析为 share_id；未命中返回空。
+// LinkResolver 将 wikilink 文本映射为分享 ID，未解析时返回空值。
 type LinkResolver interface {
-	// Resolve 返回 share_id（命中）或空字符串（未命中）。
 	Resolve(linkText string) (shareID string)
 }
 
@@ -139,7 +138,7 @@ type wikilinkExtension struct {
 }
 
 func (e *wikilinkExtension) Extend(m goldmark.Markdown) {
-	// 双链解析器必须早于 Goldmark 内置链接解析器执行。
+	// Wikilink 解析优先于 Goldmark 内置链接解析注册。
 	m.Parser().AddOptions(parser.WithInlineParsers(
 		util.Prioritized(&imageEmbedParser{}, 50),
 		util.Prioritized(newWikilinkParser(), 100),
@@ -152,13 +151,12 @@ func (e *wikilinkExtension) Extend(m goldmark.Markdown) {
 	))
 }
 
-// NewWikilinkExtension 创建一个双链扩展。resolver 为 nil 时所有 [[...]]
-// 渲染为「未分享」占位。
+// NewWikilinkExtension 创建 wikilink 扩展，resolver 为 nil 时所有链接渲染为未分享占位。
 func NewWikilinkExtension(resolver LinkResolver) goldmark.Extender {
 	return &wikilinkExtension{resolver: resolver}
 }
 
-// NewMarkdown 构造一个带双链扩展的 goldmark 实例。
+// NewMarkdown 创建带 wikilink 扩展的 Goldmark 实例。
 func NewMarkdown(resolver LinkResolver) goldmark.Markdown {
 	return newMarkdown(resolver, nil)
 }
@@ -179,7 +177,7 @@ func RenderMarkdownWithAssets(resolver LinkResolver, assets AssetResolver, sourc
 	return buf.String(), nil
 }
 
-// RenderMarkdown 便捷封装：把 markdown 文本渲染为 HTML。
+// RenderMarkdown 用默认扩展集将 Markdown 渲染为 HTML。
 func RenderMarkdown(resolver LinkResolver, source string) (string, error) {
 	md := NewMarkdown(resolver)
 	var buf strings.Builder

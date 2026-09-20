@@ -68,7 +68,7 @@ func TestClaims_Device_RoundTrip(t *testing.T) {
 
 func TestClaims_ExistingToken_NoDid_Parseable(t *testing.T) {
 	secret := "test-secret-device"
-	// Simulate old token without did: sign with old Claims shape (no did field)
+	// 用不带 did 字段的旧载荷形态签发令牌，模拟旧令牌。
 	oldClaims := Claims{UserID: 7, Username: "legacy", Role: "user"}
 	tok, err := Sign(secret, oldClaims, time.Hour)
 	if err != nil {

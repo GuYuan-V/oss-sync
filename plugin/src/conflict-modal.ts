@@ -81,7 +81,7 @@ export class ConflictModal extends Modal {
             }),
         );
     }
-    // keep classic diff for reference; hide when ordered UI active to avoid duplication, but still allow fallback
+    // 无有序合并时保留经典差异视图，有序视图接管后该分支不再展示，避免重复。
     if (!orderedRegions) {
       try {
         const rows = buildConflictDiff(localContent, this.remoteContent);
@@ -121,14 +121,13 @@ export class ConflictModal extends Modal {
         preview.createDiv({ cls: "oss-diff-empty", text: failureText });
       }
     } else {
-      // still show a compact context diff below ordered blocks
+      // 有序块下方保留精简的差异提示行。
       try {
         const rows = buildConflictDiff(localContent, this.remoteContent);
         if (rows.length > 0) {
           preview.createDiv({ cls: "oss-diff-row is-omitted", text: this.plugin.t("conflict.diffReference") });
         }
       } catch {
-        // ignore
       }
     }
 
@@ -187,14 +186,14 @@ function renderCompressedContext(
   isFirst = false,
   isLast = false,
 ): void {
-  // 保底5行才省略
+  // context 不足 5 行时全部展示，不做省略。
   if (lines.length <= 5) {
     const pre = container.createEl("pre", { cls: "oss-merge-text is-context" });
     appendTextWithPathBreaks(pre, lines.join("\n"));
     return;
   }
   if (isFirst && !isLast) {
-    // 首段：隐藏远离首个冲突的头部，只留靠近冲突的尾部，保底5行
+    // 首段仅保留靠近冲突的尾部 5 行。
     const tail = lines.slice(-5).join("\n");
     const omitted = container.createDiv({ cls: "oss-diff-row is-omitted" });
     omitted.setText(plugin.t("conflict.omittedLines", { count: lines.length - 5 }));
@@ -203,7 +202,7 @@ function renderCompressedContext(
     return;
   }
   if (!isFirst && isLast) {
-    // 尾段：只留靠近最后冲突的头部，隐藏远离的尾部（含最后一行），保底5行
+    // 尾段仅保留靠近冲突的头部 5 行。
     const head = lines.slice(0, 5).join("\n");
     const preHead = container.createEl("pre", { cls: "oss-merge-text is-context" });
     appendTextWithPathBreaks(preHead, head);

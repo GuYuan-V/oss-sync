@@ -1,4 +1,4 @@
-// 版本比较
+// 严格的语义化版本解析与比较。
 package version
 
 import (
@@ -50,7 +50,7 @@ func Parse(s string) (SemVer, error) {
 		}
 	}
 
-	// 分离 build metadata
+	// 分离 Build 元数据。
 	var build string
 	if idx := strings.Index(s, "+"); idx >= 0 {
 		build = s[idx+1:]
@@ -63,7 +63,7 @@ func Parse(s string) (SemVer, error) {
 		}
 	}
 
-	// 分离 prerelease
+	// 分离 Prerelease。
 	var prerelease string
 	if idx := strings.Index(s, "-"); idx >= 0 {
 		prerelease = s[idx+1:]
@@ -150,7 +150,7 @@ func isIdentChar(c rune) bool {
 }
 
 // Compare 比较两个版本字符串，返回 -1/0/1，任一非法时返回错误。
-// 比较忽略 build metadata，prerelease 按 SemVer 规范排序。
+// 比较忽略 Build 元数据，Prerelease 按 SemVer 规范排序。
 func Compare(a, b string) (int, error) {
 	av, err := Parse(a)
 	if err != nil {
@@ -188,14 +188,14 @@ func compareParsed(a, b SemVer) int {
 		}
 		return 1
 	}
-	// prerelease precedence
+	// 预发布版本优先级的比较规则如下。
 	aPreEmpty := a.Prerelease == ""
 	bPreEmpty := b.Prerelease == ""
 	if aPreEmpty && bPreEmpty {
 		return 0
 	}
 	if aPreEmpty {
-		return 1 // release > prerelease
+		return 1 // 正式版优先于预发布版。
 	}
 	if bPreEmpty {
 		return -1
@@ -215,7 +215,7 @@ func comparePrerelease(a, b string) int {
 	}
 	for i := 0; i < n; i++ {
 		if i >= len(ap) {
-			return -1 // a shorter => lower precedence
+			return -1 // 标识段较少者优先级较低。
 		}
 		if i >= len(bp) {
 			return 1
@@ -236,7 +236,7 @@ func comparePrerelease(a, b string) int {
 		}
 		if xNum != yNum {
 			if xNum {
-				return -1 // numeric < alphanumeric
+				return -1 // 纯数字标识段优先于字母标识段。
 			}
 			return 1
 		}

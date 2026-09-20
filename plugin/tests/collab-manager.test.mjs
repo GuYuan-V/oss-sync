@@ -99,15 +99,12 @@ test("runs an incremental vault sync immediately when SSE reports changed conten
     const fixture = harness("http://localhost:9090/api/vaults/vault-1/collaborations/stream");
     const manager = new module.CollabManager(fixture.app, fixture.api, fixture.plugin, () => {});
 
-    // Given: collaboration SSE is connected.
     manager.start();
     const source = FakeEventSource.instances[0];
 
-    // When: the server reports changed collaboration content.
     source.listeners.get("changed")();
     await new Promise((resolve) => setImmediate(resolve));
 
-    // Then: the owner vault syncs immediately instead of waiting for its polling interval.
     assert.deepEqual(fixture.syncCalls, [{ forceFull: false }]);
     manager.stop();
   } finally {

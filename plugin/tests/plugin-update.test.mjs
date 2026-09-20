@@ -186,11 +186,9 @@ test("checkForUpdates reads the remote version from the release manifest", async
     });
     const source = new GitHubReleaseSource(fetchImpl);
 
-    // Given: 本地 0.1.0，远端 Release 的 manifest.json 声明 0.2.0。
-    // When: 检查更新。
+    // 本地 0.1.0，远端 manifest.json 声明 0.2.0。
     const result = await checkForUpdates("owner/repo", "0.1.0", source);
 
-    // Then: 远端版本取 manifest 的 version，判定有新版本。
     assert.equal(result.remoteVersion, "0.2.0");
     assert.equal(result.currentVersion, "0.1.0");
     assert.equal(isUpdateAvailable(result), true);
@@ -270,11 +268,8 @@ test("downloadUpdateAssets downloads the release trio and rejects missing assets
     const source = new GitHubReleaseSource(fetchImpl);
     const release = await source.latestRelease("owner/repo");
 
-    // Given: 最新 Release。
-    // When: 下载三件套。
     const files = await downloadUpdateAssets(source, release);
 
-    // Then: 按 main.js/manifest.json/styles.css 顺序返回二进制内容。
     assert.deepEqual(files.map((file) => file.name), ["main.js", "manifest.json", "styles.css"]);
     assert.equal(decode(files[0].content), "content-of-main.js");
     assert.equal(decode(files[2].content), "content-of-styles.css");
@@ -346,11 +341,8 @@ test("applyPluginUpdate atomically replaces files and reloads the plugin", async
       return manifest ? JSON.parse(manifest).version : null;
     });
 
-    // Given: 旧三件套已就位。
-    // When: 应用新版本文件。
     await applyPluginUpdate({ adapter, reload, dir: "dir", pluginID: "oss-sync", files: updateFiles() });
 
-    // Then: 目标内容为最新版本，临时文件已清理，插件按新 manifest 版本重载。
     assert.equal(adapter.files.get("dir/main.js"), "new-main");
     assert.equal(adapter.files.get("dir/manifest.json"), JSON.stringify({ id: "oss-sync", version: "0.2.0" }));
     assert.equal(adapter.files.get("dir/styles.css"), "new-css");
@@ -374,12 +366,10 @@ test("applyPluginUpdate rolls back files when enablePlugin rejects", async () =>
       return manifest ? JSON.parse(manifest).version : null;
     });
 
-    // Given: 重载新版本会失败。
+    // 下一次启用失败，触发回滚。
     reload.state.failNextEnable = true;
-    // When: 应用更新。
     await assert.rejects(applyPluginUpdate({ adapter, reload, dir: "dir", pluginID: "oss-sync", files: updateFiles() }), /enable failed/);
 
-    // Then: 旧文件被恢复，并尝试重新启用旧版本。
     assert.equal(adapter.files.get("dir/main.js"), "old-main");
     assert.equal(adapter.files.get("dir/manifest.json"), '{"id":"oss-sync","version":"0.1.0"}');
     assert.equal(adapter.files.get("dir/styles.css"), "old-css");
@@ -457,14 +447,12 @@ test("applyPluginUpdate restores earlier targets when a rename fails midway", as
 test("applyPluginUpdate handles missing originals when creating the plugin directory", async () => {
   const { applyPluginUpdate, cleanup } = await loadUpdateModule("src/plugin-update-apply.ts");
   try {
-    // Given: 三件套尚不存在（例如插件目录为首次搭建）。
+    // 插件目录为空，三件套尚不存在。
     const adapter = makeFakeAdapter({});
     const reload = makeReloadController(() => "0.2.0");
 
-    // When: 应用更新。
     await applyPluginUpdate({ adapter, reload, dir: "dir", pluginID: "oss-sync", files: updateFiles() });
 
-    // Then: 文件写入成功，无回滚，插件已重载。
     assert.equal(adapter.files.get("dir/main.js"), "new-main");
     assert.equal(adapter.files.get("dir/manifest.json"), JSON.stringify({ id: "oss-sync", version: "0.2.0" }));
     assert.equal(adapter.files.get("dir/styles.css"), "new-css");

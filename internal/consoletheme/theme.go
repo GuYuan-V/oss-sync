@@ -1,4 +1,4 @@
-// 控制台主题
+// 控制台主题的选择与持久化。
 package consoletheme
 
 import (

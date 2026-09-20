@@ -126,7 +126,7 @@ func acquireFileLock(root string) (func(), error) {
 			_ = f.Sync()
 			_ = f.Close()
 			release := func() {
-				// only remove if we still own it
+				// 仅当锁仍归当前进程所有时删除。
 				if data, err := os.ReadFile(lockPath); err == nil {
 					var cur lockMeta
 					if json.Unmarshal(data, &cur) == nil && cur.PID == selfPID {
@@ -142,7 +142,7 @@ func acquireFileLock(root string) (func(), error) {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		// lock exists: inspect owner
+		// 锁已存在，先确认持有者。
 		data, err := os.ReadFile(lockPath)
 		if err != nil {
 			time.Sleep(10 * time.Millisecond)
@@ -150,12 +150,12 @@ func acquireFileLock(root string) (func(), error) {
 		}
 		var meta lockMeta
 		if err := json.Unmarshal(data, &meta); err != nil {
-			// try plain pid fallback
+			// 兼容纯数字 PID 的旧格式。
 			var pid int
 			if _, err := fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &pid); err == nil {
 				meta.PID = pid
 			} else {
-				// corrupted: cannot determine owner – conservative: do not steal, wait
+				// 锁内容损坏时无法确认持有者，保守等待而不抢占。
 				time.Sleep(10 * time.Millisecond)
 				continue
 			}
@@ -164,7 +164,7 @@ func acquireFileLock(root string) (func(), error) {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		// owner dead – attempt to break stale lock, but verify still same dead owner
+		// 持有者已退出，尝试清理陈旧锁，但需确认持有者未变化。
 		curData, err := os.ReadFile(lockPath)
 		if err != nil {
 			continue
@@ -183,7 +183,7 @@ func acquireFileLock(root string) (func(), error) {
 			continue
 		}
 		_ = os.Remove(lockPath)
-		// retry immediately without sleep
+		// 清理后立即重试，不等待。
 		continue
 	}
 	return nil, newUpdateError(CodeCorruptedState, "failed to acquire state lock", nil)
@@ -211,7 +211,7 @@ func atomicWriteJSON(path string, v any) error {
 	return nil
 }
 
-// SetAtomicWriteJSONFn injects atomicWriteJSON for tests.
+// SetAtomicWriteJSONFn 注入 atomicWriteJSON，供测试使用。
 func SetAtomicWriteJSONFn(fn func(string, any) error) {
 	if fn == nil {
 		atomicWriteJSONFn = atomicWriteJSON
@@ -244,7 +244,7 @@ func isAllowedTransition(from, to OperationState) bool {
 	if from.IsTerminal() || from == to {
 		return false
 	}
-	// failures allowed from any active phase
+	// 任意活跃阶段均允许进入失败态。
 	if to == StateFailed {
 		switch from {
 		case StateInProgress, StatePrepare, StateFetchRelease, StateSelectAsset, StateDownload, StateVerify, StateBackup, StateSwap, StateChecking:
@@ -253,11 +253,11 @@ func isAllowedTransition(from, to OperationState) bool {
 			return false
 		}
 	}
-	// up_to_date only from release checking (fetch_release / checking)
+	// 仅允许从发布检查阶段进入已是最新态。
 	if to == StateUpToDate {
 		return from == StateFetchRelease || from == StateChecking
 	}
-	// exact linear durable graph: in_progress -> prepare -> fetch_release -> select_asset -> download -> verify -> backup -> swap -> done
+	// 持久化操作的线性状态图。
 	linear := map[OperationState]OperationState{
 		StateInProgress:   StatePrepare,
 		StatePrepare:      StateFetchRelease,
@@ -271,7 +271,7 @@ func isAllowedTransition(from, to OperationState) bool {
 	if nxt, ok := linear[from]; ok && to == nxt {
 		return true
 	}
-	// allow idle -> in_progress and checking -> in_progress as entry points (legacy)
+	// 兼容旧入口：允许 idle 与 checking 进入进行中。
 	if from == StateIdle && to == StateInProgress {
 		return true
 	}

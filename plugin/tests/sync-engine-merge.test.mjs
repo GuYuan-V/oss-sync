@@ -13,8 +13,6 @@ async function shaHex(bytes) {
     .join("");
 }
 
-// baselineFromAcknowledgement tests
-
 test("baselineFromAcknowledgement: mergeable .md stores text including empty string", async () => {
   const { module: mod, cleanup } = await loadModule("src/ordinary-sync-baseline.ts");
   try {
@@ -135,8 +133,6 @@ test("baselineFromAcknowledgement: binary acknowledgement has no baseText proper
     await cleanup();
   }
 });
-
-// decideOrdinarySyncReconciliation tests
 
 test("decideOrdinarySyncReconciliation: independent text edits merge with content and bytes", async () => {
   const { module: mod, cleanup } = await loadModule("src/ordinary-sync-reconcile.ts");
@@ -273,8 +269,6 @@ test("decideOrdinarySyncReconciliation: no markers on text_conflict and merged",
     await cleanup();
   }
 });
-
-// OrdinarySyncFileAccess tests
 
 function makeVault(initial = new Map()) {
   const files = new Map(initial);
@@ -542,7 +536,6 @@ test("OrdinarySyncFileAccess: failure leaves canonical byte-identical and siblin
     assert.equal(ok.kind, "written");
     assert.ok(suppressed.length > 0);
 
-    // createBinary failure fixture: sibling creation throws, canonical must remain byte-identical
     const vaultFail = makeVault();
     await vaultFail.createBinary(
       "notes/f.md",
@@ -560,9 +553,7 @@ test("OrdinarySyncFileAccess: failure leaves canonical byte-identical and siblin
     };
     const faFail = new mod.OrdinarySyncFileAccess(vaultFail, () => {}, () => fixedNow);
     await assert.rejects(() => faFail.preserveSiblingIfUnchanged("notes/f.md", hashFail, enc("canonical")), /createBinary injected failure/);
-    // canonical must remain byte-identical, no sibling created
     const faCheck = new mod.OrdinarySyncFileAccess(vaultFail, () => {}, () => fixedNow);
-    // restore for read
     vaultFail.createBinary = originalCreateBinary;
     const canonAfter = await faCheck.readExact("notes/f.md");
     assert.deepEqual(canonAfter.bytes, canonBefore);

@@ -49,16 +49,13 @@ func TestBrokerIsolationByVault(t *testing.T) {
 }
 
 func TestBrokerPublishToDeliversEventOnSeparateTopic(t *testing.T) {
-	// Given
 	b := NewBroker()
 	ch, _ := b.Subscribe("user:7")
 	defer b.Unsubscribe("user:7", ch)
 	event := Event{VaultID: "owner-vault", Kind: "changed"}
 
-	// When
 	b.PublishTo("user:7", event)
 
-	// Then
 	select {
 	case got := <-ch:
 		if got.VaultID != event.VaultID || got.Revision != 1 {

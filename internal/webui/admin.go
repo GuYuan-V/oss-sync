@@ -1,4 +1,4 @@
-// 管理后台
+// 管理控制台页面与操作。
 package webui
 
 import (
@@ -163,7 +163,7 @@ func (h *Handler) lastAdminID(users []models.User) uint {
 	if count <= 1 {
 		return last
 	}
-	return 0 // 不止一个管理员，允许全部操作
+	return 0 // 多个管理员时返回零值，允许操作任意管理员。
 }
 
 func (h *Handler) adminSetUserRole(c *gin.Context) {

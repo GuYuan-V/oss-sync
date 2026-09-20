@@ -47,8 +47,6 @@ function makeVault(initial = new Map()) {
   return vault;
 }
 
-// ---------- file-access guards ----------
-
 test("create guards: absent succeeds, existing fails stale with actual", async () => {
   const { module: mod, cleanup } = await loadModule("src/ordinary-sync-file-access.ts");
   try {
@@ -58,12 +56,10 @@ test("create guards: absent succeeds, existing fails stale with actual", async (
     const created = await fa.create("a/b.md", absent, enc("hello"));
     assert.equal(created.kind, "created");
     assert.equal(new TextDecoder().decode(created.snapshot.bytes), "hello");
-    // second create with same absent should be stale
     const stale = await fa.create("a/b.md", absent, enc("world"));
     assert.equal(stale.kind, "stale");
     assert.ok(stale.actual);
     assert.equal(new TextDecoder().decode(stale.actual.bytes), "hello");
-    // guard mutation preservation: create with hash expected when file exists with different hash -> stale
     const hash = await shaHex(enc("other"));
     const stale2 = await fa.create("a/b.md", {kind:"hash", hash}, enc("x"));
     assert.equal(stale2.kind, "stale");
@@ -81,16 +77,13 @@ test("replace guards: hash match succeeds, mutation/appearance causes stale", as
     const replaced = await fa.replace("note.md", expected, enc("new"));
     assert.equal(replaced.kind, "replaced");
     assert.equal(new TextDecoder().decode(replaced.snapshot.bytes), "new");
-    // file appearance: try to replace absent file with absent expected -> stale
     const staleMissing = await fa.replace("missing.md", {kind:"hash", hash:"abc"}, enc("x"));
     assert.equal(staleMissing.kind, "stale");
     assert.equal(staleMissing.actual, null);
-    // mutation: old hash should now be stale
     const staleMutated = await fa.replace("note.md", expected, enc("again"));
     assert.equal(staleMutated.kind, "stale");
     assert.ok(staleMutated.actual);
     assert.equal(new TextDecoder().decode(staleMutated.actual.bytes), "new");
-    // absent expected on existing file -> stale
     const staleAbsent = await fa.replace("note.md", {kind:"absent"}, enc("x"));
     assert.equal(staleAbsent.kind, "stale");
   } finally { await cleanup(); }
@@ -103,23 +96,18 @@ test("deleteExact guards: hash match deletes, stale on mutation, absent idempote
     const fa = new mod.OrdinarySyncFileAccess(vault);
     const r = await fa.readExact("del.md");
     assert.ok(r);
-    // wrong hash -> stale with actual
     const wrong = await fa.deleteExact("del.md", {kind:"hash", hash:"deadbeef"});
     assert.equal(wrong.kind, "stale");
     assert.ok(wrong.actual);
-    // correct hash -> deleted
     const ok = await fa.deleteExact("del.md", {kind:"hash", hash: r.hash});
     assert.equal(ok.kind, "deleted");
     assert.equal(vault._files.has("del.md"), false);
-    // delete absent with absent expected -> deleted (idempotent)
     const again = await fa.deleteExact("del.md", {kind:"absent"});
     assert.equal(again.kind, "deleted");
-    // appearance guard: recreate file, then absent expected should be stale
     vault._files.set("del.md", {bytes:enc("reappeared"), mtime:2000});
     const staleAppear = await fa.deleteExact("del.md", {kind:"absent"});
     assert.equal(staleAppear.kind, "stale");
     assert.ok(staleAppear.actual);
-    // mutation guard: hash stale after change
     const r2 = await fa.readExact("del.md");
     assert.ok(r2);
     vault._files.set("del.md", {bytes:enc("mutated"), mtime:3000});
@@ -135,7 +123,6 @@ test("writeCanonicalIfUnchanged and preserveSibling preserve exact bytes and col
     const fa = new mod.OrdinarySyncFileAccess(vault, ()=>{}, ()=> 1700000000000);
     const r = await fa.readExact("canon.md");
     assert.ok(r);
-    // preserve sibling exact bytes
     const sibling = await fa.preserveSiblingIfUnchanged("canon.md", r.hash, r.bytes);
     assert.equal(sibling.kind, "preserved");
     assert.ok(sibling.siblingPath.includes("_conflict_"));
@@ -143,14 +130,10 @@ test("writeCanonicalIfUnchanged and preserveSibling preserve exact bytes and col
     assert.ok(sibRead);
     assert.equal(sibRead.hash, r.hash);
     assert.deepEqual(sibRead.bytes, r.bytes);
-    // collision: second preserve with same timestamp should collide
     const fa2 = new mod.OrdinarySyncFileAccess(vault, ()=>{}, ()=>1700000000000);
     const collision = await fa2.preserveSiblingIfUnchanged("canon.md", r.hash, r.bytes);
-    // need current hash still same, but sibling exists -> collision
-    // r hash still valid because canon unchanged
     assert.equal(collision.kind, "collision");
     assert.equal(collision.siblingPath, sibling.siblingPath);
-    // writeCanonical exact bytes
     const remote = enc("remote");
     const written = await fa.writeCanonicalIfUnchanged("canon.md", r.hash, remote);
     assert.equal(written.kind, "written");
@@ -158,7 +141,6 @@ test("writeCanonicalIfUnchanged and preserveSibling preserve exact bytes and col
     const after = await fa.readExact("canon.md");
     assert.ok(after);
     assert.deepEqual(after.bytes, remote);
-    // stale due to mutation
     const stale = await fa.writeCanonicalIfUnchanged("canon.md", r.hash, enc("x"));
     assert.equal(stale.kind, "stale");
     assert.equal(stale.reason, "mutated");
@@ -185,8 +167,6 @@ test("preserveSibling stale on missing/mutated returns actual", async () => {
     assert.ok(mutated.actual);
   } finally { await cleanup(); }
 });
-
-// ---------- baseline ----------
 
 test("baseline live empty markdown carries baseText ''", async () => {
   const { module: mod, cleanup } = await loadModule("src/ordinary-sync-baseline.ts");

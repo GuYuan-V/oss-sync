@@ -1,4 +1,4 @@
-// 控制台主题文件
+// 控制台主题的文件访问与校验。
 package consoletheme
 
 import (

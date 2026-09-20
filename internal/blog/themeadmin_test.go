@@ -8,7 +8,6 @@ import (
 )
 
 func TestScaffoldTheme_copiesEntireDirectory_whenBaseIsCustom(t *testing.T) {
-	// Given
 	dataDir := t.TempDir()
 	sourceDir := filepath.Join(dataDir, "themes", "source")
 	if err := os.MkdirAll(filepath.Join(sourceDir, "assets"), 0o750); err != nil {
@@ -26,10 +25,8 @@ func TestScaffoldTheme_copiesEntireDirectory_whenBaseIsCustom(t *testing.T) {
 		}
 	}
 
-	// When
 	targetDir, err := ScaffoldTheme(dataDir, "source", "copy")
 
-	// Then
 	if err != nil {
 		t.Fatalf("ScaffoldTheme() error = %v", err)
 	}
@@ -55,13 +52,10 @@ func TestScaffoldTheme_copiesEntireDirectory_whenBaseIsCustom(t *testing.T) {
 }
 
 func TestScaffoldTheme_copiesAssetsAndReadme_whenBaseIsBuiltin(t *testing.T) {
-	// Given
 	dataDir := t.TempDir()
 
-	// When
 	targetDir, err := ScaffoldTheme(dataDir, "papertrail", "paper-copy")
 
-	// Then
 	if err != nil {
 		t.Fatalf("ScaffoldTheme() error = %v", err)
 	}
@@ -80,13 +74,10 @@ func TestScaffoldTheme_copiesAssetsAndReadme_whenBaseIsBuiltin(t *testing.T) {
 }
 
 func TestScaffoldTheme_backfillsRenderableTemplate_whenDefaultHasNoTemplate(t *testing.T) {
-	// Given
 	dataDir := t.TempDir()
 
-	// When
 	targetDir, err := ScaffoldTheme(dataDir, "default", "default-copy")
 
-	// Then
 	if err != nil {
 		t.Fatalf("ScaffoldTheme() error = %v", err)
 	}
@@ -129,16 +120,13 @@ func TestScaffoldTheme_rejectsInvalidSourceOrTarget(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Given
 			dataDir := t.TempDir()
 			if tt.prepare != nil {
 				tt.prepare(t, dataDir)
 			}
 
-			// When
 			_, err := ScaffoldTheme(dataDir, tt.base, tt.target)
 
-			// Then
 			if err == nil {
 				t.Fatal("ScaffoldTheme() error = nil, want error")
 			}

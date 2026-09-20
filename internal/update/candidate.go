@@ -166,7 +166,7 @@ func (c Candidate) Validate() error {
 	if !isValidDigest(c.Digest) {
 		return newUpdateError(CodeInvalidAsset, fmt.Sprintf("digest %q is missing or malformed, want sha256:<64 hex>", c.Digest), ErrInvalidAsset)
 	}
-	// Normalize digest to lowercase for stable comparison
+	// 统一转为小写后比较，保证 digest 稳定可比。
 	if c.Digest != strings.ToLower(c.Digest) {
 		return newUpdateError(CodeInvalidAsset, fmt.Sprintf("digest %q must be lowercase", c.Digest), ErrInvalidAsset)
 	}

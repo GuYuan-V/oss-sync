@@ -3,7 +3,7 @@ package webui
 
 func init() {
 	registerEntries(map[string][2]string{
-		// vault.* — vault listing, creation, files, settings pages
+		// vault 开头的键用于仓库列表、创建、文件与设置页面。
 		"vault.vault_list":                    {"仓库列表", "Vault list"},
 		"vault.my_role":                       {"我的角色", "My role"},
 		"vault.member_count":                  {"成员数", "Members"},
@@ -58,7 +58,7 @@ func init() {
 		"vault.theme_settings_add_button":     {"添加项", "Add item"},
 		"vault.theme_settings_item_suffix":    {"项", "items"},
 
-		// share.* — vault shares page
+		// share 开头的键用于仓库分享页面。
 		"share.manage_shares_desc":   {"管理此仓库的文章与文件夹分享。分享公开后可被任何人访问。", "Manage article and folder shares for this vault. Shared content is publicly accessible."},
 		"share.create_share":         {"创建分享", "Create share"},
 		"share.create_share_desc":    {"输入仓库内的文件或文件夹路径。Markdown 文件可同时分享其引用的附件。", "Enter a file or folder path within the vault. Markdown files can also share their referenced attachments."},
@@ -75,7 +75,7 @@ func init() {
 		"share.cancel_share":         {"取消", "Unshare"},
 		"share.no_shares":            {"暂无分享。在左侧表单输入路径创建。", "No shares yet. Create one using the form on the left."},
 
-		// recycle.* — vault recycle bin page
+		// recycle 开头的键用于仓库回收站页面。
 		"recycle.bin_desc":                 {"删除的文件正文保留在此，保留期内可恢复。", "Deleted file content is retained here and can be restored within the retention period."},
 		"recycle.deleted_files":            {"已删除文件", "Deleted files"},
 		"recycle.delete_time":              {"删除时间", "Deleted"},
@@ -86,7 +86,7 @@ func init() {
 		"recycle.bin_empty":                {"回收站为空。", "Recycle bin is empty."},
 		"recycle.bin_empty_desc":           {"回收站为空。删除的文件会出现在这里。", "Recycle bin is empty. Deleted files will appear here."},
 
-		// history.* — vault history and detail pages
+		// history 开头的键用于仓库修改记录与详情页面。
 		"history.file_history":         {"%s 的修改、删除、重命名与恢复记录。", "Modification, deletion, rename, and restore history for %s."},
 		"history.vault_history":        {"查看此仓库文件的每次修改、删除、重命名与恢复记录。", "View every modification, deletion, rename, and restore record for files in this vault."},
 		"history.action":               {"操作", "Action"},
@@ -119,7 +119,7 @@ func init() {
 		"history.binary_version":       {"此版本是二进制文件，无法显示文本差异，但可以恢复。", "This version is a binary file. Text diff is not available, but it can still be restored."},
 		"history.no_snapshot":          {"此记录没有可比较或恢复的内容快照。", "This record has no content snapshot for comparison or restore."},
 
-		// member.* — vault members page
+		// member 开头的键用于仓库成员页面。
 		"member.manage_desc":             {"按成员查看已接受的协作文章，并可单篇、批量或全部取消授权。", "View accepted collaboration articles by member, and revoke individually, in bulk, or all at once."},
 		"member.collab_updated":          {"协作授权已更新。", "Collaboration authorizations updated."},
 		"member.authorized_members":      {"已授权协作成员", "Authorized members"},

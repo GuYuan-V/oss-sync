@@ -188,7 +188,7 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 		t.Fatalf("intruder device login: %d %v", code, intruderLogin)
 	}
 	intruderToken := intruderLogin["token"].(string)
-	// approve intruder device so it reaches collaboration check
+	// 批准入侵者设备，使其走到协作鉴权分支。
 	code, _ = doJSON(t, router, http.MethodPut, "/api/devices/intruder-dev/authorization", intruderToken, map[string]any{"status": "approved", "vault_ids": []string{}})
 	if code != http.StatusOK {
 		t.Fatalf("approve intruder: %d", code)

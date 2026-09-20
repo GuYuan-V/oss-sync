@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-// ServerPlugin records one administrator-installed server extension.
+// ServerPlugin 记录一条管理员安装的服务端扩展。
 type ServerPlugin struct {
 	ID           string `gorm:"primaryKey;size:64"`
 	Name         string `gorm:"size:128;not null"`

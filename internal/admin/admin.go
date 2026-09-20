@@ -1,4 +1,4 @@
-// Package admin 提供管理员用户管理 API。
+// Package admin 提供管理员账号与主题管理接口。
 package admin
 
 import (
@@ -20,7 +20,7 @@ type Handler struct {
 	Cfg *config.Config
 }
 
-// New 创建 admin handler。
+// New 创建 admin 路由处理器。
 func New(db *gorm.DB, cfg *config.Config) *Handler {
 	return &Handler{DB: db, Cfg: cfg}
 }

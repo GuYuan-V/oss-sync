@@ -19,7 +19,7 @@ type Manager struct {
 // NewManager 在 root 下创建或恢复 Manager。
 func NewManager(root string) (*Manager, error) {
 	path := stateFilePath(root)
-	// Use root-scoped lock to serialize concurrent creators on same root.
+	// 同一 root 的并发创建者经 root 级锁串行化。
 	rm := rootMutex(root)
 	rm.Lock()
 	defer rm.Unlock()
@@ -60,7 +60,7 @@ func (m *Manager) reloadLocked() error {
 	return nil
 }
 
-// IssueChecked 颁发带过期时间的已校验候选。
+// IssueChecked 颁发带过期时间的已校验候选，调用前须通过 Candidate.Validate。
 func (m *Manager) IssueChecked(c Candidate, ttl time.Duration) (CheckedCandidate, error) {
 	if err := c.Validate(); err != nil {
 		return CheckedCandidate{}, err
@@ -81,7 +81,7 @@ func (m *Manager) IssueChecked(c Candidate, ttl time.Duration) (CheckedCandidate
 	}
 	defer release()
 	if err := m.reloadLocked(); err != nil {
-		// if corrupted, surface error
+		// 状态损坏时直接返回错误。
 		return CheckedCandidate{}, err
 	}
 	m.st.Checked[cc.ID] = cc
@@ -92,7 +92,7 @@ func (m *Manager) IssueChecked(c Candidate, ttl time.Duration) (CheckedCandidate
 	return cloneChecked(cc), nil
 }
 
-// ValidateChecked 校验 checkID 是否存在且未过期。
+// ValidateChecked 按 checkID 取回候选，不存在或过期时返回类型化错误。
 func (m *Manager) ValidateChecked(id string) (*Candidate, error) {
 	rm := rootMutex(m.root)
 	rm.Lock()
@@ -119,7 +119,7 @@ func (m *Manager) ValidateChecked(id string) (*Candidate, error) {
 	return cloneCandidate(&cc.Candidate), nil
 }
 
-// GetChecked 返回 CheckedCandidate 的不可变快照。
+// GetChecked 按 ID 返回已校验候选的不可变快照。
 func (m *Manager) GetChecked(id string) (CheckedCandidate, error) {
 	rm := rootMutex(m.root)
 	rm.Lock()
@@ -144,7 +144,7 @@ func (m *Manager) GetChecked(id string) (CheckedCandidate, error) {
 	return cloneChecked(cc), nil
 }
 
-// StartOperation 原子地声明一次更新操作。
+// StartOperation 按已校验候选原子地声明一次更新操作，同一时刻仅允许一个活跃操作。
 func (m *Manager) StartOperation(checkID string, targetVersion string) (*Operation, error) {
 	rm := rootMutex(m.root)
 	rm.Lock()
@@ -191,7 +191,7 @@ func (m *Manager) StartOperation(checkID string, targetVersion string) (*Operati
 	return &cp, nil
 }
 
-// Transition 推进操作状态。
+// Transition 按允许的状态图推进操作状态，非法迁移返回类型化错误。
 func (m *Manager) Transition(opID string, next OperationState, errMsg string) (*Operation, error) {
 	rm := rootMutex(m.root)
 	rm.Lock()
@@ -236,11 +236,11 @@ func (m *Manager) Transition(opID string, next OperationState, errMsg string) (*
 	return &cp, nil
 }
 
-// GetOperation 返回操作的不可变快照。
+// GetOperation 按 ID 返回操作的不可变快照。
 func (m *Manager) GetOperation(id string) (*Operation, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// reload for cross-manager visibility without requiring write lock file (best-effort)
+	// 跨实例可见性要求重读磁盘状态，尽力而为，不强制持有写锁文件。
 	if fresh, err := loadState(m.path); err == nil {
 		m.st = fresh
 	}
@@ -257,7 +257,7 @@ func (m *Manager) QueryOperation(id string) (*Operation, error) {
 	return m.GetOperation(id)
 }
 
-// ActiveOperation 返回活跃操作快照。
+// ActiveOperation 返回当前活跃操作的快照，无活跃操作时返回空。
 func (m *Manager) ActiveOperation() *Operation {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -275,7 +275,7 @@ func (m *Manager) ActiveOperation() *Operation {
 	return &cp
 }
 
-// ListHistory 返回历史快照。
+// ListHistory 按持久化顺序返回操作历史快照。
 func (m *Manager) ListHistory() []Operation {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -291,7 +291,7 @@ func (m *Manager) ListHistory() []Operation {
 	return out
 }
 
-// CurrentStatus 返回不含 GitHub/可执行路径的精简状态。
+// CurrentStatus 返回对外暴露的精简状态，不含下载地址与可执行路径。
 func (m *Manager) CurrentStatus() ManagerStatus {
 	m.mu.Lock()
 	defer m.mu.Unlock()

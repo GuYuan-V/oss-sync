@@ -1,4 +1,4 @@
-// 数据库初始化
+// Package database 打开配置的 SQL 后端并执行迁移。
 package database
 
 import (
@@ -19,8 +19,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// Init 根据配置初始化 GORM 连接。
-// SQLite 的 DSN 是文件路径；上层会确保父目录存在。
+// Init 打开配置的 SQLite 或 PostgreSQL 连接，SQLite 父目录由初始化器创建。
 func Init(cfg *config.Config) (*gorm.DB, error) {
 	switch cfg.Database.Driver {
 	case "sqlite":
@@ -68,7 +67,7 @@ func initPostgres(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// AutoMigrate 注册模型，并补齐旧数据的默认 Vault 和 revision。
+// AutoMigrate 注册模型并为旧数据执行兼容回填。
 func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&models.User{},
@@ -126,8 +125,7 @@ func backfillServerPluginMetadata(db *gorm.DB) error {
 	return nil
 }
 
-// backfillLegacyVaults 只为升级前没有 VaultID 的历史内容创建承载 Vault。
-// 没有历史内容的新账户保持零 Vault，等待用户在插件中明确创建。
+// backfillLegacyVaults 仅为存在无 Vault 归属旧内容的账号创建默认 Vault，无内容的空账号保持无 Vault。
 func backfillLegacyVaults(db *gorm.DB) error {
 	var users []models.User
 	if err := db.Find(&users).Error; err != nil {

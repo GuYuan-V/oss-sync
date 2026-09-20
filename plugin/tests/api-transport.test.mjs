@@ -101,8 +101,6 @@ test("records safe status, duration, and byte metadata for binary transfers", as
     const client = new OSSApiClient(settings("http://localhost:9090"), diagnostics);
     client.setToken("s3cr3t-token");
 
-    // Given: binary upload and download transport responses.
-    // When: both transfers complete.
     await client.uploadV2("vault-1", {
       path: "Notes/Private.md",
       baseRevision: 1,
@@ -113,7 +111,6 @@ test("records safe status, duration, and byte metadata for binary transfers", as
     });
     await client.downloadV2("vault-1", "Notes/Private.md", 2);
 
-    // Then: diagnostics retain status and byte counts but omit secrets, paths, and bodies.
     assert.deepEqual(events.filter((event) => event.kind === "api").map((event) => event.status), [200, 200]);
     assert.deepEqual(events.filter((event) => event.kind === "transfer").map((event) => event.bytes), [4, 4]);
     const serialized = JSON.stringify(events);

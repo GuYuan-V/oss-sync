@@ -14,9 +14,8 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// RunHelper is the entry point for the helper process. It never returns
-// normally — it exits the process with the appropriate code. Caller in
-// main.go should call os.Exit(RunHelper()).
+// RunHelper 为 helper 进程入口，直接以进程退出码结束而不正常返回。
+// main.go 中的调用方应执行 os.Exit(RunHelper())。
 func RunHelper(markerPath string) int {
 	if markerPath == "" {
 		fmt.Fprintln(os.Stderr, "helper: marker path empty")
@@ -32,19 +31,19 @@ func RunHelper(markerPath string) int {
 		fmt.Fprintf(os.Stderr, "helper: corrupt marker: %v\n", err)
 		return 2
 	}
-	// Validate durable marker references active operation — if not active, this is ordinary startup; do not rollback.
+	// 校验标记引用的操作仍活跃，非活跃视为常规启动，不回滚。
 	_, op, err := recoverActiveMarker(markerPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "helper: no active marker, skipping: %v\n", err)
-		// Do not perform rollback; just exit. Marker retention rule: no valid marker -> no action.
+		// 无有效标记时不回滚，直接退出。
 		return 0
 	}
-	// Validate safe paths/digest/target before any mutation.
+	// 变更前先校验路径安全性、digest 与目标版本。
 	if err := validateMarkerSafe(&m); err != nil {
 		fmt.Fprintf(os.Stderr, "helper: unsafe marker: %v\n", err)
 		return 2
 	}
-	// Ensure helper handles parent wait before any mutation.
+	// 变更前先等待父进程退出。
 	parentPID := m.ParentPID
 	if parentPID > 0 {
 		if err := waitForParentFn(parentPID, 10*time.Second); err != nil {
@@ -53,34 +52,34 @@ func RunHelper(markerPath string) int {
 		}
 	}
 
-	// Re-verify staged file exists and matches digest/magic/version BEFORE swap.
+	// 替换前复核暂存文件的存在性、digest、魔数与版本。
 	if err := verifyStagedFileFn(m.StagedPath, m.Digest, m.TargetVersion); err != nil {
 		_ = recordRollback(&m, fmt.Sprintf("staged verification failed: %v", err))
 		return 4
 	}
-	// Ensure backup exists before swap (required for rollback).
+	// 替换前确认备份存在，回滚依赖该备份。
 	if _, err := os.Stat(m.BackupPath); err != nil {
 		_ = recordRollback(&m, fmt.Sprintf("backup missing: %v", err))
 		return 4
 	}
 
-	// Atomic replacement after parent exit.
+	// 父进程退出后执行原子替换。
 	if err := atomicReplaceFn(m.StagedPath, m.ExecPath); err != nil {
 		_ = recordRollback(&m, fmt.Sprintf("swap failed: %v", err))
 		return 5
 	}
 
-	// Launch new binary preserving original args/env/workdir.
+	// 按原始参数、环境与工作目录拉起新二进制。
 	child, err := startNewServerFn(&m)
 	if err != nil {
-		// Swap succeeded but launch failed — rollback.
+		// 替换成功但拉起失败，回滚。
 		_ = recordRollback(&m, fmt.Sprintf("launch new binary failed: %v", err))
 		return 6
 	}
 
-	// Probe /readyz for ready:true and exact target version.
+	// 探测 /readyz，要求 ready 为真且版本精确匹配。
 	if err := probeReadyzWithVersionFn(m.ReadyURL, m.TargetVersion, 30*time.Second, 500*time.Millisecond); err != nil {
-		// Terminate failed child if still alive.
+		// 子进程仍存活时先终止。
 		if child != nil && child.Process != nil {
 			_ = child.Process.Kill()
 			_, _ = child.Process.Wait()
@@ -88,7 +87,7 @@ func RunHelper(markerPath string) int {
 		_ = recordRollback(&m, fmt.Sprintf("readiness/version check failed: %v", err))
 		return 7
 	}
-	// Child may have exited quickly after becoming ready; check.
+	// 就绪后子进程可能已快速退出，此处复核。
 	if child != nil && child.Process != nil {
 		done := make(chan error, 1)
 		go func() { _, e := child.Process.Wait(); done <- e }()
@@ -99,12 +98,12 @@ func RunHelper(markerPath string) int {
 				return 7
 			}
 		case <-time.After(200 * time.Millisecond):
-			// Still running — success; detach.
+			// 仍在运行视为成功，分离后返回。
 			_ = child.Process.Release()
 		}
 	}
-	// Detect wrong version already covered by probe; if probe passed, version matched.
-	_ = op // reference to avoid unused
+	// 探测通过即表示版本已匹配。
+	_ = op
 	_ = recordSuccess(&m)
 	return 0
 }
@@ -131,7 +130,7 @@ func startNewServer(m *HandoffMarker) (*exec.Cmd, error) {
 	if len(args) == 0 {
 		args = []string{m.ExecPath}
 	}
-	// First element is program name; exec.Command expects args without it.
+	// 首个元素为程序名，exec.Command 只需其后的参数。
 	childArgs := []string{}
 	if len(args) > 1 {
 		childArgs = args[1:]
@@ -141,7 +140,7 @@ func startNewServer(m *HandoffMarker) (*exec.Cmd, error) {
 	if m.WorkDir != "" {
 		cmd.Dir = m.WorkDir
 	}
-	// Inherit stdio to avoid silent failures in early startup; helper logs remain.
+	// 继承标准输出，避免启动初期失败无声，helper 日志不受影响。
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	detachHelper(cmd)

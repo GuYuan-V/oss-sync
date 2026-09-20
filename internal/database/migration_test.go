@@ -146,7 +146,6 @@ func TestAutoMigrateDoesNotCreateVaultForEmptyAccount(t *testing.T) {
 }
 
 func TestAutoMigrate_whenPolicySettingsExist_preservesValuesAndInheritance(t *testing.T) {
-	// Given
 	db, err := gorm.Open(
 		sqlite.Open(filepath.Join(t.TempDir(), "policy-settings.db")),
 		&gorm.Config{Logger: logger.Default.LogMode(logger.Silent)},
@@ -193,12 +192,10 @@ func TestAutoMigrate_whenPolicySettingsExist_preservesValuesAndInheritance(t *te
 		}
 	}
 
-	// When
 	if err := AutoMigrate(db); err != nil {
 		t.Fatalf("repeat migration: %v", err)
 	}
 
-	// Then
 	var migratedSystem models.SystemSetting
 	if err := db.First(&migratedSystem, 1).Error; err != nil {
 		t.Fatalf("load system settings: %v", err)
@@ -234,7 +231,6 @@ func TestAutoMigrate_whenPolicySettingsExist_preservesValuesAndInheritance(t *te
 }
 
 func TestAutoMigrate_whenSystemSettingsAreLegacy_addsCustomFragmentsEnabledWithDefaultFalse(t *testing.T) {
-	// Given
 	db, err := gorm.Open(
 		sqlite.Open(filepath.Join(t.TempDir(), "legacy-system-settings.db")),
 		&gorm.Config{Logger: logger.Default.LogMode(logger.Silent)},
@@ -273,7 +269,6 @@ func TestAutoMigrate_whenSystemSettingsAreLegacy_addsCustomFragmentsEnabledWithD
 		t.Fatalf("migration: %v", err)
 	}
 
-	// Then
 	var migrated models.SystemSetting
 	if err := db.First(&migrated, 1).Error; err != nil {
 		t.Fatalf("load system settings: %v", err)

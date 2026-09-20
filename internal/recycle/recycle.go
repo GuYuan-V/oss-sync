@@ -1,7 +1,5 @@
-// Package recycle 管理软删除文件的回收站存储与恢复。
-//
-// 删除文件时正文移动到 data/vaults/<vault>/recycle/ 下，File 记录保留墓碑；
-// 恢复时移回 files 目录，过期后由定时任务物理清除。
+// Package recycle 将删除内容移入 Vault 回收站并保留墓碑。
+// Restore 负责恢复，cleanup 负责永久删除过期条目。
 package recycle
 
 import (

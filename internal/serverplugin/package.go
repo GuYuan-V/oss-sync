@@ -40,7 +40,7 @@ var (
 var pluginIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,63}$`)
 var routePathPattern = regexp.MustCompile(`^/(?:[A-Za-z0-9._~-]+(?:/[A-Za-z0-9._~-]+)*)?$`)
 
-// Manifest is the trusted, parsed metadata of one server plugin package.
+// Manifest 是单个服务端插件包受信的解析后元数据。
 type Manifest struct {
 	ID           string                   `json:"id"`
 	Name         string                   `json:"name"`
@@ -56,21 +56,21 @@ type Manifest struct {
 	Args         []string                 `json:"args,omitempty"`
 }
 
-// HookSpec declares a host integration point handled by a trusted plugin.
+// HookSpec 声明受信插件处理的宿主集成点。
 type HookSpec struct {
 	Name  string `json:"name"`
 	ID    string `json:"id,omitempty"`
 	Label string `json:"label,omitempty"`
 }
 
-// RouteSpec declares a route inside the plugin's fixed namespace.
+// RouteSpec 声明插件固定命名空间内的一条路由。
 type RouteSpec struct {
 	Method string `json:"method"`
 	Path   string `json:"path"`
 	Public bool   `json:"public"`
 }
 
-// PluginRequest is the request data exposed to a server plugin.
+// PluginRequest 是暴露给服务端插件的请求数据。
 type PluginRequest struct {
 	Method     string              `json:"method"`
 	Path       string              `json:"path"`
@@ -92,7 +92,7 @@ type PluginUser struct {
 	Role     string `json:"role"`
 }
 
-// PluginResponse is the response shape a server plugin can return.
+// PluginResponse 是服务端插件可返回的响应形态。
 type PluginResponse struct {
 	Status     int               `json:"status"`
 	Headers    map[string]string `json:"headers,omitempty"`

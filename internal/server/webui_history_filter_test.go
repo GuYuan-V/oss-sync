@@ -14,7 +14,6 @@ import (
 func TestWebConsoleHistory_whenFiltersCombined_returnsOnlyMatchingRows(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	token := registerAndLogin(t, router, "history-filter-owner", "password123")
@@ -42,10 +41,8 @@ func TestWebConsoleHistory_whenFiltersCombined_returnsOnlyMatchingRows(t *testin
 		"to":       {"2026-08-10T11:00"},
 	}
 
-	// When
 	page := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/history?"+filters.Encode(), nil, session, csrf)
 
-	// Then
 	if page.Code != http.StatusOK {
 		t.Fatalf("history page: status=%d body=%s", page.Code, page.Body)
 	}

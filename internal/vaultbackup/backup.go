@@ -1,5 +1,4 @@
-// Package vaultbackup creates portable, administrator-managed archives before
-// a Vault is permanently removed.
+// Package vaultbackup 提供永久删除 Vault 前的管理员归档。
 package vaultbackup
 
 import (
@@ -40,7 +39,7 @@ func Path(dataDir, fileName string) (string, error) {
 	return filepath.Join(Root(dataDir), fileName), nil
 }
 
-// ExistingPath resolves pre-upgrade archives as well as archives in the data directory.
+// ExistingPath 解析升级前归档与数据目录内归档。
 func ExistingPath(dataDir, fileName string) (string, error) {
 	path, err := Path(dataDir, fileName)
 	if err != nil {

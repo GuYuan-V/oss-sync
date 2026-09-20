@@ -113,8 +113,7 @@ test("poll distinguishes rolled_back vs failed via version mismatch", async () =
     };
     const p2 = new ServerUpdatePoller(depsFailed, { expectedVersion: "1.2.4", intervalMs: 1, maxAttempts: 2, maxDurationMs: 1000 }, async () => {});
     const out2 = await p2.poll();
-    // when version matches but failed, it's still considered rolled_back logic falls through to failed
-    // our poller treats versionMatches false branch first, so version matches + failed => second branch rolled_back check but versionMatches true => falls to second if -> then third branch returns failed
+    // 版本一致的失败沿失败分支返回，断言兼容两种终态。
     assert.ok(out2.kind === "failed" || out2.kind === "rolled_back");
   } finally { await cleanup(); }
 });
@@ -131,7 +130,6 @@ test("poll bounded by maxAttempts and maxDuration returns timeout, no unbounded 
     const out = await poller.poll();
     assert.equal(out.kind, "timeout");
     assert.equal(out.attempts, 3);
-    // sleep called at most maxAttempts times (no unbounded)
     assert.ok(sleepCalls <= 3);
 
     let sleepCalls2 = 0;
@@ -158,7 +156,7 @@ test("poll validates 401/403 as stale-role auth_error and respects cleanup on di
     assert.equal(out.kind, "auth_error");
     assert.equal(sleepCalls, 0);
 
-    // cleanup on plugin unload: dispose aborts promptly
+    // 插件卸载时 dispose 立即中止轮询。
     let calls = 0;
     const depsLong = {
       getStatus: async () => { calls++; return { version: "1.0.0", state: "in_progress", exec_path: "", backup_path: "", update_in_progress: true }; },

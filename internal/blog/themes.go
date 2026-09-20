@@ -1,4 +1,4 @@
-// 博客主题
+// 博客主题的名称校验、目录定位与模板读取。
 package blog
 
 import (
@@ -18,7 +18,7 @@ type themeMetadata struct {
 	SupportsPublicBlog bool `json:"supports_public_blog"`
 }
 
-// SupportsPublicBlog reports whether a theme explicitly supports public blog rendering.
+// SupportsPublicBlog 判断主题是否显式支持公开博客渲染。
 func SupportsPublicBlog(dataDir, themeName string) bool {
 	if IsBuiltinTheme(themeName) {
 		return themeName == "papertrail"
@@ -35,7 +35,7 @@ func SupportsPublicBlog(dataDir, themeName string) bool {
 	return json.Unmarshal(raw, &metadata) == nil && metadata.SupportsPublicBlog
 }
 
-// ThemeHasBundledPlugin reports whether a custom theme carries a server plugin package.
+// ThemeHasBundledPlugin 判断自定义主题是否携带服务端插件包。
 func ThemeHasBundledPlugin(dataDir, themeName string) bool {
 	if IsBuiltinTheme(themeName) {
 		return false
@@ -50,11 +50,10 @@ func ThemeHasBundledPlugin(dataDir, themeName string) bool {
 
 const (
 	customTemplateFile = "template.html"
-	maxTemplateSize    = 1 << 20 // 1 MiB is ample for a page layout.
+	maxTemplateSize    = 1 << 20 // 页面布局模板上限为 1 MiB。
 )
 
-// ValidateThemeName limits theme names to one portable directory component.
-// It is used for both disk access and the public asset URL.
+// ValidateThemeName 将主题名称限制为单个可移植目录组件，同时适用于磁盘访问与公开资源 URL。
 func ValidateThemeName(name string) error {
 	if !validThemeName(name) {
 		return errors.New("主题名称只能使用字母、数字、连字符和下划线，且长度为 1–64")
@@ -87,7 +86,7 @@ func themeDirectory(dataDir, themeName string) (string, error) {
 	return filepath.Join(dataDir, "themes", themeName), nil
 }
 
-// CustomThemeExists reports whether a theme has a renderable layout.
+// CustomThemeExists 判断主题是否具备可渲染的布局模板。
 func CustomThemeExists(dataDir, themeName string) bool {
 	if themeName == "default" {
 		return true
@@ -100,9 +99,7 @@ func CustomThemeExists(dataDir, themeName string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-// CreateDevelopmentTheme copies the bundled starter into data/themes/<name>.
-// It deliberately refuses to replace an existing directory, so a template
-// being edited by an administrator can never be overwritten by the console.
+// CreateDevelopmentTheme 把内置起始模板复制到 data/themes/<name>。已存在目录一律拒绝覆盖，管理员正在编辑的模板不会被控制台改写。
 func CreateDevelopmentTheme(dataDir, themeName string) (string, error) {
 	if themeName == "default" {
 		return "", errors.New("default 是内置主题，不能覆盖")

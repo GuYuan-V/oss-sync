@@ -20,8 +20,7 @@ const CR = 0x000d;
 const SURROGATE_MIN = 0xd800;
 const SURROGATE_MAX = 0xdfff;
 
-// Collapses CRLF/CR to LF and drops the empty segment produced by a single
-// trailing newline, keeping interior blank lines as real lines.
+// 将 CRLF 与 CR 统一为 LF，单个末尾换行不产生空行，中间空行保留为有效行。
 function normalizeLines(text: string): string[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   if (lines[lines.length - 1] === "") {
@@ -30,9 +29,7 @@ function normalizeLines(text: string): string[] {
   return lines;
 }
 
-// Encodes each unique line as exactly one UTF-16 code unit (excluding NUL, LF,
-// CR, and the surrogate range) with "\n" separators, so the line-level diff
-// reduces to a character-level diff on compact strings.
+// 每行映射为一个 UTF-16 码元（排除 NUL、LF、CR 与代理区），并以 LF 分隔，使行级差异可按字符级差异计算。
 class LineCodec {
   private readonly lineToCode = new Map<string, string>();
   private readonly codeToLine: Record<string, string> = {};
@@ -80,9 +77,7 @@ class LineCodec {
   }
 }
 
-// Compresses unchanged runs: leading >2 -> omitted(count-2)+last2,
-// trailing >2 -> first2+omitted(count-2), middle >4 ->
-// first2+omitted(count-4)+last2; otherwise retained whole.
+// 压缩连续 context 行：首段超过 2 行仅保留末尾 2 行，尾段超过 2 行仅保留开头 2 行，中段超过 4 行仅保留首尾各 2 行，其余完整保留。
 export function collapseContextRows(rows: ConflictDiffRow[]): ConflictDiffRow[] {
   const out: ConflictDiffRow[] = [];
   let i = 0;
@@ -125,8 +120,7 @@ export function buildConflictDiff(local: string, remote: string): ConflictDiffRo
   const diffs = dmp.diff_main(encodedLocal, encodedRemote, false);
   dmp.diff_cleanupMerge(diffs);
 
-  // Change rows are buffered per replacement block (a run of non-equal ops)
-  // so deletes always precede inserts, even when diff_main interleaves them.
+  // 按替换块缓存变更行，使同一块内 removed 始终排在 added 之前，避免 diff_main 交错输出打乱顺序。
   const rows: ConflictDiffRow[] = [];
   const removed: string[] = [];
   const added: string[] = [];

@@ -46,7 +46,7 @@ func TestCloseInterruptsBlockedExecutableWrite(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	// Close must cover the writer gate as well as the shutdown frame and process wait.
+	// Close 需同时覆盖写门限、关闭帧与进程等待。
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	closed := make(chan error, 1)

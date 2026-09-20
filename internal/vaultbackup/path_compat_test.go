@@ -34,7 +34,7 @@ func TestExistingPathSupportsLegacyAndCurrentArchives(t *testing.T) {
 			t.Fatalf("unsafe name accepted: %q", invalid)
 		}
 	}
-	// New backups always use the data directory even if an old archive shares the name.
+	// 新备份固定写入数据目录，同名旧归档不改变写入位置。
 	writePath, err := Path(dataDir, "legacy.zip")
 	if err != nil {
 		t.Fatal(err)

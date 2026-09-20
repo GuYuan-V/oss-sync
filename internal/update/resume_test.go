@@ -19,17 +19,16 @@ func TestResumePendingHandoffs_CrashAfterMarkerBeforeHelperLaunch(t *testing.T) 
 	_ = os.WriteFile(exePath, []byte("old-binary"), 0o755)
 	mgrRoot := t.TempDir()
 	mgr, _ := NewManager(mgrRoot)
-	// create checked candidate
+	// 构造已校验候选。
 	assetName, _ := AssetName("9.9.9", "linux", "amd64")
 	content := fakeExecBytes()
 	serveContent := makeTarGz(t, map[string][]byte{"oss-server": content})
 	digest := digestOfBytes(serveContent)
 	cand, _ := NewCandidate("v9.9.9", "linux", "amd64", "https://example.com/"+assetName, "https://example.com/releases/tag/v9.9.9", int64(len(serveContent)), 1001, 2001, digest)
 	cc, _ := mgr.IssueChecked(*cand, time.Minute)
-	// Simulate crash after marker write but before helper launch:
-	// Manually create marker via atomicWriteMarker with active operation
+	// 模拟 marker 已写但 helper 尚未启动的崩溃，经 atomicWriteMarker 以活跃操作手工建 marker。
 	op, _ := mgr.StartOperation(cc.ID, "9.9.9")
-	// Drive to swap state as InitiateHelperHandoff would
+	// 按 InitiateHelperHandoff 路径推进到 Swap 状态。
 	seq := []OperationState{StatePrepare, StateFetchRelease, StateSelectAsset, StateDownload, StateVerify, StateBackup, StateSwap}
 	for _, nxt := range seq {
 		cur, _ := mgr.GetOperation(op.ID)
@@ -37,7 +36,7 @@ func TestResumePendingHandoffs_CrashAfterMarkerBeforeHelperLaunch(t *testing.T) 
 			mgr.Transition(op.ID, nxt, "")
 		}
 	}
-	// stage files
+	// 落盘暂存、备份与 helper 副本。
 	staged := filepath.Join(exeDir, ".oss-update-pending", "staged-"+op.ID)
 	backup := filepath.Join(exeDir, ".oss-update-pending", "backup-"+op.ID)
 	helperCopy := filepath.Join(exeDir, ".oss-update-pending", "helper-"+op.ID)
@@ -54,7 +53,7 @@ func TestResumePendingHandoffs_CrashAfterMarkerBeforeHelperLaunch(t *testing.T) 
 		HelperPath:    helperCopy,
 		TargetVersion: "9.9.9",
 		Digest:        digest,
-		ParentPID:     99999, // dead PID
+		ParentPID:     99999, // 已死亡 PID。
 		ReadyURL:      "http://127.0.0.1:0/readyz",
 		OrigArgs:      []string{exePath},
 		WorkDir:       exeDir,
@@ -63,11 +62,11 @@ func TestResumePendingHandoffs_CrashAfterMarkerBeforeHelperLaunch(t *testing.T) 
 	if err := atomicWriteMarker(markerPath, marker); err != nil {
 		t.Fatalf("atomicWriteMarker: %v", err)
 	}
-	// Ensure helper not yet launched – marker exists, staged exists
+	// helper 尚未拉起，marker 与暂存均应存在。
 	if _, err := os.Stat(markerPath); err != nil {
 		t.Fatalf("marker should exist before resume")
 	}
-	// Mock helper launch
+	// 桩 helper 启动。
 	launched := 0
 	origLaunch := launchHelperFn
 	launchHelperFn = func(ep, mp string) error {
@@ -85,7 +84,7 @@ func TestResumePendingHandoffs_CrashAfterMarkerBeforeHelperLaunch(t *testing.T) 
 	if n != 1 || launched != 1 {
 		t.Fatalf("should resume 1 pending, got %d launched %d", n, launched)
 	}
-	// marker should still exist after resume (helper will clean up)
+	// 恢复后 marker 仍在，由 helper 后续清理。
 	if _, err := os.Stat(markerPath); err != nil {
 		t.Errorf("marker should still exist after resume launch, helper cleans later")
 	}
@@ -97,10 +96,10 @@ func TestResumePendingHandoffs_NeverActOnCorruptNonActive(t *testing.T) {
 	_ = os.WriteFile(exePath, []byte("old"), 0o755)
 	dir := helperMarkerDir(exePath)
 	_ = os.MkdirAll(dir, 0o755)
-	// corrupt marker
+	// 写入损坏的 marker。
 	corruptPath := filepath.Join(dir, "corrupt.handoff.json")
 	_ = os.WriteFile(corruptPath, []byte("{ invalid"), 0o644)
-	// non-active marker: create manager, issue, start, then transition to failed
+	// 非活跃 marker 来源：签发、启动后再转失败。
 	mgrRoot := t.TempDir()
 	mgr, _ := NewManager(mgrRoot)
 	assetName, _ := AssetName("1.2.3", "linux", "amd64")
@@ -135,12 +134,12 @@ func TestResumePendingHandoffs_NeverActOnCorruptNonActive(t *testing.T) {
 	if n != 0 || launched != 0 {
 		t.Fatalf("should not resume corrupt/non-active, got %d launched %d", n, launched)
 	}
-	// ensure corrupt and non-active files still exist (no deletion, no rollback)
+	// 损坏与非活跃文件均不得删除或回滚。
 	if _, err := os.Stat(corruptPath); err != nil {
 		t.Error("corrupt marker should not be deleted")
 	}
 	if _, err := os.Stat(nonActivePath); err != nil {
 		t.Error("non-active marker should not be deleted")
 	}
-	// ensure exe not modified
+	// 可执行文件不得被改动。
 }

@@ -1,4 +1,4 @@
-// 国际化
+// Package webui 提供网页控制台的语言选择与文案查找。
 package webui
 
 import "fmt"

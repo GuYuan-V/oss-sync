@@ -24,7 +24,6 @@ func TestValidateThemeName_acceptsChineseAndRejectsPathCharacters(t *testing.T) 
 }
 
 func TestValidateThemeConfig_returnsCleanDeclaredValues_whenInputIsValid(t *testing.T) {
-	// Given
 	fields := []ThemeSettingField{
 		{Key: "blog_name", Label: "博客名称", Type: "text", MaxLength: 120},
 		{Key: "logo_url", Label: "Logo URL", Type: "url", MaxLength: 512},
@@ -47,10 +46,8 @@ func TestValidateThemeConfig_returnsCleanDeclaredValues_whenInputIsValid(t *test
 		},
 	}
 
-	// When
 	got, err := ValidateThemeConfig(fields, raw)
 
-	// Then
 	if err != nil {
 		t.Fatalf("ValidateThemeConfig() error = %v", err)
 	}
@@ -71,20 +68,16 @@ func TestValidateThemeConfig_returnsCleanDeclaredValues_whenInputIsValid(t *test
 }
 
 func TestValidateThemeConfig_rejectsInvalidURL(t *testing.T) {
-	// Given
 	fields := []ThemeSettingField{{Key: "logo_url", Label: "Logo", Type: "url", MaxLength: 512}}
 
-	// When
 	_, err := ValidateThemeConfig(fields, map[string]any{"logo_url": "javascript:alert(1)"})
 
-	// Then
 	if err == nil {
 		t.Fatal("ValidateThemeConfig() error = nil, want URL validation error")
 	}
 }
 
 func TestValidateThemeConfig_preservesPapertrailShape_whenLegacyValuesAreSaved(t *testing.T) {
-	// Given
 	fields := []ThemeSettingField{
 		{Key: "blog_name", Label: "博客名称", Type: "text", MaxLength: 120},
 		{Key: "description", Label: "博客介绍", Type: "textarea", MaxLength: 500},
@@ -106,10 +99,8 @@ func TestValidateThemeConfig_preservesPapertrailShape_whenLegacyValuesAreSaved(t
 		},
 	}
 
-	// When
 	got, err := ValidateThemeConfig(fields, raw)
 
-	// Then
 	if err != nil {
 		t.Fatalf("ValidateThemeConfig() error = %v", err)
 	}

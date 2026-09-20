@@ -11,7 +11,6 @@ import (
 )
 
 func TestClientRunsRegisteredCallback(t *testing.T) {
-	// Given a host request and an SDK callback.
 	input := `{"type":"request","id":"1","request":{"method":"GET","path":"/hello","callback":"hello"}}` + "\n"
 	var output bytes.Buffer
 	client := New(strings.NewReader(input), &output)
@@ -24,12 +23,10 @@ func TestClientRunsRegisteredCallback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// When the SDK runs with a registration.
 	if err := client.Run(Registration{Routes: []Route{{Method: "GET", Path: "/hello", Callback: "hello"}}}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Then it emits registration and the matching response.
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
 	if len(lines) != 2 {
 		t.Fatalf("output lines = %d, want 2", len(lines))
@@ -51,7 +48,6 @@ func TestClientRunsRegisteredCallback(t *testing.T) {
 }
 
 func TestClientHostCallRoundTrip(t *testing.T) {
-	// Given a live duplex host connection.
 	pluginInput, hostInput := io.Pipe()
 	hostOutput, pluginOutput := io.Pipe()
 	client := New(pluginInput, pluginOutput)

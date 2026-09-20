@@ -1,4 +1,4 @@
-// Package blog 公开博客首页与仓库公开入口。
+// 公开博客发现与首页渲染。
 package blog
 
 import (
@@ -109,7 +109,7 @@ type HomePost struct {
 	Time    time.Time
 }
 
-// PublicBlog is one discoverable Vault on the unauthenticated server homepage.
+// PublicBlog 描述未登录首页上可发现的一个 Vault。
 type PublicBlog struct {
 	Name        string
 	Description string
@@ -122,7 +122,7 @@ type publicHomeData struct {
 	Blogs []PublicBlog
 }
 
-// handleHome lists every Vault that explicitly enabled its public blog.
+// handleHome 列出显式开启公开博客的全部 Vault。
 func (h *Handler) handleHome(c *gin.Context) {
 	var settings []models.VaultSetting
 	if err := h.DB.Where("is_public_blog = ?", true).Order("updated_at desc").Find(&settings).Error; err != nil {
@@ -278,9 +278,6 @@ func (h *Handler) handleVaultBlog(c *gin.Context) {
 	}
 	h.renderTemplate(c, params)
 }
-
-// renderParams 扩展：博客首页与文章页字段。
-// 字段在原 renderParams 上扩展（见 blog.go）。
 
 func mustJSON(v any) string {
 	raw, err := json.Marshal(v)

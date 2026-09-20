@@ -88,7 +88,7 @@ func TestAtomicWriteMarker_PropagatesDirSyncError(t *testing.T) {
 	t.Cleanup(func() { syncDirFn = origSyncDir })
 	err := atomicWriteMarker(markerPath, marker)
 	if runtime.GOOS == "windows" && isWindowsDirSyncUnsupported(os.ErrInvalid) {
-		// narrow Windows exception: should be ignored and return nil
+		// Windows 窄例外：目录同步不支持时忽略错误并返回 nil。
 		if err != nil {
 			t.Errorf("Windows dir sync unsupported should be ignored, got %v", err)
 		}

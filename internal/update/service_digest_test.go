@@ -16,8 +16,7 @@ import (
 	"time"
 )
 
-// Exercise the real download, extraction, staging and helper verification. Earlier
-// service tests mocked verification, hiding archive-vs-executable digest errors.
+// 覆盖真实下载、解包、暂存与 helper 校验，压缩包 digest 与可执行文件 digest 不一致必须暴露。
 func TestService_ArchiveDigestHandoff(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "main.go")
@@ -79,8 +78,8 @@ func main() { fmt.Println("9.9.9") }
 				launchHelperFn, waitForParentFn = origLaunch, origWait
 				startNewServerFn, probeReadyzWithVersionFn = origStart, origProbe
 			})
-			// Only process lifecycle and readiness are simulated; file integrity,
-			// executable magic, --version, persistence and replacement stay real.
+			// 仅模拟进程生命周期与就绪探测；文件完整性、可执行魔数、
+			// --version 校验、持久化与替换保持真实。
 			launchHelperFn = func(_, path string) error { markerPath = path; return nil }
 			waitForParentFn = func(int, time.Duration) error { return nil }
 			startNewServerFn = func(*HandoffMarker) (*exec.Cmd, error) { return nil, nil }

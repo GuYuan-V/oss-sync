@@ -18,7 +18,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// PluginInfo is the safe management view of an installed server plugin.
+// PluginInfo 是已安装服务端插件面向管理面的安全视图。
 type PluginInfo struct {
 	Manifest
 	Enabled            bool
@@ -41,7 +41,7 @@ type PluginAssociation struct {
 	TargetName string
 }
 
-// Manager owns installed plugin files and compiled enabled modules.
+// Manager 持有已安装插件文件与已启用的编译模块。
 type Manager struct {
 	db      *gorm.DB
 	root    string
@@ -277,8 +277,8 @@ func (m *Manager) Install(ctx context.Context, reader io.ReaderAt, size int64) (
 	return infoFromRecord(record)
 }
 
-// InstallOrReuse installs a package or reuses an identical installed package.
-// This lets multiple themes depend on the same administrator-approved plugin.
+// InstallOrReuse 安装插件包，已安装相同包时直接复用。
+// 多个主题可依赖同一份管理员审核通过的插件。
 func (m *Manager) InstallOrReuse(ctx context.Context, reader io.ReaderAt, size int64) (PluginInfo, error) {
 	packageData, err := ParsePackage(reader, size)
 	if err != nil {
@@ -298,8 +298,8 @@ func (m *Manager) InstallOrReuse(ctx context.Context, reader io.ReaderAt, size i
 	return infoFromRecord(existing)
 }
 
-// Upgrade replaces an installed package and restores the old runtime on failure.
-// Committed plugin migrations and external lifecycle effects must remain backward compatible.
+// Upgrade 替换已安装的插件包，失败时恢复旧运行时。
+// 已提交的插件迁移与外部生命周期副作用必须保持向后兼容。
 func (m *Manager) Upgrade(ctx context.Context, reader io.ReaderAt, size int64) (PluginInfo, error) {
 	m.lifecycleMu.Lock()
 	defer m.lifecycleMu.Unlock()
@@ -333,7 +333,7 @@ func (m *Manager) upgrade(ctx context.Context, reader io.ReaderAt, size int64) (
 		if committed {
 			return
 		}
-		// A canceled upload request must not prevent restoration of the old plugin.
+		// 已取消的上传请求也不能阻止旧插件恢复。
 		recoveryCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		var recoveryErr error

@@ -10,7 +10,6 @@ import (
 )
 
 func TestList_includesBuiltinAndCustomThemes(t *testing.T) {
-	// Given
 	dataDir := t.TempDir()
 	dir := filepath.Join(dataDir, "console-themes", "custom")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -20,10 +19,8 @@ func TestList_includesBuiltinAndCustomThemes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// When
 	themes, err := List(dataDir)
 
-	// Then
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -44,7 +41,6 @@ func TestValidateName_acceptsChineseAndRejectsPathCharacters(t *testing.T) {
 }
 
 func TestScaffold_copiesBuiltinOrCustomTheme(t *testing.T) {
-	// Given
 	dataDir := t.TempDir()
 	sourceDir := filepath.Join(dataDir, "console-themes", "source", "assets")
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
@@ -57,11 +53,9 @@ func TestScaffold_copiesBuiltinOrCustomTheme(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// When
 	builtinDir, builtinErr := Scaffold(dataDir, "default", "default-copy")
 	customDir, customErr := Scaffold(dataDir, "source", "source-copy")
 
-	// Then
 	if builtinErr != nil || customErr != nil {
 		t.Fatalf("Scaffold() errors = %v, %v", builtinErr, customErr)
 	}
@@ -75,7 +69,6 @@ func TestScaffold_copiesBuiltinOrCustomTheme(t *testing.T) {
 }
 
 func TestUpload_acceptsSafePackageAndRejectsTraversal(t *testing.T) {
-	// Given
 	dataDir := t.TempDir()
 	valid := zipBytes(t, map[string]string{
 		"theme.css":       ":root{--canvas:white}",
@@ -86,11 +79,9 @@ func TestUpload_acceptsSafePackageAndRejectsTraversal(t *testing.T) {
 		"../evil.css": "x",
 	})
 
-	// When
 	validErr := Upload(dataDir, "uploaded", bytes.NewReader(valid), int64(len(valid)))
 	unsafeErr := Upload(dataDir, "unsafe", bytes.NewReader(unsafe), int64(len(unsafe)))
 
-	// Then
 	if validErr != nil {
 		t.Fatalf("Upload(valid) error = %v", validErr)
 	}
@@ -103,7 +94,6 @@ func TestUpload_acceptsSafePackageAndRejectsTraversal(t *testing.T) {
 }
 
 func TestSaveFile_editsTextAndRejectsEscapedPath(t *testing.T) {
-	// Given
 	dataDir := t.TempDir()
 	dir := filepath.Join(dataDir, "console-themes", "custom")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -113,11 +103,9 @@ func TestSaveFile_editsTextAndRejectsEscapedPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// When
 	saveErr := SaveFile(dataDir, "custom", "theme.css", []byte("body{color:blue}"))
 	escapeErr := SaveFile(dataDir, "custom", "../outside.css", []byte("x"))
 
-	// Then
 	if saveErr != nil {
 		t.Fatalf("SaveFile() error = %v", saveErr)
 	}
@@ -131,7 +119,6 @@ func TestSaveFile_editsTextAndRejectsEscapedPath(t *testing.T) {
 }
 
 func TestCreateZipAndDelete_roundTripsCustomTheme(t *testing.T) {
-	// Given
 	dataDir := t.TempDir()
 	if _, err := Scaffold(dataDir, "default", "custom"); err != nil {
 		t.Fatal(err)
@@ -139,12 +126,10 @@ func TestCreateZipAndDelete_roundTripsCustomTheme(t *testing.T) {
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 
-	// When
 	zipErr := CreateZip(dataDir, "custom", writer)
 	closeErr := writer.Close()
 	deleteErr := Delete(dataDir, "custom")
 
-	// Then
 	if zipErr != nil || closeErr != nil || deleteErr != nil {
 		t.Fatalf("round trip errors = %v, %v, %v", zipErr, closeErr, deleteErr)
 	}

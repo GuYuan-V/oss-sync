@@ -14,7 +14,6 @@ import (
 )
 
 func TestCreate_whenDataDirectoryIsConfigured_writesArchiveInsidePersistentStorage(t *testing.T) {
-	// Given
 	dataDir := t.TempDir()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(dataDir, "backup.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
@@ -37,10 +36,8 @@ func TestCreate_whenDataDirectoryIsConfigured_writesArchiveInsidePersistentStora
 		t.Fatalf("create Vault fixture: %v", err)
 	}
 
-	// When
 	backup, err := Create(db, dataDir, vault)
 
-	// Then
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

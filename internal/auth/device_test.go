@@ -51,11 +51,9 @@ func TestCurrentDeviceID_NoBinding(t *testing.T) {
 	if _, ok := CurrentDeviceID(c); ok {
 		t.Fatal("expected no device id when not set")
 	}
-	// Helper should reject missing as 401 device_identity_required with WWW-Authenticate
 	w2 := httptest.NewRecorder()
 	c2, _ := gin.CreateTestContext(w2)
 	c2.Set(ContextKeyIdentity, &Identity{User: &models.User{}})
-	// also set user key to avoid panic
 	if _, ok := RequireDeviceID(c2); ok {
 		t.Fatal("expected RequireDeviceID to reject missing device")
 	}
@@ -194,7 +192,6 @@ func TestRequireDeviceID_Match_ReturnsClaim(t *testing.T) {
 		t.Fatalf("got %q want %q", got, did)
 	}
 	if w.Code != http.StatusOK {
-		// Gin TestContext defaults to 200 unless aborted; we expect not aborted
 		if w.Code != 200 {
 			t.Fatalf("unexpected status %d", w.Code)
 		}
@@ -246,7 +243,6 @@ func TestMiddleware_CarriesDeviceIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := newTestDB(t)
 	cfg := newTestConfig()
-	// create user in db
 	user := models.User{Username: "alice", PasswordHash: "x", Role: "user", TokenVersion: 0}
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatalf("create user: %v", err)
@@ -256,7 +252,6 @@ func TestMiddleware_CarriesDeviceIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue device token: %v", err)
 	}
-	// Call middleware
 	r := gin.New()
 	r.Use(Middleware(db, cfg))
 	var gotDid jwt.DeviceID
@@ -275,7 +270,6 @@ func TestMiddleware_CarriesDeviceIdentity(t *testing.T) {
 	if !gotOk || gotDid != did {
 		t.Fatalf("expected device %q, got %q ok=%v", did, gotDid, gotOk)
 	}
-	// Ensure CurrentUser still works
 	userTok, _, _ := IssueToken(cfg, user)
 	r2 := gin.New()
 	r2.Use(Middleware(db, cfg))
@@ -291,10 +285,6 @@ func TestMiddleware_CarriesDeviceIdentity(t *testing.T) {
 	if w2.Code != 200 || gotUser == nil || gotUser.ID != user.ID {
 		t.Fatalf("CurrentUser failed: code %d user %v", w2.Code, gotUser)
 	}
-	// Basic auth should have no device
-	req3 := httptest.NewRequest("GET", "/test", nil)
-	req3.SetBasicAuth("alice", "wrong") // will fail; just test no device path: use valid password? skip
-	// Not needed; just ensure device absence for basic when no did
 }
 
 func TestAuthBoundary_InvalidDidRejected(t *testing.T) {
@@ -305,7 +295,7 @@ func TestAuthBoundary_InvalidDidRejected(t *testing.T) {
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	// craft token with invalid did (contains !)
+	// 构造携带非法设备标识（含感叹号）的令牌。
 	claims := jwt.Claims{UserID: user.ID, Username: user.Username, Role: user.Role, DeviceID: jwt.DeviceID("bad!id")}
 	tok, _ := jwt.Sign(cfg.Auth.JWTSecret, claims, 3600*time.Second)
 	r := gin.New()

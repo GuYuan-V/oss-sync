@@ -1,4 +1,4 @@
-// 定时调度
+// Scheduler 提供后端周期性任务的注册与生命周期管理。
 package cron
 
 import (
@@ -26,7 +26,7 @@ type Scheduler struct {
 	pluginEntries map[string][]cron.EntryID
 }
 
-// AddPluginTask registers a trusted executable plugin task with the host scheduler.
+// AddPluginTask 向宿主调度器注册受信可执行插件任务。
 func (s *Scheduler) AddPluginTask(pluginID, name, schedule string, task func()) error {
 	if strings.TrimSpace(schedule) == "" || task == nil {
 		return errors.New("plugin task schedule and callback are required")

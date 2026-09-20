@@ -57,7 +57,6 @@ test("downloads collaboration content by file ID through the collaboration endpo
 });
 
 test("sends collaboration upload with content, base_revision, operation_id and stable client_id", async () => {
-  // Given: a collaboration file with known content and revision base.
   globalThis.__ossRequests = [];
   globalThis.__ossResponse = {
     status: 200,
@@ -79,14 +78,12 @@ test("sends collaboration upload with content, base_revision, operation_id and s
     const client = new OSSApiClient(settings());
     client.setToken("token-1");
 
-    // When: uploading collaboration content with CAS fields.
     const result = await client.collabUpload("vault 1", 42, {
       content: "# shared edit",
       baseRevision: 7,
       operationID: "op-1",
     });
 
-    // Then: request carries content, base_revision, operation_id and stable client_id via header.
     assert.equal(globalThis.__ossRequests.length, 1);
     const req = globalThis.__ossRequests[0];
     assert.equal(req.method, "POST");
@@ -104,7 +101,6 @@ test("sends collaboration upload with content, base_revision, operation_id and s
 });
 
 test("returns SyncFileMeta-shaped metadata on successful collaboration upload", async () => {
-  // Given: server returns SyncFileMeta on success.
   const serverMeta = {
     path: "Shared.md",
     type: "markdown",
@@ -127,14 +123,12 @@ test("returns SyncFileMeta-shaped metadata on successful collaboration upload", 
     const client = new OSSApiClient(settings());
     client.setToken("token-1");
 
-    // When: uploading with CAS base.
     const result = await client.collabUpload("vault 1", 42, {
       content: "# new content",
       baseRevision: 8,
       operationID: "op-2",
     });
 
-    // Then: request body matches CAS contract and returned value is SyncFileMeta-shaped, not {status}.
     const req = globalThis.__ossRequests[0];
     const body = JSON.parse(req.body);
     assert.equal(body.content, "# new content");
@@ -156,7 +150,6 @@ test("returns SyncFileMeta-shaped metadata on successful collaboration upload", 
 });
 
 test("propagates stable client_id via existing client header on collaboration upload", async () => {
-  // Given: settings with stable clientId.
   globalThis.__ossRequests = [];
   globalThis.__ossResponse = {
     status: 200,
@@ -178,14 +171,12 @@ test("propagates stable client_id via existing client header on collaboration up
     const client = new OSSApiClient(customSettings);
     client.setToken("token-1");
 
-    // When: uploading.
     await client.collabUpload("vault 1", 42, {
       content: "hello",
       baseRevision: 3,
       operationID: "op-stable-1",
     });
 
-    // Then: stable client_id is sent via existing header (X-OSS-Client-ID) and body carries CAS fields.
     const req = globalThis.__ossRequests[0];
     assert.equal(req.headers["X-OSS-Client-ID"], "stable-client-xyz");
     const body = JSON.parse(req.body);
@@ -199,7 +190,6 @@ test("propagates stable client_id via existing client header on collaboration up
 });
 
 test("converts HTTP 409 with current metadata into OSSApiError.current", async () => {
-  // Given: server reports revision conflict with current SyncFileMeta.
   const currentMeta = {
     path: "Shared.md",
     type: "markdown",
@@ -225,7 +215,6 @@ test("converts HTTP 409 with current metadata into OSSApiError.current", async (
     const client = new OSSApiClient(settings());
     client.setToken("token-1");
 
-    // When: uploading with stale base_revision.
     let caught = null;
     try {
       await client.collabUpload("vault 1", 42, {
@@ -237,7 +226,6 @@ test("converts HTTP 409 with current metadata into OSSApiError.current", async (
       caught = e;
     }
 
-    // Then: it throws OSSApiError with status 409 and current SyncFileMeta, and request carried CAS fields.
     assert.notEqual(caught, null);
     assert.equal(caught.name, "OSSApiError");
     assert.equal(caught.status, 409);

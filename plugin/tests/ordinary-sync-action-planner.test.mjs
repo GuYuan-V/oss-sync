@@ -55,7 +55,7 @@ test("pending local upload reuses operation id and preserves baseRevision", asyn
     const baseline = new Map([["notes/a.md", makeBaseline({ serverRevision: 5, serverHash: "old", localHash: "old" })]]);
     const localByPath = new Map([["notes/a.md", makeLocal("notes/a.md", "new-hash", 200, 12)]]);
     const remote = new Map([["notes/a.md", makeRemote("notes/a.md", { hash: "old", revision: 5 })]]);
-    // remote inferred from baseline when forceFull false and submitted missing? but we provide same as baseline to make remoteChanged false
+    // 此处 remote 与 baseline 一致，使 remoteChanged 为 false。
     const pending = [{ id: "op-1", kind: "upsert", path: "notes/a.md", createdAt: 1 }];
     let factoryCalls = 0;
     const result = plan({
@@ -83,7 +83,6 @@ test("pending local upload reuses operation id and preserves baseRevision", asyn
     assert.ok(!("bytes" in a.local));
     assert.deepEqual(result.obsoletePendingIds, []);
     assert.deepEqual(result.removedBaselinePaths, []);
-    // ensure no mutation
     assert.equal(baseline.size, 1);
     assert.equal(pending.length, 1);
   } finally { await cleanup(); }
@@ -151,7 +150,6 @@ test("unchanged local with remote update triggers download and delete_local with
   try {
     const baseline = new Map([["a.md", makeBaseline({ serverRevision: 1, serverHash: "h1", localHash: "h1", localMTime: 10 })]]);
     const localByPath = new Map([["a.md", makeLocal("a.md", "h1", 10)]]);
-    // remote updated
     const remoteDownload = new Map([["a.md", makeRemote("a.md", { hash: "h2", revision: 2, deleted: false })]]);
     const r1 = plan({
       forceFull: false,
@@ -226,7 +224,6 @@ test("reconcile and adopt branches carry expectedLocal and full shapes", async (
   const { plan, cleanup } = await loadPlanner();
   try {
     const baseline = new Map([["note.md", makeBaseline({ serverRevision: 1, serverHash: "base", localHash: "base" })]]);
-    // divergent: local changed to lh, remote changed to rh (different)
     const localByPath = new Map([["note.md", makeLocal("note.md", "lh", 20)]]);
     const remoteReconcile = new Map([["note.md", makeRemote("note.md", { hash: "rh", revision: 2, deleted: false })]]);
     const r1 = plan({
@@ -250,11 +247,9 @@ test("reconcile and adopt branches carry expectedLocal and full shapes", async (
       expectedLocal: { kind: "hash", hash: "lh" },
     });
 
-    // same hash divergent -> adopt
     const localSame = new Map([["note.md", makeLocal("note.md", "same", 20)]]);
     const remoteSame = new Map([["note.md", makeRemote("note.md", { hash: "same", revision: 2 })]]);
-    // need localChanged true (hash diff from baseline) but hash equals remote => adopt
-    // baseline hash is "base", local "same" != base => localChanged true; remote "same" != base => remoteChanged true; but hashes equal => adopt
+    // 本地与远端均偏离 baseline 但哈希相同，走 adopt 分支。
     const r2 = plan({
       forceFull: false,
       recoverySnapshot: false,
@@ -294,7 +289,6 @@ test("conflict when local and server deleted diverge and when baseline absent wi
     assert.deepEqual(r.actions[0].expectedLocal, { kind: "hash", hash: "local-h" });
     assert.ok(!("bytes" in r.actions[0].local));
 
-    // baseline absent with local and deleted remote => conflict
     const baselineEmpty = new Map();
     const local2 = new Map([["x.md", makeLocal("x.md", "lh2")]]);
     const remoteDel2 = new Map([["x.md", makeRemote("x.md", { hash: "rh", revision: 1, deleted: true })]]);
@@ -319,7 +313,6 @@ test("recoverySnapshot compacted handling: delete_local_absent, conflict, upload
   try {
     const base = makeBaseline({ serverRevision: 4, serverHash: "same", localHash: "same", serverDeleted: false });
     const baseline = new Map([["a.md", base]]);
-    // unchanged local -> delete_local_absent
     const localSame = new Map([["a.md", makeLocal("a.md", "same")]]);
     const r1 = plan({
       forceFull: true,
@@ -336,7 +329,6 @@ test("recoverySnapshot compacted handling: delete_local_absent, conflict, upload
     assert.deepEqual(r1.actions[0], { kind: "delete_local_absent", path: "a.md", expectedLocal: { kind: "hash", hash: "same" } });
     assert.deepEqual(r1.removedBaselinePaths, []);
 
-    // changed local -> conflict with compacted delete
     const localChanged = new Map([["a.md", makeLocal("a.md", "changed")]]);
     const r2 = plan({
       forceFull: true,
@@ -354,7 +346,6 @@ test("recoverySnapshot compacted handling: delete_local_absent, conflict, upload
     assert.equal(r2.actions[0].remote.revision, 0);
     assert.deepEqual(r2.actions[0].expectedLocal, { kind: "hash", hash: "changed" });
 
-    // tombstone with local -> upload
     const tomb = makeBaseline({ serverRevision: 2, serverHash: "h", serverDeleted: true, localHash: "", localMTime: 0, localSize: 0 });
     const baselineTomb = new Map([["b.md", tomb]]);
     const localExists = new Map([["b.md", makeLocal("b.md", "new")]]);
@@ -373,7 +364,6 @@ test("recoverySnapshot compacted handling: delete_local_absent, conflict, upload
     assert.equal(r3.actions[0].baseRevision, 0);
     assert.deepEqual(r3.removedBaselinePaths, ["b.md"]);
 
-    // tombstone without local and with pending delete -> obsolete
     const localAbsent = new Map([["b.md", null]]);
     const pendingDel = [{ id: "pend-del", kind: "delete", path: "b.md", createdAt: 1 }];
     const r4 = plan({
@@ -391,7 +381,6 @@ test("recoverySnapshot compacted handling: delete_local_absent, conflict, upload
     assert.deepEqual(r4.obsoletePendingIds, ["pend-del"]);
     assert.deepEqual(r4.removedBaselinePaths, ["b.md"]);
 
-    // live baseline absent locally -> removed, no action
     const liveBase = makeBaseline({ serverRevision: 1, serverHash: "h", serverDeleted: false });
     const baselineLive = new Map([["c.md", liveBase]]);
     const r5 = plan({
@@ -430,7 +419,6 @@ test("rename and conflict exclusions produce no actions and no side effects", as
     });
     assert.equal(r1.actions.length, 0);
     assert.deepEqual(r1.obsoletePendingIds, []);
-    // target also excluded
     const localByPath2 = new Map([["b.md", makeLocal("b.md", "x")]]);
     const r1b = plan({
       forceFull: false,
@@ -480,15 +468,12 @@ test("obsolete pending ids and removed paths are explicit and inputs not mutated
       vaultPaths: [],
       createOperationId: () => "gen",
     });
-    // both unchanged -> obsolete pending
     assert.deepEqual(result.actions, []);
     assert.deepEqual(result.obsoletePendingIds, ["up-keep"]);
-    // inputs unchanged
     assert.deepEqual(pending, pendingCopy);
     assert.equal(baseline.size, baselineCopy.size);
     assert.deepEqual([...baseline.entries()], [...baselineCopy.entries()]);
 
-    // orphan pending delete without server tombstone -> obsolete
     const baselineEmpty = new Map();
     const localEmpty = new Map([["orphan.md", null]]);
     const pendingOrphan = [{ id: "orphan-del", kind: "delete", path: "orphan.md", createdAt: 1 }];

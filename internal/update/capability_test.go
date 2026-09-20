@@ -46,12 +46,10 @@ func TestCheckCapability_DevelopmentVersionRejected(t *testing.T) {
 	withVersion(t, "1.2.3")
 	err = CheckCapability(exe, "linux", "amd64")
 	if err != nil {
-		// May still fail due to platform mismatch on non-linux, but not development error
+		// 合法版本不得报开发版本错误，其余平台相关错误允许。
 		if IsDevelopmentVersionError(err) {
 			t.Fatalf("valid version should not be development error, got %v", err)
 		}
-		// If running on windows/darwin, linux is still supported? Actually linux is supported, so should be nil
-		// Accept any non-development error is okay for this test
 	}
 }
 
@@ -79,14 +77,12 @@ func TestCheckCapability_UnsupportedPlatform(t *testing.T) {
 func TestCheckCapability_NotRegularFile(t *testing.T) {
 	withVersion(t, "1.2.3")
 	dir := t.TempDir()
-	// Pass directory itself
 	err := CheckCapability(dir, runtime.GOOS, runtime.GOARCH)
 	if err == nil {
 		t.Fatal("expected not_regular_file for directory")
 	}
 	ue, ok := err.(*UpdateError)
 	if !ok || (ue.Code != CodeNotRegularFile && ue.Code != CodeSymlinkNotAllowed) {
-		// directory should be not_regular_file
 		t.Fatalf("expected not_regular_file, got %v", err)
 	}
 }
@@ -118,8 +114,7 @@ func TestCheckCapability_UnwritableDirectory(t *testing.T) {
 	if err := os.WriteFile(exe, []byte("bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Make directory non-writable by making it a file? Instead, use subdir that is file
-	// Simpler: use path where parent is file not dir
+	// 以文件冒充父目录，构造不可写的目录场景。
 	fileAsDir := filepath.Join(dir, "file-as-dir")
 	if err := os.WriteFile(fileAsDir, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)

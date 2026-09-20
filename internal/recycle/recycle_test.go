@@ -15,7 +15,6 @@ import (
 func TestRetentionDays_whenVaultOverrideExceedsAdministratorCeiling_clampsToCeiling(t *testing.T) {
 	t.Parallel()
 
-	// Given
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "recycle.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -51,10 +50,8 @@ func TestRetentionDays_whenVaultOverrideExceedsAdministratorCeiling_clampsToCeil
 		}
 	}
 
-	// When
 	days, err := RetentionDays(db, "vault-1")
 
-	// Then
 	if err != nil {
 		t.Fatalf("RetentionDays: %v", err)
 	}
@@ -64,15 +61,12 @@ func TestRetentionDays_whenVaultOverrideExceedsAdministratorCeiling_clampsToCeil
 }
 
 func TestCanRestore_whenRetentionBoundaryPasses_marksEntryExpired(t *testing.T) {
-	// Given
 	deletedAt := time.Date(2026, time.September, 16, 12, 0, 0, 0, time.UTC)
 	file := models.File{DeletedAt: sql.NullTime{Time: deletedAt, Valid: true}}
 
-	// When
 	beforeExpiry := CanRestore(file, 1, deletedAt.Add(24*time.Hour-time.Second))
 	atExpiry := CanRestore(file, 1, deletedAt.Add(24*time.Hour))
 
-	// Then
 	if !beforeExpiry {
 		t.Error("entry should remain restorable before its retention deadline")
 	}

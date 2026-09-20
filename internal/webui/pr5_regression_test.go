@@ -34,7 +34,7 @@ func TestReviewPapertrailSettingsPreservePublicBlog(t *testing.T) {
 	if !strings.Contains(field, "checked") {
 		t.Errorf("enabled Papertrail blog rendered unchecked: %s", field)
 	}
-	// Submit the checkbox state returned by the settings page, as a browser would.
+	// 按浏览器行为回传设置页返回的复选框状态。
 	form := url.Values{"_csrf": {csrf}, "theme_name": {"papertrail"}, "recycle_bin_days": {"30"}}
 	if strings.Contains(field, "checked") {
 		form.Set("is_public_blog", "on")

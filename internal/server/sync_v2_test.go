@@ -179,7 +179,7 @@ func deviceTokenFor(t *testing.T, router *gin.Engine, username, password, client
 		t.Fatalf("login device %s: %d %v", clientID, code, login)
 	}
 	devToken := login["token"].(string)
-	// Approve via user management token (userToken is user-only, not device-bound)
+	// 用纯用户管理 token 批准，userToken 未绑定设备。
 	code, _ = doJSON(t, router, http.MethodPut,
 		"/api/devices/"+url.PathEscape(clientID)+"/authorization",
 		userToken,
@@ -188,10 +188,10 @@ func deviceTokenFor(t *testing.T, router *gin.Engine, username, password, client
 	if code != http.StatusOK {
 		t.Fatalf("approve device %s after login: %d", clientID, code)
 	}
-	// Re-login to ensure token reflects approved status (optional but ensures fresh)
+	// 重新登录，使 token 携带已批准状态，保证拿到最新 token。
 	code, login2 := loginAsDevice(t, router, username, password, clientID, "device-"+clientID)
 	if code != http.StatusOK {
-		// fallback to original pending token (still valid after approval per DB check)
+		// 批准后原 token 按数据库校验仍有效，回退使用。
 		return devToken
 	}
 	return login2["token"].(string)
@@ -207,7 +207,6 @@ func userOnlyToken(t *testing.T, router *gin.Engine, username, password string) 
 }
 
 func TestSyncStrategy_whenUserPreferencesAreWithinAdministratorCeilings_returnsEffectiveTiming(t *testing.T) {
-	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	devToken := registerAndLogin(t, router, "strategy-user", "password123")
@@ -227,7 +226,6 @@ func TestSyncStrategy_whenUserPreferencesAreWithinAdministratorCeilings_returnsE
 		t.Fatalf("set strategy preferences: %v", err)
 	}
 
-	// When
 	code, body := doJSONAsDevice(
 		t,
 		router,
@@ -239,7 +237,6 @@ func TestSyncStrategy_whenUserPreferencesAreWithinAdministratorCeilings_returnsE
 		nil,
 	)
 
-	// Then
 	if code != http.StatusOK {
 		t.Fatalf("strategy response: %d %v", code, body)
 	}
@@ -249,7 +246,6 @@ func TestSyncStrategy_whenUserPreferencesAreWithinAdministratorCeilings_returnsE
 }
 
 func TestSyncStrategy_whenGlobalModeIsForced_ignoresClientPreference(t *testing.T) {
-	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	devToken := registerAndLogin(t, router, "global-strategy-user", "password123")
@@ -259,7 +255,6 @@ func TestSyncStrategy_whenGlobalModeIsForced_ignoresClientPreference(t *testing.
 	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("sync_mode", "long_poll").Error; err != nil {
 		t.Fatalf("set global sync mode: %v", err)
 	}
-	// When
 	code, body := doJSONAsDevice(
 		t,
 		router,
@@ -271,7 +266,6 @@ func TestSyncStrategy_whenGlobalModeIsForced_ignoresClientPreference(t *testing.
 		nil,
 	)
 
-	// Then
 	if code != http.StatusOK {
 		t.Fatalf("strategy response: %d %v", code, body)
 	}
@@ -281,7 +275,6 @@ func TestSyncStrategy_whenGlobalModeIsForced_ignoresClientPreference(t *testing.
 }
 
 func TestV2Upload_whenUserUploadPreferenceTightensAdminCeiling_rejectsOversizedContent(t *testing.T) {
-	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	devToken := registerAndLogin(t, router, "v2-upload-limit", "password123")
@@ -295,20 +288,17 @@ func TestV2Upload_whenUserUploadPreferenceTightensAdminCeiling_rejectsOversizedC
 		t.Fatalf("set upload preference: %v", err)
 	}
 
-	// When
 	code, body := uploadV2(
 		t, router, deviceToken, vaultID, "Notes/Large.md", "123456",
 		0, "device-upload-limit", "upload-over-limit",
 	)
 
-	// Then
 	if code != http.StatusRequestEntityTooLarge {
 		t.Errorf("oversized v2 upload: status=%d body=%v, want 413", code, body)
 	}
 }
 
 func TestV2Upload_whenUserVaultCapacityIsExceeded_rejectsWrite(t *testing.T) {
-	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	devToken := registerAndLogin(t, router, "v2-vault-limit", "password123")
@@ -322,20 +312,17 @@ func TestV2Upload_whenUserVaultCapacityIsExceeded_rejectsWrite(t *testing.T) {
 		t.Fatalf("set vault preference: %v", err)
 	}
 
-	// When
 	code, body := uploadV2(
 		t, router, deviceToken, vaultID, "Notes/Capacity.md", "123456",
 		0, "device-vault-limit", "upload-over-capacity",
 	)
 
-	// Then
 	if code != http.StatusInternalServerError || body["error"] != "vault storage quota exceeded" {
 		t.Errorf("capacity overflow: status=%d body=%v, want quota error", code, body)
 	}
 }
 
 func TestVaultCreate_whenUserCapacityIsWithinAdminCeiling_seedsEffectiveQuota(t *testing.T) {
-	// Given
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	devToken := registerAndLogin(t, router, "vault-default-limit", "password123")
@@ -346,10 +333,8 @@ func TestVaultCreate_whenUserCapacityIsWithinAdminCeiling_seedsEffectiveQuota(t 
 		t.Fatalf("set vault preference: %v", err)
 	}
 
-	// When
 	code, body := doJSON(t, router, http.MethodPost, "/api/vaults", devToken, map[string]any{"name": "Policy Vault"})
 
-	// Then
 	if code != http.StatusCreated {
 		t.Fatalf("create policy vault: %d %v", code, body)
 	}
@@ -793,7 +778,7 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 		t.Fatalf("login device-a: %d %v", code, loginA)
 	}
 	deviceAToken := loginA["token"].(string)
-	// Ensure tokenA is fresh approved token; use loginA token for device-a operations
+	// 用 loginA 的 token 操作 device-a，保证 token 为已批准态。
 	tokenA = deviceAToken
 
 	code, created := uploadV2(

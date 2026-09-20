@@ -1,6 +1,6 @@
-// operation-id.ts — 统一的 collaboration operationID 生成与校验
+// operation-id.ts 统一生成与校验 collaboration operationID。
 // 规则与服务端 deviceauth.NormalizeClientID 保持一致：
-// 1-64 字符，仅允许 A-Z a-z 0-9 - _ .
+// 长度为 1-64，仅允许 A-Z、a-z、0-9、-、_ 和 .。
 // 优先使用 crypto.randomUUID()，其输出完全符合该字符集。
 
 const OPERATION_ID_RE = /^[A-Za-z0-9._-]{1,64}$/;
@@ -16,20 +16,19 @@ export function normalizeOperationID(value: string): string | null {
 }
 
 export function createOperationID(): string {
-  // crypto.randomUUID() 在 Obsidian/Electron 环境始终可用
+  // crypto.randomUUID() 在 Obsidian/Electron 环境始终可用。
   try {
     const raw = crypto.randomUUID();
     const normalized = normalizeOperationID(raw);
     if (normalized) return normalized;
   } catch {
-    // fallback
   }
-  // 备用：时间戳 + 随机串，同样符合字符集
+  // 备用分支使用时间戳加随机串，同样符合字符集。
   const fallback = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
-  // 确保仅含合法字符且 <=64
+  // 清洗为合法字符并截断至 64 字符。
   const cleaned = fallback.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 64);
   if (isValidOperationID(cleaned)) return cleaned;
-  // 极端兜底：截断 UUID 风格
+  // 极端兜底分支，返回短随机标识。
   return "op-" + Math.random().toString(36).slice(2, 10);
 }
 

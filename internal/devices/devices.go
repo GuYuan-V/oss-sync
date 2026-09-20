@@ -1,4 +1,4 @@
-// 设备管理
+// Package devices 提供设备审批、吊销与 Vault 访问接口。
 package devices
 
 import (

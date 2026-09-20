@@ -119,7 +119,7 @@ func TestVaultCreationRequiresExplicitRequest(t *testing.T) {
 	if code != http.StatusCreated || first["is_default"] != true {
 		t.Fatalf("first explicit vault: status=%d body=%v", code, first)
 	}
-	// re-authorize device to see new vaults
+	// 重新授权设备，使其可见新建仓库。
 	if code, _ = approveAs(t, router, userToken, "manual-dev", []string{first["id"].(string)}, nil); code != http.StatusOK {
 		t.Fatalf("re-approve after first vault: %d", code)
 	}

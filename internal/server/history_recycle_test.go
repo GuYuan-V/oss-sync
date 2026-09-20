@@ -62,7 +62,7 @@ func TestHistoryAndRecycleFlow(t *testing.T) {
 		t.Fatalf("history diff missing: %v", detail)
 	}
 
-	// 从 modify 历史（快照为 # v1）恢复 -> 内容回到 # v1。
+	// 从 modify 历史（快照为 # v1）恢复，内容回到 # v1。
 	restorePath := "/api/vaults/" + url.PathEscape(vaultID) + "/sync/history/" + strconv.FormatUint(modifyID, 10) +
 		"/restore?path=" + url.QueryEscape("Notes/Hist.md") + "&client_id=hist-dev"
 	code, _ = doJSONAsDevice(t, router, http.MethodPost, restorePath, histToken, "hist-dev", "hist-pc", nil)
@@ -73,7 +73,7 @@ func TestHistoryAndRecycleFlow(t *testing.T) {
 		t.Fatalf("restored content: %q", got.Body.String())
 	}
 
-	// 删除 -> 回收站（恢复操作已推进 revision，以当前 revision 作为 base）。
+	// 删除进回收站，恢复操作已推进 revision，以当前 revision 作为 base。
 	restoredResp := downloadV2(t, router, histToken, vaultID, "Notes/Hist.md", 0)
 	currentRev, _ := strconv.ParseInt(restoredResp.Header().Get("X-OSS-Revision"), 10, 64)
 	code, deleted := doJSONAsDevice(t, router, http.MethodPost,
@@ -152,12 +152,12 @@ func TestParticipantCannotRestoreHistoryOrRecycle(t *testing.T) {
 		t.Fatalf("register member: %d", code)
 	}
 	memberUserToken := memberLogin["token"].(string)
-	// member needs vault membership first, then device approve
+	// 成员先加入仓库，再批准设备。
 	code, _ = doJSON(t, router, http.MethodPost, "/api/vaults/"+url.PathEscape(vaultID)+"/members", ownerDev, map[string]string{"username": "hist-member", "role": "participant"})
 	if code != http.StatusNoContent {
 		t.Fatalf("add participant: %d", code)
 	}
-	// create member device after membership
+	// 加入成员后再建设备。
 	memberDev := deviceTokenFor(t, router, "hist-member", "password123", "member-dev", memberUserToken, []string{vaultID})
 
 	code, created := uploadV2(t, router, ownerDev, vaultID, "Restrict.md", "x", 0, "owner-dev", "create-restrict")
@@ -215,7 +215,7 @@ func TestAcceptedCollaboratorCanReadOnlyCollaboratedFileHistory(t *testing.T) {
 		t.Fatalf("register collaborator: %d", code)
 	}
 	collabUserToken := collaboratorLogin["token"].(string)
-	// create collaborator device (even though not vault member, still need device for history read via collaboration)
+	// 协作者虽非仓库成员，读协作文件历史仍需设备。
 	collabDev := deviceTokenFor(t, router, "history-collaborator", "password123", "collab-device", collabUserToken, []string{})
 	var owner, collaborator models.User
 	var file models.File
@@ -235,11 +235,11 @@ func TestAcceptedCollaboratorCanReadOnlyCollaboratedFileHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Given: the user is an accepted collaborator for one file but not a Vault member.
+	// 用户是单文件的接受态协作者，但不是 Vault 成员。
 	listPath := "/api/vaults/" + url.PathEscape(vaultID) + "/sync/history?path=Shared.md&client_id=collab-device"
-	// When: the collaborator opens that file's history.
+	// 协作者打开该文件历史。
 	code, list := doJSONAsDevice(t, router, http.MethodGet, listPath, collabDev, "collab-device", "collab-pc", nil)
-	// Then: list and detail are readable, but restoration remains forbidden.
+	// 列表与详情可读，恢复仍禁止。
 	if code != http.StatusOK {
 		t.Fatalf("collaborator history list: %d %v", code, list)
 	}

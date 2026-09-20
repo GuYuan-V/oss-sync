@@ -93,7 +93,7 @@ function findByClass(element, className) {
 async function loadConflictModal() {
   const dir = await mkdtemp(join(tmpdir(), "oss-conflict-modal-"));
   const outfile = join(dir, "conflict-modal.mjs");
-  // Provide a minimal document stub so production code can call createTextNode.
+  // 生产代码调用 createTextNode，此处提供最小 document 桩。
   globalThis.document = { createTextNode: (t) => new FakeTextNode(t) };
   await build({
     entryPoints: ["src/conflict-modal.ts"],
@@ -257,7 +257,6 @@ test("inserts WBR before forward-slash and backslash path separators in diff tex
     const preview = findByClass(modal.contentEl, "oss-diff-preview")[0];
     assert.ok(preview, "preview is rendered");
 
-    // Verify diff structure is intact: one removed, one added, two context rows
     assert.deepEqual(
       findByClass(preview, "oss-diff-marker").map((el) => el.text),
       ["", "", "-", "+"],
@@ -267,7 +266,6 @@ test("inserts WBR before forward-slash and backslash path separators in diff tex
     const textSpans = findByClass(preview, "oss-diff-text");
     assert.equal(textSpans.length, 4, "four diff text spans");
 
-    // Forward-slash path: "Projects/architecture.md"
     const fwdSpan = textSpans.find((s) => s.visibleText.includes("Projects/architecture.md"));
     assert.ok(fwdSpan, "forward-slash span exists");
     assert.deepEqual(
@@ -281,7 +279,6 @@ test("inserts WBR before forward-slash and backslash path separators in diff tex
       "forward-slash visible text matches original byte-for-byte"
     );
 
-    // Backslash path: "src\utils\helper.ts"
     const bwdSpan = textSpans.find((s) => s.visibleText.includes("src\\utils\\helper.ts"));
     assert.ok(bwdSpan, "backslash span exists");
     assert.deepEqual(
@@ -295,7 +292,6 @@ test("inserts WBR before forward-slash and backslash path separators in diff tex
       "backslash visible text matches original byte-for-byte"
     );
 
-    // Verify textContent (non-WBR text) is identical to original
     const composed = textSpans.map((s) => s.visibleText).join("");
     assert.ok(
       composed.includes("# Projects/architecture.md") && composed.includes("# src\\utils\\helper.ts"),

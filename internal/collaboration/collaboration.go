@@ -1,4 +1,4 @@
-// Package collaboration 提供 Markdown 文件协作：邀请、接受、正文写入与事件订阅。
+// Package collaboration 提供 Markdown 协作状态与事件发布。
 package collaboration
 
 import (
@@ -12,7 +12,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// 协作状态。
+// 协作关系的生命周期状态。
 const (
 	StatusPending  = "pending"
 	StatusAccepted = "accepted"
@@ -29,15 +29,14 @@ var (
 	ErrFileNotFound      = errors.New("文件不存在")
 )
 
-// Service 协作业务服务。
+// Service 提供协作关系的持久化与鉴权。
 type Service struct {
 	DB *gorm.DB
 }
 
 func New(db *gorm.DB) *Service { return &Service{DB: db} }
 
-// Invite 邀请用户协作一个 Markdown 文件。
-// 只有 owner 或 manager 可以邀请；不能邀请自己。
+// Invite 为 owner 或 manager 创建待接受的 Markdown 文件协作。
 func (s *Service) Invite(ownerID uint, vaultID, filePath, username string) (*models.Collaboration, error) {
 	var vault models.Vault
 	if err := s.DB.Where("id = ?", vaultID).First(&vault).Error; err != nil {
@@ -52,7 +51,7 @@ func (s *Service) Invite(ownerID uint, vaultID, filePath, username string) (*mod
 			return nil, ErrNotOwnerOrManager
 		}
 	}
-	// 目标文件必须存在且是 Markdown。
+	// 目标须为存在且未删除的 Markdown 文件。
 	var file models.File
 	if err := s.DB.Where(
 		"user_id = ? AND vault_id = ? AND path = ? AND is_deleted = ? AND type = ?",
@@ -67,7 +66,7 @@ func (s *Service) Invite(ownerID uint, vaultID, filePath, username string) (*mod
 	if target.ID == ownerID {
 		return nil, ErrSelfInvite
 	}
-	// 重复关系检查：pending 或 accepted 视为未结束。
+	// pending 与 accepted 均视为未结束的协作关系。
 	var existing int64
 	if err := s.DB.Model(&models.Collaboration{}).
 		Where("vault_id = ? AND file_id = ? AND collaborator_id = ? AND status IN ?",
@@ -88,7 +87,7 @@ func (s *Service) Invite(ownerID uint, vaultID, filePath, username string) (*mod
 	return &row, nil
 }
 
-// ListForUser 返回用户收到的邀请和接受的协作。
+// ListForUser 返回某用户收到的全部协作关系。
 func (s *Service) ListForUser(userID uint) ([]models.Collaboration, error) {
 	var rows []models.Collaboration
 	if err := s.DB.Where("collaborator_id = ?", userID).
@@ -98,7 +97,7 @@ func (s *Service) ListForUser(userID uint) ([]models.Collaboration, error) {
 	return rows, nil
 }
 
-// ListForVault 返回仓库内全部协作关系（owner/manager 视角）。
+// ListForVault 返回 Vault 的 owner 或 manager 可见的全部协作关系。
 func (s *Service) ListForVault(vaultID string) ([]models.Collaboration, error) {
 	var rows []models.Collaboration
 	if err := s.DB.Where("vault_id = ?", vaultID).
@@ -108,7 +107,7 @@ func (s *Service) ListForVault(vaultID string) ([]models.Collaboration, error) {
 	return rows, nil
 }
 
-// Respond 被邀请者接受或拒绝。
+// Respond 接受或拒绝待处理的邀请。
 func (s *Service) Respond(userID uint, collabID uint, accept bool) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		var row models.Collaboration
@@ -126,7 +125,7 @@ func (s *Service) Respond(userID uint, collabID uint, accept bool) error {
 	})
 }
 
-// Revoke 撤回 pending 邀请或解除 accepted 协作（owner/manager）。
+// Revoke 供 owner 或 manager 结束待处理邀请或已接受的协作。
 func (s *Service) Revoke(ownerID uint, collabID uint) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		var row models.Collaboration
@@ -140,7 +139,7 @@ func (s *Service) Revoke(ownerID uint, collabID uint) error {
 	})
 }
 
-// Leave ends an accepted collaboration at the collaborator's request.
+// Leave 供协作者主动结束已接受的协作。
 func (s *Service) Leave(collaboratorID uint, collabID uint) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		var row models.Collaboration
@@ -154,7 +153,7 @@ func (s *Service) Leave(collaboratorID uint, collabID uint) error {
 	})
 }
 
-// CollaborationsForFile 返回文件当前的 accepted 协作关系（用于事件通知）。
+// CollaborationsForFile 返回已接受的协作关系，供事件广播确定接收者。
 func (s *Service) CollaborationsForFile(vaultID string, fileID uint) ([]models.Collaboration, error) {
 	var rows []models.Collaboration
 	if err := s.DB.Where("vault_id = ? AND file_id = ? AND status = ?",
@@ -164,14 +163,14 @@ func (s *Service) CollaborationsForFile(vaultID string, fileID uint) ([]models.C
 	return rows, nil
 }
 
-// RevokeForPath 文件被删除或重命名时撤销相关协作。
+// RevokeForPath 在文件删除或重命名时结束已接受的协作。
 func (s *Service) RevokeForPath(vaultID, oldPath string, fileID uint) error {
 	if fileID > 0 {
 		return s.DB.Model(&models.Collaboration{}).
 			Where("vault_id = ? AND file_id = ? AND status = ?", vaultID, fileID, StatusAccepted).
 			Update("status", StatusRevoked).Error
 	}
-	// 按路径反查 file id。
+	// 允许只传路径的调用，此处按路径解析文件标识。
 	var files []models.File
 	if err := s.DB.Where("vault_id = ? AND path = ?", vaultID, oldPath).Find(&files).Error; err != nil {
 		return err
@@ -198,19 +197,19 @@ func (s *Service) canManage(tx *gorm.DB, userID uint, vaultID string) bool {
 	return false
 }
 
-// 事件总线
+// 事件总线。
 
-// Event 协作事件。
+// Event 描述一条协作通知。
 type Event struct {
 	VaultID  string `json:"vault_id"`
 	FileID   uint   `json:"file_id"`
 	FilePath string `json:"file_path"`
-	Kind     string `json:"kind"` // changed / revoked / invited
+	Kind     string `json:"kind"` // Kind 取值：changed、revoked、invited。
 	Revision int64  `json:"revision"`
 	At       int64  `json:"at"`
 }
 
-// Broker 按 Vault 分发协作事件。
+// Broker 按 Vault 或账号主题分发协作事件。
 type Broker struct {
 	mu      sync.Mutex
 	subs    map[string][]chan Event
@@ -224,7 +223,7 @@ func NewBroker() *Broker {
 	}
 }
 
-// Subscribe 订阅某 Vault 的事件，返回事件通道与当前版本号。
+// Subscribe 注册 Vault 主题订阅者并返回当前版本号。
 func (b *Broker) Subscribe(vaultID string) (chan Event, int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -233,7 +232,7 @@ func (b *Broker) Subscribe(vaultID string) (chan Event, int64) {
 	return ch, b.version[vaultID]
 }
 
-// Unsubscribe 移除订阅。
+// Unsubscribe 移除主题订阅者并关闭其通道。
 func (b *Broker) Unsubscribe(vaultID string, ch chan Event) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -247,12 +246,12 @@ func (b *Broker) Unsubscribe(vaultID string, ch chan Event) {
 	}
 }
 
-// Publish 广播事件并递增版本号。
+// Publish 在事件所属 Vault 主题上广播。
 func (b *Broker) Publish(ev Event) {
 	b.PublishTo(ev.VaultID, ev)
 }
 
-// PublishTo publishes an event on an explicit Vault or account topic.
+// PublishTo 在指定的 Vault 或账号主题上发布事件。
 func (b *Broker) PublishTo(topic string, ev Event) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -262,12 +261,12 @@ func (b *Broker) PublishTo(topic string, ev Event) {
 		select {
 		case ch <- ev:
 		default:
-			// 订阅者落后时丢弃，等待下一次拉取。
+			// 慢订阅者通过下次轮询恢复，发布者不阻塞。
 		}
 	}
 }
 
-// WaitVersion 阻塞直到版本号超过 last，用于长轮询。
+// WaitVersion 阻塞等待主题版本超过 last，直至超时。
 func (b *Broker) WaitVersion(vaultID string, last int64, timeout time.Duration) (int64, bool) {
 	ch, _ := b.Subscribe(vaultID)
 	defer b.Unsubscribe(vaultID, ch)
@@ -289,7 +288,7 @@ func (b *Broker) WaitVersion(vaultID string, last int64, timeout time.Duration) 
 	}
 }
 
-// CurrentVersion 返回 Vault 当前事件版本。
+// CurrentVersion 返回主题的当前版本号。
 func (b *Broker) CurrentVersion(vaultID string) int64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()

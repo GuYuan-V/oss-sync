@@ -1,4 +1,4 @@
-// 模板管理
+// admin 包的主题管理路由。
 package admin
 
 import (

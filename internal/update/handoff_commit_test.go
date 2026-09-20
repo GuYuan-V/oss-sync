@@ -19,10 +19,10 @@ func TestHandoff_DirectorySyncFailureAfterRename_CommittedAndResumable(t *testin
 	syncDirFn = func(f *os.File) error { return os.ErrDeadlineExceeded }
 	t.Cleanup(func() { syncDirFn = origSyncDir })
 
-	// Force removal to fail so cleanup cannot be proven -> committed.
+	// 强制删除失败，使清理无法自证，交接保持已提交状态。
 	origRemove := removeFileFn
 	removeFileFn = func(name string) error {
-		// Fail only for marker removal, allow staged cleanup to be attempted but marker remains.
+		// 仅让 marker 删除失败，暂存清理仍可尝试，marker 保持存在。
 		if filepath.Ext(name) == ".json" {
 			return os.ErrInvalid
 		}
@@ -58,22 +58,22 @@ func TestHandoff_DirectorySyncFailureAfterRename_CommittedAndResumable(t *testin
 	if op == nil {
 		t.Fatal("expected operation on committed handoff")
 	}
-	// Marker must still exist and be resumable.
+	// marker 存在且可恢复。
 	markerPath := helperMarkerPath(exePath, op.ID)
 	if _, err := os.Stat(markerPath); err != nil {
 		t.Fatalf("marker should still exist for resumable handoff, stat err %v", err)
 	}
-	// Operation must not be terminal.
+	// 操作不得进入终态。
 	cur, _ := mgr.GetOperation(op.ID)
 	if cur.IsTerminal() {
 		t.Fatalf("operation should not be terminal for committed handoff, got %s", cur.State)
 	}
-	// Resume should find it.
+	// 恢复流程应找到该 marker。
 	origLaunch2 := launchHelperFn
 	launched := 0
 	launchHelperFn = func(ep, mp string) error { launched++; return nil }
 	t.Cleanup(func() { launchHelperFn = origLaunch2 })
-	// Temporarily restore removeFileFn to allow resume to work? Resume doesn't need remove.
+	// 恢复不依赖删除，原桩保持不动即可。
 	n, err := ResumePendingHandoffs(exePath)
 	if err != nil {
 		t.Fatalf("ResumePendingHandoffs: %v", err)
@@ -81,7 +81,7 @@ func TestHandoff_DirectorySyncFailureAfterRename_CommittedAndResumable(t *testin
 	if n != 1 || launched != 1 {
 		t.Fatalf("resume should find 1 pending committed handoff, got %d launched %d", n, launched)
 	}
-	// Invariant: API returned success and resume found marker -> consistent.
+	// 接口返回成功且恢复找到 marker，两者一致。
 }
 
 func TestHandoff_DirectorySyncFailureAfterRename_SuccessfulCleanup_NoResume(t *testing.T) {
@@ -107,11 +107,10 @@ func TestHandoff_DirectorySyncFailureAfterRename_SuccessfulCleanup_NoResume(t *t
 	cfg := &config.Config{Storage: config.StorageConfig{DataDir: mgrRoot}}
 	up, _ := NewUpdater(cfg, Options{ExecPath: exePath, Verifier: func(string, string) error { return nil }})
 
-	// With default removeFileFn and successful persist, cleanup should be proven and API should return failure with no resumable marker.
+	// 默认删除路径下清理可自证，接口应返回失败且不留可恢复 marker。
 	op, err := up.InitiateHelperHandoff(mgr, id, candPath, fakeDigestForFile(candPath), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err == nil {
-		// In this implementation, post-rename dir sync failure with successful cleanup returns failure.
-		// Verify no resumable marker.
+		// 重命名后目录同步失败但清理成功时返回失败。
 		if op != nil {
 			markerPath := helperMarkerPath(exePath, op.ID)
 			if _, statErr := os.Stat(markerPath); statErr == nil {
@@ -120,7 +119,7 @@ func TestHandoff_DirectorySyncFailureAfterRename_SuccessfulCleanup_NoResume(t *t
 		}
 		t.Fatalf("expected write marker failure when cleanup proven, got success")
 	}
-	// Ensure no resumable marker left.
+	// 确认没有可恢复 marker 残留。
 	origLaunch := launchHelperFn
 	launched := 0
 	launchHelperFn = func(string, string) error { launched++; return nil }
@@ -132,7 +131,7 @@ func TestHandoff_DirectorySyncFailureAfterRename_SuccessfulCleanup_NoResume(t *t
 	if n != 0 || launched != 0 {
 		t.Fatalf("no resume should happen after proven cleanup failure, got %d launched %d", n, launched)
 	}
-	// Invariant holds: API failure with no resumable marker.
+	// 接口失败且无可恢复 marker，两者一致。
 }
 
 func TestHandoff_MarkerRemovalFailure_KeepsCommitted(t *testing.T) {
@@ -182,7 +181,7 @@ func TestHandoff_MarkerRemovalFailure_KeepsCommitted(t *testing.T) {
 	if cur.IsTerminal() {
 		t.Fatalf("operation should remain non-terminal (committed) after removal failure, got %s", cur.State)
 	}
-	// Resume must find it.
+	// 恢复流程必须找到该 marker。
 	launchHelperFn = func(ep, mp string) error { return nil }
 	n, err := ResumePendingHandoffs(exePath)
 	if err != nil {
@@ -212,12 +211,12 @@ func TestHandoff_TerminalStatePersistenceFailure_KeepsCommitted(t *testing.T) {
 	cfg := &config.Config{Storage: config.StorageConfig{DataDir: mgrRoot}}
 	up, _ := NewUpdater(cfg, Options{ExecPath: exePath, Verifier: func(string, string) error { return nil }})
 
-	// Make launch fail, and make Transition to Failed fail via atomicWriteJSONFn.
+	// 启动失败，同时经 atomicWriteJSONFn 让转终态持久化失败。
 	origLaunch := launchHelperFn
 	launchHelperFn = func(string, string) error { return os.ErrInvalid }
 	t.Cleanup(func() { launchHelperFn = origLaunch })
 
-	// Also make marker removal fail so marker remains durable when transition fails.
+	// marker 删除同样失败，使终态失败时 marker 保持可恢复。
 	origRemove := removeFileFn
 	removeFileFn = func(name string) error {
 		if filepath.Ext(name) == ".json" {
@@ -227,14 +226,12 @@ func TestHandoff_TerminalStatePersistenceFailure_KeepsCommitted(t *testing.T) {
 	}
 	t.Cleanup(func() { removeFileFn = origRemove })
 
-	// Inject failure for Transition to Failed only.
+	// 仅对转 StateFailed 的持久化注入失败。
 	origAtomic := atomicWriteJSONFn
 	callCount := 0
 	atomicWriteJSONFn = func(path string, v any) error {
 		callCount++
-		// Fail the persist that corresponds to Transition to Failed (after marker+swap).
-		// First persists are StartOperation + Prepare...Backup + Swap. Those should succeed.
-		// We detect by inspecting operations map: if any op is Failed state, fail.
+		// 仅当持久化内容包含 StateFailed 的操作时失败；此前持久化全部放行。
 		if ps, ok := v.(persistedState); ok {
 			for _, op := range ps.Ops {
 				if op.State == StateFailed {
@@ -257,16 +254,16 @@ func TestHandoff_TerminalStatePersistenceFailure_KeepsCommitted(t *testing.T) {
 	if _, err := os.Stat(markerPath); err != nil {
 		t.Fatalf("marker should remain when terminal persist fails, stat %v", err)
 	}
-	// Operation should still be non-terminal (since Failed persist failed, it remains Swap/Backup)
+	// StateFailed 持久化失败，操作停留在 Swap 或 Backup 等非终态。
 	mgr2, _ := NewManager(mgrRoot)
 	cur, _ := mgr2.GetOperation(op.ID)
-	// Even if manager reload fails, original mgr should still have non-terminal.
+	// 以重载后状态为准；重载失败时以原 Manager 内存状态为准。
 	if cur != nil && cur.IsTerminal() {
 		t.Fatalf("operation should not be terminal after persist failure, got %s", cur.State)
 	}
-	// Resume should find it (since still active).
+	// 操作仍活跃，恢复流程应找到该 marker。
 	launchHelperFn = func(ep, mp string) error { return nil }
-	// Restore atomic write for resume's manager load.
+	// 恢复前先恢复原子写桩，保证 Manager 重载正常。
 	atomicWriteJSONFn = origAtomic
 	n, err := ResumePendingHandoffs(exePath)
 	if err != nil {
@@ -296,8 +293,7 @@ func TestHandoff_NormalStartupResumeConsistency(t *testing.T) {
 	cfg := &config.Config{Storage: config.StorageConfig{DataDir: mgrRoot}}
 	up, _ := NewUpdater(cfg, Options{ExecPath: exePath, Verifier: func(string, string) error { return nil }})
 
-	// Case 1: successful handoff -> API success and resume finds marker (if helper not yet launched? Actually Initiate launches helper, so marker still exists until helper cleans).
-	// To simulate committed without launch, we make launch succeed.
+	// 场景一：交接成功，启动桩放行，marker 在 helper 清理前一直存在。
 	origLaunch := launchHelperFn
 	launchHelperFn = func(string, string) error { return nil }
 	t.Cleanup(func() { launchHelperFn = origLaunch })
@@ -309,8 +305,7 @@ func TestHandoff_NormalStartupResumeConsistency(t *testing.T) {
 	if _, err := os.Stat(markerPath); err != nil {
 		t.Fatalf("marker should exist after successful handoff, %v", err)
 	}
-	// Simulate crash-before-helper-launch: marker exists, operation in Swap, helper not yet run.
-	// Resume should launch it.
+	// 模拟 marker 已写但 helper 尚未运行的崩溃，恢复流程应重新拉起。
 	launched := 0
 	launchHelperFn = func(ep, mp string) error { launched++; return nil }
 	n, err := ResumePendingHandoffs(exePath)
@@ -321,34 +316,33 @@ func TestHandoff_NormalStartupResumeConsistency(t *testing.T) {
 		t.Fatalf("normal startup should resume committed handoff, got %d launched %d", n, launched)
 	}
 
-	// Case 2: fully failed handoff (pre-marker) -> API failure and no resume.
-	// Use a new manager and make prepareStaging fail by making candidatePath invalid?
-	// Simpler: make verify fail before marker.
+	// 场景二：marker 落盘前失败，接口返回失败且不产生可恢复 marker。
+	// 让校验失败，使 prepareStaging 在写 marker 前返回。
 	verifyStagedFileFn = func(string, string, string) error { return os.ErrInvalid }
-	// Need new checked candidate.
+	// 重新签发新的已校验候选。
 	mgr2, _ := NewManager(mgrRoot)
-	// Need new exe for second op to avoid active lock: first op is still active (Swap). Need to transition it to Failed to allow new op.
+	// 首个操作仍处于 Swap，先转终态以便签发新检查。
 	_, _ = mgr.Transition(op.ID, StateFailed, "cleanup for test")
-	// Now issue new check.
+	// 签发新检查。
 	id2 := newCheckedForHelper(t, mgr2, "9.9.55")
 	candPath2 := candidatePathFor(id2)
 	up2, _ := NewUpdater(cfg, Options{ExecPath: exePath, Verifier: func(string, string) error { return nil }})
-	// verifyStaged still fails -> prepareStaging will fail before marker.
+	// 校验仍失败，交接在 marker 落盘前返回。
 	op2, err := up2.InitiateHelperHandoff(mgr2, id2, candPath2, fakeDigestForFile(candPath2), "http://127.0.0.1:0/readyz", []string{exePath}, exeDir)
 	if err == nil {
 		t.Fatalf("expected failure for verify failure, got op %v", op2)
 	}
-	// No marker for op2 should exist.
+	// 失败场景不得残留 marker。
 	if op2 != nil {
 		mp2 := helperMarkerPath(exePath, op2.ID)
 		if _, err := os.Stat(mp2); err == nil {
 			t.Fatalf("marker should not exist after pre-marker failure")
 		}
 	}
-	// Resume should not find new marker, but will still find old one (op). Clean old marker.
+	// 清理旧 marker 后再恢复，应无可恢复项。
 	_ = os.Remove(markerPath)
 	_, _ = mgr.Transition(op.ID, StateFailed, "cleanup")
-	// After cleanup, resume should find 0.
+	// 清理后恢复结果应为空。
 	launchHelperFn = func(string, string) error { launched++; return nil }
 	n, err = ResumePendingHandoffs(exePath)
 	if err != nil {
@@ -357,16 +351,15 @@ func TestHandoff_NormalStartupResumeConsistency(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("after failed handoff and cleanup, resume should find 0, got %d", n)
 	}
-	// Invariant: API failure matches no resume.
+	// 接口失败与无可恢复 marker 一致。
 
-	// Case 3: verify public status safe (no paths in PublicOperation).
+	// 场景三：公开状态不得携带路径等敏感信息。
 	publicStatus := mgr2.CurrentStatus()
 	if publicStatus.Active != nil {
-		// Should not contain paths; only ID, State, Version, etc.
+		// 公开操作仅含 ID、State、Version 等字段。
 		if publicStatus.Active.Error != "" {
-			// error may be present but should be low cardinality code, not path
 		}
 	}
-	// Ensure toPublic doesn't expose staged path (checked via handler response not containing marker strings).
+	// 公开状态通过 handler 响应校验不含 marker 路径。
 	_ = time.Now()
 }

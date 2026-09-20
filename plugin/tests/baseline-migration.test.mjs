@@ -16,7 +16,6 @@ function makeCollabEntry(vaultId, fileId, overrides = {}) {
 test("Given v2 ordinary state When migrated to v3 Then ordinary files pending conflicts and cursor survive", async () => {
   const { BaselineStore, cleanup } = await loadBaselineStore();
   try {
-    // Given: v2 state with distinct ordinary values
     const path = "Notes/Keep-991.md";
     const entry = {
       serverRevision: 1199,
@@ -57,15 +56,12 @@ test("Given v2 ordinary state When migrated to v3 Then ordinary files pending co
       ],
     ]);
     const store = new BaselineStore({ adapter: memoryAdapter(files) });
-    // When: load migrates to v3
     await store.load();
-    // Then: ordinary state preserved
     assert.equal(store.getVaultID(), "vault-migrate-991");
     assert.equal(store.getCursor(), 77);
     assert.deepEqual(store.get(path), entry);
     assert.deepEqual(store.pending(), [pending]);
     assert.deepEqual(store.conflicts(), [conflict]);
-    // And: save upgrades persisted version to 3
     await store.save();
     const persisted = JSON.parse(files.get(".oss-sync-state.json"));
     assert.equal(persisted.version, 3);
@@ -78,7 +74,6 @@ test("Given v2 ordinary state When migrated to v3 Then ordinary files pending co
 test("Given v2 entry without baseText When loaded as v3 Then baseText remains absent", async () => {
   const { BaselineStore, cleanup } = await loadBaselineStore();
   try {
-    // Given: v2 entry has no baseText
     const path = "Notes/NoBase-481.md";
     const entry = {
       serverRevision: 10,
@@ -102,9 +97,7 @@ test("Given v2 entry without baseText When loaded as v3 Then baseText remains ab
       ],
     ]);
     const store = new BaselineStore({ adapter: memoryAdapter(files) });
-    // When: load as v3
     await store.load();
-    // Then: baseText absent
     const loaded = store.get(path);
     assert.ok(loaded);
     assert.equal(loaded.baseText, undefined);
@@ -117,7 +110,6 @@ test("Given v2 entry without baseText When loaded as v3 Then baseText remains ab
 test("Given v3 collaboration pending and conflict When reloaded Then collaboration survives", async () => {
   const { BaselineStore, cleanup } = await loadBaselineStore();
   try {
-    // Given: collaboration entry keyed by vaultId:fileId
     const vaultId = "vault-collab-ABC-123";
     const fileId = 987;
     const entry = makeCollabEntry(vaultId, fileId);
@@ -127,10 +119,8 @@ test("Given v3 collaboration pending and conflict When reloaded Then collaborati
     store.bindCollaborationAccount("alice-111");
     store.setCollaboration(vaultId, fileId, entry);
     await store.save();
-    // When: fresh store over same adapter
     const fresh = new BaselineStore({ adapter: memoryAdapter(files) });
     await fresh.load();
-    // Then: collaboration survives
     assert.deepEqual(fresh.getCollaboration(vaultId, fileId), entry);
     assert.deepEqual(fresh.collaborationEntries(), [entry]);
   } finally {
@@ -141,7 +131,6 @@ test("Given v3 collaboration pending and conflict When reloaded Then collaborati
 test("Given durable collaboration When ordinary bindVault changes Then collaboration preserved", async () => {
   const { BaselineStore, cleanup } = await loadBaselineStore();
   try {
-    // Given: collaboration under ordinary vault ORIG
     const vaultId = "vault-collab-PRESERVE-222";
     const fileId = 333;
     const entry = makeCollabEntry(vaultId, fileId, {
@@ -164,11 +153,9 @@ test("Given durable collaboration When ordinary bindVault changes Then collabora
     store.setCollaboration(vaultId, fileId, entry);
     store.bindVault("vault-orig-111");
     await store.save();
-    // When: ordinary vault changes
     const changed = store.bindVault("vault-new-999");
     assert.equal(changed, true);
     await store.save();
-    // Then: collaboration still present
     assert.deepEqual(store.getCollaboration(vaultId, fileId), entry);
     assert.deepEqual(store.collaborationEntries(), [entry]);
     const fresh = new BaselineStore({ adapter: memoryAdapter(files) });
@@ -182,7 +169,6 @@ test("Given durable collaboration When ordinary bindVault changes Then collabora
 test("Given collaboration When collaboration account changes Then collaboration cleared", async () => {
   const { BaselineStore, cleanup } = await loadBaselineStore();
   try {
-    // Given: collaboration for alice
     const vaultId = "vault-collab-CLEAR-444";
     const fileId = 555;
     const entry = makeCollabEntry(vaultId, fileId, {
@@ -204,11 +190,9 @@ test("Given collaboration When collaboration account changes Then collaboration 
     store.bindCollaborationAccount("alice-111");
     store.setCollaboration(vaultId, fileId, entry);
     await store.save();
-    // When: account changes to bob
     const changed = store.bindCollaborationAccount("bob-222");
     assert.equal(changed, true);
     await store.save();
-    // Then: cleared
     assert.equal(store.getCollaboration(vaultId, fileId), null);
     assert.deepEqual(store.collaborationEntries(), []);
     const fresh = new BaselineStore({ adapter: memoryAdapter(files) });

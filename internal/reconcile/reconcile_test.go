@@ -137,7 +137,6 @@ func TestRunRecordsAndResolvesMissingFile(t *testing.T) {
 }
 
 func TestRun_whenMissingFileBecomesDeleted_resolvesIssueAfterStorageKeyChanges(t *testing.T) {
-	// Given
 	reconciler, db, _, vault := setupReconciler(t)
 	file := storedFile(vault, "MissingThenDeleted.md", "content")
 	if err := db.Create(&file).Error; err != nil {
@@ -158,10 +157,8 @@ func TestRun_whenMissingFileBecomesDeleted_resolvesIssueAfterStorageKeyChanges(t
 		t.Fatal(err)
 	}
 
-	// When
 	report, err := reconciler.Run(true)
 
-	// Then
 	if err != nil {
 		t.Fatal(err)
 	}

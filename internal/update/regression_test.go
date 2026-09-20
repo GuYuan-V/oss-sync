@@ -99,16 +99,15 @@ func TestRegression_HelperOwnedRollbackRelaunch(t *testing.T) {
 	content := fakeExecBytes()
 	serveContent := makeTarGz(t, map[string][]byte{"oss-server": content})
 	digest := digestOfBytes(serveContent)
-	// candidate with loopback URL so download would succeed if needed, but we use direct file path for handoff
+	// 交接直接使用本地候选文件，候选 URL 为 loopback 形态。
 	cand, _ := NewCandidate("v9.9.9", "linux", "amd64", "https://example.com/"+assetName, "https://example.com/releases/tag/v9.9.9", int64(len(serveContent)), 1001, 2001, digest)
-	// For this regression we need candidate file path with correct digest and magic
+	// 回归场景要求候选文件具备正确 digest 与可执行魔数。
 	candPath := filepath.Join(t.TempDir(), "cand")
 	_ = os.WriteFile(candPath, serveContent, 0o755)
-	// recompute digest for file to match candidate – use file's actual digest
-	// Overwrite candidate digest to match file
+	// 以文件实际 digest 重建候选，保证两者一致。
 	cand2, _ := NewCandidate("v9.9.9", "linux", "amd64", "https://example.com/"+assetName, "https://example.com/releases/tag/v9.9.9", int64(len(serveContent)), 1001, 2001, digestOfBytes(serveContent))
 	cc, _ := mgr.IssueChecked(*cand2, time.Minute)
-	_ = cand // avoid unused
+	_ = cand
 	origVerify := verifyStagedFileFn
 	verifyStagedFileFn = func(string, string, string) error { return nil }
 	t.Cleanup(func() { verifyStagedFileFn = origVerify })
@@ -191,7 +190,7 @@ func TestRegression_MarkerAtomicWrite(t *testing.T) {
 	if got.OpID != "test-op" {
 		t.Errorf("opID %q", got.OpID)
 	}
-	// no temp file should remain
+	// 不得残留临时文件。
 	matches, _ := filepath.Glob(markerPath + ".tmp.*")
 	if len(matches) != 0 {
 		t.Errorf("temp files remain %v", matches)

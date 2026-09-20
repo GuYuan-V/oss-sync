@@ -22,10 +22,8 @@ func TestParseSyncMode_whenValueVaries_acceptsOnlySupportedModes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// When
 			got, err := ParseSyncMode(tt.value)
 
-			// Then
 			if tt.wantErr {
 				if !errors.Is(err, ErrInvalidSyncMode) {
 					t.Fatalf("ParseSyncMode(%q) error = %v, want ErrInvalidSyncMode", tt.value, err)

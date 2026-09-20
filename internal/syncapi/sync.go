@@ -122,29 +122,29 @@ type CheckRequest struct {
 
 type CheckFileIn struct {
 	Path  string `json:"path"`
-	MTime int64  `json:"mtime"` // 客户端本地 mtime（Unix 毫秒）
-	Hash  string `json:"hash"`  // 客户端本地 SHA256
+	MTime int64  `json:"mtime"` // 客户端本地 mtime（Unix 毫秒）。
+	Hash  string `json:"hash"`  // 客户端本地 SHA256。
 }
 
 type CheckResponse struct {
-	ServerTime int64          `json:"server_time"` // Unix 毫秒时间戳
+	ServerTime int64          `json:"server_time"` // Unix 毫秒时间戳。
 	Results    []CheckFileOut `json:"results"`
 }
 
 type CheckFileOut struct {
 	Path        string `json:"path"`
-	Status      string `json:"status"` // upload_needed / download_needed / in_sync / conflict_detected / assume_in_sync
+	Status      string `json:"status"` // 取值：upload_needed、download_needed、in_sync、conflict_detected、assume_in_sync。
 	ServerMTime int64  `json:"server_mtime,omitempty"`
 	ServerHash  string `json:"server_hash,omitempty"`
 }
 
 // Check 按修改时间和哈希比较客户端与服务端文件：
-//   - 本端无记录 + 客户端有文件 → upload_needed
-//   - 服务端无记录 + 客户端提交了 → upload_needed（首次同步上传后建基线）
-//   - 客户端 mtime > 服务端 mtime → upload_needed
-//   - 客户端 mtime < 服务端 mtime → download_needed
-//   - 相等 → in_sync
-//   - hash 不同 且 服务端 mtime > 客户端 mtime → conflict_detected
+//   - 本端无记录 + 客户端有文件 → upload_needed。
+//   - 服务端无记录 + 客户端提交了 → upload_needed（首次同步上传后建基线）。
+//   - 客户端 mtime 大于服务端 mtime → upload_needed。
+//   - 客户端 mtime 小于服务端 mtime → download_needed。
+//   - 相等 → in_sync。
+//   - 哈希不同且服务端 mtime 更大 → conflict_detected。
 func (h *Handler) Check(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {

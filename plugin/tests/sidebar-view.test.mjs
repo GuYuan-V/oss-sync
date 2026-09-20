@@ -1,7 +1,4 @@
-// 行为测试：SidebarView.refresh() 必须保留未解决冲突的可见性与可操作入口，
-// 且不再渲染最近活动列表。
-//
-// 测试冲突入口、管理按钮和不再显示的活动列表。
+// SidebarView.refresh() 呈现未解决冲突入口与管理按钮，不呈现最近活动列表。
 // 只断言路径、类名、标签与事件调用等数据契约，不断言翻译文案。
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -139,15 +136,12 @@ test("keeps a persisted conflict visible with a native reopen action after refre
     },
   ]);
   try {
-    // Given: baseline 中持久化了一条未解决冲突。
     assert.equal(store.conflicts().length, 1);
     assert.equal(store.conflicts()[0].path, CONFLICT_PATH);
 
-    // When: 侧边栏完成一次刷新。
     const plugin = makePlugin(store);
     const root = renderSidebar(SidebarView, plugin);
 
-    // Then: 冲突行与原生按钮可见，点击以精确路径打开冲突弹窗。
     const rows = root.querySelectorAll(".oss-sidebar-conflict");
     assert.ok(rows.length > 0, "expected a rendered conflict row for the persisted conflict");
     assert.ok(rows[0].getText().includes(CONFLICT_PATH), "conflict row must surface the path");
@@ -167,14 +161,11 @@ test("no longer renders recent activity after refresh", async () => {
   const { SidebarView } = module;
   const { store, cleanup: cleanupStore } = await makeStore([]);
   try {
-    // Given: 存在最近活动条目。
     const plugin = makePlugin(store);
     assert.ok(plugin.collabManager.getRecentActivity().length > 0);
 
-    // When: 侧边栏完成一次刷新。
     const root = renderSidebar(SidebarView, plugin);
 
-    // Then: 不再渲染最近活动列表。
     const lists = root.querySelectorAll(".oss-activity-list");
     assert.equal(lists.length, 0, "recent activity list must not be rendered");
   } finally {
@@ -188,13 +179,11 @@ test("renders compact share, collaboration, and recycle management buttons inste
   const { SidebarView } = module;
   const { store, cleanup: cleanupStore } = await makeStore([]);
   try {
-    // Given: the bound vault has a shared article and a pending collaboration.
+    // 绑定仓库带有一篇分享文章与一条待处理协作。
     const plugin = makePlugin(store);
 
-    // When: the sidebar refreshes.
     const root = renderSidebar(SidebarView, plugin);
 
-    // Then: compact native buttons open the two management dialogs and no rows consume sidebar space.
     const shareButtons = root.querySelectorAll(".oss-sidebar-share-manager");
     const collabButtons = root.querySelectorAll(".oss-sidebar-collab-manager");
     const recycleButtons = root.querySelectorAll(".oss-sidebar-recycle-manager");

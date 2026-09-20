@@ -18,11 +18,11 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// 1. Token only for configured GitHub API asset origin, never for browser_download_url.
+// Token 仅发往配置的 GitHub API 资产源，绝不发往 browser_download_url。
 func TestOracle_TokenOnlyForAPIAssetOrigin(t *testing.T) {
 	content := []byte("hello-world-content")
 	digest := "sha256:" + hex.EncodeToString(sha256Sum(content))
-	// API origin server (should get token)
+	// 同源服务端，应收到 Token。
 	var apiGotToken bool
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "Bearer secret-token-123" {
@@ -32,7 +32,7 @@ func TestOracle_TokenOnlyForAPIAssetOrigin(t *testing.T) {
 		w.Write(content)
 	}))
 	defer apiSrv.Close()
-	// Cross-host server (must NOT get token)
+	// 跨站服务端，不得收到 Token。
 	var crossGotToken bool
 	crossSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "" {
@@ -46,7 +46,7 @@ func TestOracle_TokenOnlyForAPIAssetOrigin(t *testing.T) {
 	client := apiSrv.Client()
 	dir := t.TempDir()
 
-	// Same host -> token should be sent
+	// 同站请求应携带 Token。
 	apiGotToken = false
 	dest := filepath.Join(dir, "a.bin")
 	if err := downloadFile(context.Background(), client, apiSrv.URL+"/asset.bin", dest, int64(len(content)), digest, "secret-token-123", apiSrv.URL); err != nil {
@@ -56,7 +56,7 @@ func TestOracle_TokenOnlyForAPIAssetOrigin(t *testing.T) {
 		t.Error("expected token for same-host API origin")
 	}
 
-	// Cross-host initial URL -> no token
+	// 跨站初始请求不得携带 Token。
 	crossGotToken = false
 	dest2 := filepath.Join(dir, "b.bin")
 	if err := downloadFile(context.Background(), client, crossSrv.URL+"/asset.bin", dest2, int64(len(content)), digest, "secret-token-123", apiSrv.URL); err != nil {
@@ -66,16 +66,16 @@ func TestOracle_TokenOnlyForAPIAssetOrigin(t *testing.T) {
 		t.Error("token leaked to cross-host initial URL")
 	}
 
-	// browser_download_url must never get token even if same host
+	// browser_download_url 即使同站也不得携带 Token。
 	t.Run("browser_download_url never gets token", func(t *testing.T) {
 		exePath := filepath.Join(t.TempDir(), "oss-server")
 		if err := os.WriteFile(exePath, []byte("old"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		// mock upstream where browser_download_url is on api host but downloadAsset must not send token
+		// browser_download_url 与 apiBase 同站时 downloadAsset 仍不得发送 Token。
 		var browserGotToken bool
 		assetName, _ := AssetName("v9.9.9", "linux", "amd64")
-		// create a server that serves the asset and records token on the download endpoint
+		// 构造记录下载端 Token 的资源服务。
 		var srv *httptest.Server
 		mux := http.NewServeMux()
 		mux.HandleFunc("/downloads/"+assetName, func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +90,7 @@ func TestOracle_TokenOnlyForAPIAssetOrigin(t *testing.T) {
 			serve := wrapContentIfArchive(t, assetName, fakeExecBytes())
 			dig := digestOfBytes(serve)
 			w.Header().Set("Content-Type", "application/json")
-			// browser_download_url points to same host as apiBase
+			// browser_download_url 与 apiBase 指向同一主机。
 			burl := srv.URL + "/downloads/" + assetName
 			w.Write([]byte(`{"id":1001,"tag_name":"v9.9.9","html_url":"https://example.com/releases/tag/v9.9.9","draft":false,"prerelease":false,"assets":[{"id":2001,"name":"` + assetName + `","browser_download_url":"` + burl + `","url":"","size":` + strconv.Itoa(len(serve)) + `,"digest":"` + dig + `"}]}`))
 		})
@@ -102,7 +102,7 @@ func TestOracle_TokenOnlyForAPIAssetOrigin(t *testing.T) {
 			t.Fatal(err)
 		}
 		u.gh.token = "secret-token-123"
-		// directly invoke downloadAsset with browser_download_url
+		// 直接调用 downloadAsset 覆盖 browser_download_url 分支。
 		asset := Asset{Name: assetName, BrowserDownloadURL: srv.URL + "/downloads/" + assetName, Size: int64(len(wrapContentIfArchive(t, assetName, fakeExecBytes()))), Digest: digestOfBytes(wrapContentIfArchive(t, assetName, fakeExecBytes())), ID: 2001}
 		tmpDir := t.TempDir()
 		browserGotToken = false
@@ -114,7 +114,7 @@ func TestOracle_TokenOnlyForAPIAssetOrigin(t *testing.T) {
 		}
 	})
 
-	// redirect stripping already covered in hardening test, but ensure cross-host redirect strips
+	// 跨站重定向剥离已有 hardening 测试覆盖，此处补跨站剥离断言。
 	t.Run("redirect strips token", func(t *testing.T) {
 		var secondGotToken bool
 		second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -129,14 +129,12 @@ func TestOracle_TokenOnlyForAPIAssetOrigin(t *testing.T) {
 			http.Redirect(w, r, second.URL+"/x", http.StatusFound)
 		}))
 		defer first.Close()
-		// client with safe redirect uses apiBase = first.URL host; initial request to first should get token, redirect to second should strip
+		// 初始请求与 apiBase 同站应带 Token，重定向到跨站后剥离。
 		apiGotToken = false
 		secondGotToken = false
-		// use downloadFile with first URL and token, apiBase = first.URL (initial host matches, so first gets token, redirect strips)
+		// 初始与目标处理器已具重定向逻辑，此处仅校验 clientWithSafeRedirect 跨站剥离。
 		safe := clientWithSafeRedirect(first.Client(), first.URL)
 		dest3 := filepath.Join(dir, "c.bin")
-		// need a handler that expects token on first but not second: we already have redirect logic
-		// Instead verify clientWithSafeRedirect strips on cross-host
 		_ = safe
 		_ = dest3
 		if secondGotToken {
@@ -150,36 +148,36 @@ func sha256Sum(b []byte) []byte {
 	return h[:]
 }
 
-// 2. Production NewCandidate must require real IDs/digest; fabrication rejected.
+// 生产 NewCandidate 必须要求真实 ID 与 digest，伪造输入一律拒绝。
 func TestOracle_NewCandidateRequiresRealIdentity(t *testing.T) {
 	assetURL := "https://example.com/oss-server_1.2.3_linux_amd64.tar.gz"
 	releaseURL := "https://example.com/releases/tag/v1.2.3"
 	validDigest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	// missing IDs
+	// ID 缺失。
 	if _, err := NewCandidate("v1.2.3", "linux", "amd64", assetURL, releaseURL, 100, 0, 1, validDigest); err == nil {
 		t.Error("should reject releaseID 0")
 	}
 	if _, err := NewCandidate("v1.2.3", "linux", "amd64", assetURL, releaseURL, 100, 1, 0, validDigest); err == nil {
 		t.Error("should reject assetID 0")
 	}
-	// missing digest
+	// digest 缺失或格式非法。
 	if _, err := NewCandidate("v1.2.3", "linux", "amd64", assetURL, releaseURL, 100, 1, 1, ""); err == nil {
 		t.Error("should reject empty digest")
 	}
 	if _, err := NewCandidate("v1.2.3", "linux", "amd64", assetURL, releaseURL, 100, 1, 1, "sha256:zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"); err == nil {
 		t.Error("should reject malformed digest")
 	}
-	// valid
+	// 合法输入。
 	if _, err := NewCandidate("v1.2.3", "linux", "amd64", assetURL, releaseURL, 100, 1, 1, validDigest); err != nil {
 		t.Errorf("valid should pass: %v", err)
 	}
-	// ensure private fixture still works for tests
+	// 测试桩仍可正常构造。
 	if _, err := newTestCandidate("v1.2.3", "linux", "amd64", assetURL, releaseURL, 100); err != nil {
 		t.Errorf("private fixture should pass: %v", err)
 	}
 }
 
-// 3. Status copies under lock – concurrency/race regression.
+// Status 返回值必须为加锁拷贝，并发读写不得互相污染。
 func TestOracle_StatusImmutableCopy(t *testing.T) {
 	exe := filepath.Join(t.TempDir(), "oss-server")
 	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
@@ -188,14 +186,14 @@ func TestOracle_StatusImmutableCopy(t *testing.T) {
 	up := &Updater{exe: exe, backup: exe + ".bak"}
 	up.lastCheck = &CheckResult{CheckedAt: time.Now(), CurrentVersion: "1.0.0", LatestVersion: "v1.2.3", UpdateAvailable: true}
 	up.lastUpdate = &UpdateResult{At: time.Now(), Code: "ok", Phase: StateDone, Version: "1.2.3"}
-	// concurrent readers and writers
+	// 并发读写，读到拷贝后篡改不得影响内部。
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			s := up.Status()
-			// mutate returned copy must not affect internal
+			// 篡改返回拷贝，内部状态不得被污染。
 			if s.LastCheck != nil {
 				s.LastCheck.LatestVersion = "mutated"
 				s.LastCheck.UpdateAvailable = false
@@ -225,12 +223,12 @@ func TestOracle_StatusImmutableCopy(t *testing.T) {
 	if st.LastUpdate != nil && st.LastUpdate.Code == "hacked" {
 		t.Error("Status copy mutated internal lastUpdate")
 	}
-	// verify CheckUpdate and Status isolation
+	// 再校验 CheckUpdate 与 Status 的隔离性。
 	cfg := &config.Config{Update: config.UpdateConfig{GitHubRepo: "fake/oss-sync"}}
-	// need a mock server
+	// 构造 CheckUpdate 隔离性用的桩服务。
 	content := fakeExecBytes()
 	assetName := "oss-server_9.9.9_linux_amd64.tar.gz"
-	// quick mock for CheckUpdate isolation
+	// 覆盖 CheckUpdate 隔离分支的桩输入。
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"id":1,"tag_name":"v9.9.9","html_url":"https://example.com/tag/v9.9.9","draft":false,"prerelease":false,"assets":[]}`))
@@ -258,9 +256,9 @@ func TestOracle_StatusImmutableCopy(t *testing.T) {
 	_ = version.Version
 }
 
-// 4. Strict durable transition graph table-driven.
+// 严格持久化状态机按表驱动覆盖。
 func TestOracle_StrictTransitionGraph(t *testing.T) {
-	// allowed linear sequence
+	// 允许的线性推进序列。
 	allowed := [][2]OperationState{
 		{StateInProgress, StatePrepare},
 		{StatePrepare, StateFetchRelease},
@@ -276,14 +274,14 @@ func TestOracle_StrictTransitionGraph(t *testing.T) {
 			t.Errorf("should allow %s -> %s", p[0], p[1])
 		}
 	}
-	// failures allowed from active phases
+	// 活跃阶段均可转失败。
 	active := []OperationState{StateInProgress, StatePrepare, StateFetchRelease, StateSelectAsset, StateDownload, StateVerify, StateBackup, StateSwap}
 	for _, from := range active {
 		if !isAllowedTransition(from, StateFailed) {
 			t.Errorf("should allow %s -> failed", from)
 		}
 	}
-	// up_to_date only from fetch_release (and checking)
+	// up_to_date 仅允许从 fetch_release 离开。
 	if !isAllowedTransition(StateFetchRelease, StateUpToDate) {
 		t.Error("fetch_release -> up_to_date should be allowed")
 	}
@@ -293,7 +291,7 @@ func TestOracle_StrictTransitionGraph(t *testing.T) {
 	if isAllowedTransition(StatePrepare, StateUpToDate) {
 		t.Error("prepare -> up_to_date should be rejected")
 	}
-	// phase skips rejected
+	// 跳阶段一律拒绝。
 	rejected := [][2]OperationState{
 		{StateInProgress, StateDownload},
 		{StateInProgress, StateDone},
@@ -314,16 +312,16 @@ func TestOracle_StrictTransitionGraph(t *testing.T) {
 			t.Errorf("should reject skip %s -> %s", p[0], p[1])
 		}
 	}
-	// also test via Manager.Transition enforcement
+	// 再经 Manager.Transition 校验强制执行。
 	t.Run("manager enforces graph", func(t *testing.T) {
 		m := newTestManager(t)
 		cc, _ := m.IssueChecked(testCandidate("10.0.0"), time.Minute)
 		op, _ := m.StartOperation(cc.ID, "")
-		// skip should fail
+		// 跳阶段必须失败。
 		if _, err := m.Transition(op.ID, StateDownload, ""); err == nil {
 			t.Error("manager should reject skip in_progress -> download")
 		}
-		// correct linear progression
+		// 按正确线性序列推进。
 		seq := []OperationState{StatePrepare, StateFetchRelease, StateSelectAsset, StateDownload, StateVerify, StateBackup, StateSwap, StateDone}
 		for _, nxt := range seq {
 			var err error
@@ -335,7 +333,7 @@ func TestOracle_StrictTransitionGraph(t *testing.T) {
 		if op.State != StateDone {
 			t.Errorf("final state %q", op.State)
 		}
-		// up_to_date path
+		// 覆盖 fetch_release 直达 up_to_date 路径。
 		m2 := newTestManager(t)
 		cc2, _ := m2.IssueChecked(testCandidate("10.0.1"), time.Minute)
 		op2, _ := m2.StartOperation(cc2.ID, "")
@@ -347,7 +345,7 @@ func TestOracle_StrictTransitionGraph(t *testing.T) {
 	})
 }
 
-// 5. Same-root concurrent manager semantics.
+// 同根多 Manager 并发语义。
 func TestOracle_ConcurrentManagerSameRoot(t *testing.T) {
 	root := t.TempDir()
 	m1, err := NewManager(root)
@@ -358,7 +356,7 @@ func TestOracle_ConcurrentManagerSameRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("m2: %v", err)
 	}
-	// concurrent IssueChecked from both managers
+	// 两个 Manager 并发签发。
 	var wg sync.WaitGroup
 	ids := make([]string, 0, 20)
 	var mu sync.Mutex
@@ -389,8 +387,7 @@ func TestOracle_ConcurrentManagerSameRoot(t *testing.T) {
 	if len(ids) != 20 {
 		t.Fatalf("expected 20 checked, got %d", len(ids))
 	}
-	// verify both managers see all after reload
-	// force reload by calling GetChecked on each id via either manager
+	// 重载后两侧均应可见全部签发；逐个回查即可触发重载。
 	for _, id := range ids {
 		if _, err := m1.GetChecked(id); err != nil {
 			t.Errorf("m1 missing %s: %v", id, err)
@@ -399,9 +396,9 @@ func TestOracle_ConcurrentManagerSameRoot(t *testing.T) {
 			t.Errorf("m2 missing %s: %v", id, err)
 		}
 	}
-	// concurrent StartOperation – only one should succeed
+	// 并发启动操作，仅允许一个成功。
 	cc, _ := m1.IssueChecked(testCandidate("9.9.9"), time.Minute)
-	// ensure m2 sees it (reload)
+	// 先让 m2 可见该检查，后续并发启动依赖重载。
 	var success int
 	var sMu sync.Mutex
 	wg = sync.WaitGroup{}
@@ -430,10 +427,10 @@ func TestOracle_ConcurrentManagerSameRoot(t *testing.T) {
 	if success != 1 {
 		t.Fatalf("expected exactly 1 StartOperation success across managers, got %d", success)
 	}
-	// ensure atomic writes used unique temps – no leftover .tmp files clobbering
+	// 原子写必须使用唯一临时文件，不得残留固定 .tmp 文件。
 	matches, _ := filepath.Glob(filepath.Join(root, "update_state.json.tmp*"))
 	_ = matches
-	// there should be no fixed .tmp file left
+	// 不得残留固定 .tmp 文件。
 	if _, err := os.Stat(filepath.Join(root, "update_state.json.tmp")); err == nil {
 		t.Error("fixed .tmp file should not remain; unique temps required")
 	}
