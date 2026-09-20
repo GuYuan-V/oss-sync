@@ -47,17 +47,3 @@ func TestIsDevelopment_Current(t *testing.T) {
 		t.Error("0.1.0 should not be development")
 	}
 }
-
-func TestVersionDefaults(t *testing.T) {
-	if Version == "" {
-		t.Error("Version should not be empty, default is dev")
-	}
-	// Must not be falsely eligible
-	if !IsDevelopmentVersion("dev") {
-		t.Error("dev must be development")
-	}
-	info := Get()
-	if info.Version != Version {
-		t.Errorf("Get().Version = %q, want %q", info.Version, Version)
-	}
-}

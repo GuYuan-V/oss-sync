@@ -16,9 +16,6 @@ import (
 )
 
 func TestRegression_VersionExactEquality_1_2_3_vs_1_2_30(t *testing.T) {
-	if !strings.Contains("1.2.30", "1.2.3") {
-		t.Fatal("sanity: Contains should be true")
-	}
 	if version.Normalize("1.2.30") == version.Normalize("1.2.3") {
 		t.Fatal("exact normalized equality should fail for 1.2.30 vs 1.2.3")
 	}

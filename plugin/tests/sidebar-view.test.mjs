@@ -1,11 +1,7 @@
 // 行为测试：SidebarView.refresh() 必须保留未解决冲突的可见性与可操作入口，
 // 且不再渲染最近活动列表。
 //
-// 期望契约（当前生产代码尚未实现，本测试先红后绿）：
-//   - refresh() 渲染 plugin.baseline.conflicts() 中的每一条冲突；
-//   - 每条冲突行内含一个原生 <button>，其 click 调用 plugin.openConflictModal(path)；
-//   - 不再渲染 .oss-activity-list。
-//
+// 测试冲突入口、管理按钮和不再显示的活动列表。
 // 只断言路径、类名、标签与事件调用等数据契约，不断言翻译文案。
 import assert from "node:assert/strict";
 import test from "node:test";
