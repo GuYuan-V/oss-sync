@@ -1,8 +1,8 @@
-// GitHub Release 在线更新支持。
+// GitHub Release 在线更新支持
 //
-// 模块不依赖 Obsidian，便于在 Node 测试中注入伪造的 fetch 与文件系统。
+// 模块不依赖 Obsidian，便于在 Node 测试中注入伪造的 fetch 与文件系统
 // 更新流程：查询最新 Release → 读取 manifest.json 得到远端版本 → 下载三件套 →
-// 由 plugin-update-apply.ts 原子替换并重载插件。
+// 由 plugin-update-apply.ts 原子替换并重载插件
 
 export interface HttpResult {
   status: number;
@@ -59,7 +59,7 @@ function parseVersion(value: string): ParsedVersion {
   return { core: core.slice(0, 3), pre };
 }
 
-/** 按 semver 比较两个版本字符串；a < b 返回 -1，a === b 返回 0，a > b 返回 1。 */
+/** 按 semver 比较两个版本字符串；a < b 返回 -1，a === b 返回 0，a > b 返回 1*/
 export function compareVersions(a: string, b: string): number {
   const pa = parseVersion(a);
   const pb = parseVersion(b);
@@ -96,17 +96,17 @@ function comparePreRelease(a: string | null, b: string | null): number {
   return 0;
 }
 
-/** remote 是否比 current 新。 */
+/** remote 是否比 current 新*/
 export function isNewerVersion(current: string, remote: string): boolean {
   return compareVersions(remote, current) > 0;
 }
 
-/** 去掉 Release 标签前缀的 v/V。 */
+/** 去掉 Release 标签前缀的 v/V*/
 export function parseVersionTag(tag: string): string {
   return tag.trim().replace(/^[vV]/, "");
 }
 
-/** 从 Release 内的 manifest.json 文本解析版本；解析失败返回 null。 */
+/** 从 Release 内的 manifest.json 文本解析版本；解析失败返回 null*/
 export function manifestVersionFromText(text: string | null): string | null {
   if (!text) return null;
   try {
@@ -152,7 +152,7 @@ export class GitHubReleaseSource {
     };
   }
 
-  /** 读取 Release 中指定资产的文本；资产缺失或下载失败返回 null。 */
+  /** 读取 Release 中指定资产的文本；资产缺失或下载失败返回 null*/
   async downloadAssetText(release: GitHubRelease, name: string): Promise<string | null> {
     if (!release.assets.some((item) => item.name === name)) return null;
     try {
@@ -162,7 +162,7 @@ export class GitHubReleaseSource {
     }
   }
 
-  /** 下载指定资产；资产缺失或 HTTP 错误时抛错。 */
+  /** 下载指定资产；资产缺失或 HTTP 错误时抛错*/
   async downloadAsset(release: GitHubRelease, name: string): Promise<ArrayBuffer> {
     const matches = release.assets.filter((item) => item.name === name);
     if (matches.length === 0) {

@@ -1,4 +1,3 @@
-// 同步模式策略
 package settingspolicy
 
 import (

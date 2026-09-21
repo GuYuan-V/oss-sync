@@ -1,4 +1,3 @@
-// 更新错误
 package update
 
 import (
@@ -6,7 +5,7 @@ import (
 	"fmt"
 )
 
-// ErrorCode 是更新子系统的机器可读错误编码，稳定且用于 API/日志分组。
+// ErrorCode 是更新子系统的机器可读错误编码，稳定且用于 API/日志分组
 type ErrorCode string
 
 const (
@@ -24,7 +23,7 @@ const (
 	CodeInvalidDigest       ErrorCode = "invalid_digest"
 )
 
-// UpdateError 是带稳定编码的更新错误，可通过 errors.Is/As 探测。
+// UpdateError 是带稳定编码的更新错误，可通过 errors.Is/As 探测
 type UpdateError struct {
 	Code    ErrorCode
 	Message string
@@ -40,7 +39,7 @@ func (e *UpdateError) Error() string {
 
 func (e *UpdateError) Unwrap() error { return e.Cause }
 
-// Is 允许 errors.Is(err, target) 按 Code 匹配。
+// Is 允许 errors.Is(err, target) 按 Code 匹配
 func (e *UpdateError) Is(target error) bool {
 	t, ok := target.(*UpdateError)
 	if !ok {
@@ -53,7 +52,7 @@ func newUpdateError(code ErrorCode, msg string, cause error) *UpdateError {
 	return &UpdateError{Code: code, Message: msg, Cause: cause}
 }
 
-// 预定义的哨兵错误，便于 errors.Is 探测。
+// 预定义的哨兵错误，便于 errors.Is 探测
 var (
 	ErrDevelopmentVersion  = &UpdateError{Code: CodeDevelopmentVersion, Message: "development version not eligible for self-update"}
 	ErrUnsupportedPlatform = &UpdateError{Code: CodeUnsupportedPlatform, Message: "unsupported platform"}
@@ -69,17 +68,17 @@ var (
 	ErrInvalidDigest       = &UpdateError{Code: CodeInvalidDigest, Message: "invalid digest"}
 )
 
-// IsDevelopmentVersionError 判断是否为开发版本错误。
+// IsDevelopmentVersionError 判断是否为开发版本错误
 func IsDevelopmentVersionError(err error) bool {
 	return errors.Is(err, ErrDevelopmentVersion)
 }
 
-// IsUnsupportedPlatformError 判断是否为不支持平台错误。
+// IsUnsupportedPlatformError 判断是否为不支持平台错误
 func IsUnsupportedPlatformError(err error) bool {
 	return errors.Is(err, ErrUnsupportedPlatform)
 }
 
-// IsExternalUpdateError 判断当前部署是否必须由外部管理器更新。
+// IsExternalUpdateError 判断当前部署是否必须由外部管理器更新
 func IsExternalUpdateError(err error) bool {
 	return errors.Is(err, ErrExternalUpdate)
 }

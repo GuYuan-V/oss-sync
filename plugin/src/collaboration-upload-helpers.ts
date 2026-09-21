@@ -1,5 +1,5 @@
-// collaboration-upload-helpers.ts — 统一的协作上传参数准备
-// 所有协上传入口必须经过此函数，避免直接构造 {content, baseRevision, operationID}
+// 统一的协作上传参数准备
+// 所有协作上传入口必须经过此函数，避免直接构造 {content, baseRevision, operationID}
 
 import { isValidOperationID, isValidServerRevision, createOperationID } from "./operation-id.js";
 import type { CollaborationBaselineEntry } from "./collaboration-state.js";

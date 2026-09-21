@@ -5,7 +5,7 @@ import (
 	"github.com/helantianshen/oss-sync/pkg/ossplugin"
 )
 
-// modelWireResult 将结果转换为 SDK 协议类型，不直接使用 GORM 模型的 JSON 形态。
+// modelWireResult 将结果转换为 SDK 协议类型，不直接使用 GORM 模型的 JSON 形态
 func modelWireResult(value any, err error) (any, error) {
 	if err != nil {
 		return nil, err

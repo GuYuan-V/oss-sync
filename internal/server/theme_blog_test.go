@@ -21,7 +21,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// zipTheme 构造包含 template.html 的主题 ZIP。
+// zipTheme 构造包含 template.html 的主题 ZIP
 func zipTheme(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -48,7 +48,7 @@ func TestAdminThemeManagement(t *testing.T) {
 	}
 	session, csrf := webLogin(t, router, "root", "root-password-123")
 
-	// 模板列表页显示内置模板。
+	// 模板列表页显示内置模板
 	list := doForm(t, router, http.MethodGet, "/dashboard/admin/themes", nil, session, csrf)
 	if list.Code != http.StatusOK ||
 		!strings.Contains(list.Body.String(), "default") ||
@@ -65,7 +65,7 @@ func TestAdminThemeManagement(t *testing.T) {
 		t.Fatal("theme guide trigger or accessible dialog contract is missing")
 	}
 
-	// 脚手架：从 papertrail 创建副本。
+	// 脚手架：从 papertrail 创建副本
 	scaffold := doForm(t, router, http.MethodPost, "/dashboard/admin/themes/scaffold",
 		url.Values{"base": {"papertrail"}, "name": {"my-blog"}}, session, csrf)
 	if scaffold.Code != http.StatusSeeOther {
@@ -82,7 +82,7 @@ func TestAdminThemeManagement(t *testing.T) {
 		t.Fatalf("theme editor does not preload individual files: %s", editor.Body)
 	}
 
-	// 编辑副本的 template.html。
+	// 编辑副本的 template.html
 	edit := doForm(t, router, http.MethodPost, "/dashboard/admin/themes/my-blog/files/save",
 		url.Values{"path": {"template.html"}, "content": {"<html>edited</html>"}}, session, csrf)
 	if edit.Code != http.StatusSeeOther {
@@ -93,7 +93,7 @@ func TestAdminThemeManagement(t *testing.T) {
 		t.Fatalf("edited content: %q err=%v", content, err)
 	}
 
-	// 下载副本 ZIP。
+	// 下载副本 ZIP
 	download := doForm(t, router, http.MethodGet, "/dashboard/admin/themes/my-blog/download", nil, session, csrf)
 	if download.Code != http.StatusOK {
 		t.Fatalf("download theme: %d", download.Code)
@@ -117,7 +117,7 @@ func TestAdminThemeManagement(t *testing.T) {
 		t.Fatal("downloaded zip missing edited template.html")
 	}
 
-	// 上传主题 ZIP。
+	// 上传主题 ZIP
 	upload := doMultipart(t, router, "/dashboard/admin/themes/upload",
 		map[string]string{"name": "uploaded-theme"}, "file", "template.html",
 		zipTheme(t, map[string]string{"template.html": "<html>uploaded</html>", "style.css": "body{}"}), session, csrf)
@@ -128,7 +128,7 @@ func TestAdminThemeManagement(t *testing.T) {
 		t.Fatalf("uploaded theme file: %v", err)
 	}
 
-	// 已有自定义模板也可作为副本来源。
+	// 已有自定义模板也可作为副本来源
 	list = doForm(t, router, http.MethodGet, "/dashboard/admin/themes", nil, session, csrf)
 	if !strings.Contains(list.Body.String(), `<option value="uploaded-theme">uploaded-theme</option>`) {
 		t.Fatalf("custom theme missing from clone sources: %s", list.Body)
@@ -143,7 +143,7 @@ func TestAdminThemeManagement(t *testing.T) {
 		t.Fatalf("cloned custom style: %q err=%v", clonedStyle, err)
 	}
 
-	// 上传路径穿越 ZIP 应被拒绝。
+	// 上传路径穿越 ZIP 应被拒绝
 	evil := zipTheme(t, map[string]string{"../evil.txt": "x", "template.html": "ok"})
 	badUpload := doMultipart(t, router, "/dashboard/admin/themes/upload",
 		map[string]string{"name": "evil-theme"}, "file", "evil.zip", evil, session, csrf)
@@ -155,7 +155,7 @@ func TestAdminThemeManagement(t *testing.T) {
 		t.Fatal("evil theme directory created")
 	}
 
-	// 内置模板不可下载/删除。
+	// 内置模板不可下载/删除
 	builtinDownload := doForm(t, router, http.MethodGet, "/dashboard/admin/themes/default/download", nil, session, csrf)
 	if builtinDownload.Code != http.StatusSeeOther ||
 		!strings.Contains(builtinDownload.Header().Get("Location"), "error=") {
@@ -166,7 +166,7 @@ func TestAdminThemeManagement(t *testing.T) {
 		!strings.Contains(builtinDelete.Header().Get("Location"), "error=") {
 		t.Fatalf("builtin delete not blocked: %d", builtinDelete.Code)
 	}
-	// 内置模板编辑 API 返回 403（用管理员 Bearer token）。
+	// 内置模板编辑 API 返回 403（用管理员 Bearer token）
 	adminToken := ""
 	code, loginBody := doJSON(t, router, http.MethodPost, "/api/auth/login", "",
 		map[string]string{"username": "root", "password": "root-password-123"})
@@ -185,19 +185,19 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 
-	// 尚无公开 Vault 时显示空目录（不含私密内容）。
+	// 尚无公开 Vault 时显示空目录（不含私密内容）
 	home := doForm(t, router, http.MethodGet, "/", nil, nil)
 	if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), "暂无公开博客") {
 		t.Fatalf("empty public directory: %d", home.Code)
 	}
 
-	// 创建 owner + 仓库 + 文章 + 分享。
+	// 创建 owner + 仓库 + 文章 + 分享
 	ownerToken := registerAndLogin(t, router, "blog-owner", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, ownerToken)
 	uploadViaV1(t, router, ownerToken, "Posts/Hello.md", "# 你好世界\n\n这是我的第一篇文章。\n")
 	uploadViaV1(t, router, ownerToken, "Posts/Private.md", "# 私密文章\n")
 
-	// 创建两篇分享（Hello 公开，Private 删除目标验证过滤）。
+	// 创建两篇分享（Hello 公开，Private 删除目标验证过滤）
 	code, body := doJSON(t, router, http.MethodPost, "/api/shares", ownerToken, map[string]any{
 		"vault_id": vaultID, "target_path": "Posts/Hello.md", "allow_copy": true,
 	})
@@ -206,13 +206,13 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	}
 	shareID := body["share_id"].(string)
 
-	// 管理员登录配置仓库。
+	// 管理员登录配置仓库
 	if _, err := auth.CreateAccount(db, "blog-root", "root-password-123", "admin"); err != nil {
 		t.Fatal(err)
 	}
 	session, csrf := webLogin(t, router, "blog-root", "root-password-123")
 
-	// 先通过仓库设置选择 papertrail 并启用公开入口。
+	// 先通过仓库设置选择 papertrail 并启用公开入口
 	vaultSettings := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings",
 		url.Values{
 			"theme_name":       {"papertrail"},
@@ -223,7 +223,7 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 		t.Fatalf("save vault theme: %d body=%s", vaultSettings.Code, vaultSettings.Body)
 	}
 
-	// Papertrail 功能设置由内置插件页面动态显示并保存博客信息。
+	// Papertrail 功能设置由内置插件页面动态显示并保存博客信息
 	pt := doForm(t, router, http.MethodGet, "/dashboard/plugins/papertrail-settings/settings?vault_id="+vaultID, nil, session, csrf)
 	if pt.Code != http.StatusOK ||
 		!strings.Contains(pt.Body.String(), `name="setting_blog_name"`) ||
@@ -270,7 +270,7 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 		t.Fatalf("papertrail config: %+v", cfg)
 	}
 
-	// 服务器首页直接列出所有已公开博客，不依赖管理员选择单个首页仓库。
+	// 服务器首页直接列出所有已公开博客，不依赖管理员选择单个首页仓库
 	home2 := doForm(t, router, http.MethodGet, "/", nil, nil)
 	if home2.Code != http.StatusOK ||
 		!strings.Contains(home2.Body.String(), "我的笔记") ||
@@ -286,7 +286,7 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 		t.Fatalf("papertrail homepage logo size: %d body=%s", blogHome.Code, blogHome.Body)
 	}
 
-	// 文章页正常渲染。
+	// 文章页正常渲染
 	article := doForm(t, router, http.MethodGet, "/p/"+shareID, nil, nil)
 	if article.Code != http.StatusOK ||
 		!strings.Contains(article.Body.String(), "你好世界") ||
@@ -305,7 +305,7 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 		t.Fatalf("article navigation must not render homepage custom buttons: %s", article.Body)
 	}
 
-	// /b/:vault_id 公开入口（已标记公开）。
+	// /b/:vault_id 公开入口（已标记公开）
 	blogEntry := doForm(t, router, http.MethodGet, "/b/"+vaultID, nil, nil)
 	if blogEntry.Code != http.StatusOK ||
 		!strings.Contains(blogEntry.Body.String(), "我的笔记") ||
@@ -318,7 +318,7 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	if strings.Count(blogEntry.Body.String(), `href="/p/xyz"`) != 1 {
 		t.Fatalf("blog home must render the configured button exactly once: %s", blogEntry.Body)
 	}
-	// 未标记公开的仓库入口 404。
+	// 未标记公开的仓库入口 404
 	otherVaultID := "nonexistent"
 	vaultEntry := doForm(t, router, http.MethodGet, "/b/"+otherVaultID, nil, nil)
 	if vaultEntry.Code != http.StatusNotFound {
@@ -350,7 +350,7 @@ func TestPublicBlogRoutesRenderCustomFragmentsWithoutScriptAndExcludeFromHome(t 
 	}
 	session, csrf := webLogin(t, router, "fragment-admin", "root-password-123")
 
-	// 先设置含有危险链接与属性的自定义片段。
+	// 先设置含有危险链接与属性的自定义片段
 	customHeader := "HEADER_MARKER\n\n<a href=\"https://example.com\">Safe Link</a> <a href=\"javascript:alert(1)\">Unsafe</a>"
 	customFooter := "FOOTER_MARKER\n\n<img src=\"javascript:alert(1)\" onerror=\"alert(1)\" />"
 	res := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings", url.Values{
@@ -532,7 +532,7 @@ func TestThemeScaffoldRejectsBuiltinName(t *testing.T) {
 	}
 }
 
-// doMultipart 发送 multipart 表单（ZIP 上传）。
+// doMultipart 发送 multipart 表单（ZIP 上传）
 func doMultipart(
 	t *testing.T,
 	router *gin.Engine,

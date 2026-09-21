@@ -1,4 +1,4 @@
-// Package syncapi 提供文件同步接口。
+// Package syncapi 提供文件同步接口
 //
 //   - POST /api/sync/check    比较客户端与服务端文件元数据
 //   - POST /api/sync/upload   接收原始字节或 multipart 文件
@@ -6,7 +6,7 @@
 //   - POST /api/sync/delete   删除正文并写入同步墓碑
 //
 // 新客户端使用 /api/vaults/:vault_id/sync 下的 revision 协议；旧接口保留
-// 用于兼容已有客户端。
+// 用于兼容已有客户端
 package syncapi
 
 import (
@@ -51,7 +51,7 @@ func New(db *gorm.DB, cfg *config.Config) *Handler {
 	}
 }
 
-// Register 挂载需要身份认证的同步路由。
+// Register 挂载需要身份认证的同步路由
 func (h *Handler) Register(r *gin.Engine) {
 	g := r.Group("/api/sync", auth.Middleware(h.DB, h.Cfg))
 	{
@@ -102,7 +102,7 @@ func (h *Handler) Register(r *gin.Engine) {
 	{
 		collabAccountEvents.GET("/stream", h.CollabAccountSSE)
 	}
-	// SSE 与长轮询自行鉴权（支持 EventSource 的短期 token 查询参数），不套用 Bearer 中间件。
+	// SSE 与长轮询自行鉴权（支持 EventSource 的短期 token 查询参数），不套用 Bearer 中间件
 	collabEvents := r.Group("/api/vaults/:vault_id/collaborations", allowObsidianDesktopOrigin())
 	{
 		collabEvents.GET("/stream", h.CollabSSE)
@@ -110,11 +110,11 @@ func (h *Handler) Register(r *gin.Engine) {
 	}
 }
 
-// CheckRequest 客户端提交的同步检查请求。
+// CheckRequest 客户端提交的同步检查请求
 //
 // mode：
-//   - "full"（默认）：客户端提交全量文件元数据，服务端对每个文件返回状态。
-//   - "incremental"：客户端只提交本地有变化的文件。
+//   - "full"（默认）：客户端提交全量文件元数据，服务端对每个文件返回状态
+//   - "incremental"：客户端只提交本地有变化的文件
 type CheckRequest struct {
 	Mode  string        `json:"mode"`
 	Files []CheckFileIn `json:"files"`
@@ -122,29 +122,29 @@ type CheckRequest struct {
 
 type CheckFileIn struct {
 	Path  string `json:"path"`
-	MTime int64  `json:"mtime"` // 客户端本地 mtime（Unix 毫秒）。
-	Hash  string `json:"hash"`  // 客户端本地 SHA256。
+	MTime int64  `json:"mtime"` // 客户端本地 mtime（Unix 毫秒）
+	Hash  string `json:"hash"`  // 客户端本地 SHA256
 }
 
 type CheckResponse struct {
-	ServerTime int64          `json:"server_time"` // Unix 毫秒时间戳。
+	ServerTime int64          `json:"server_time"` // Unix 毫秒时间戳
 	Results    []CheckFileOut `json:"results"`
 }
 
 type CheckFileOut struct {
 	Path        string `json:"path"`
-	Status      string `json:"status"` // 取值：upload_needed、download_needed、in_sync、conflict_detected、assume_in_sync。
+	Status      string `json:"status"` // 取值：upload_needed、download_needed、in_sync、conflict_detected、assume_in_sync
 	ServerMTime int64  `json:"server_mtime,omitempty"`
 	ServerHash  string `json:"server_hash,omitempty"`
 }
 
 // Check 按修改时间和哈希比较客户端与服务端文件：
-//   - 本端无记录 + 客户端有文件 → upload_needed。
-//   - 服务端无记录 + 客户端提交了 → upload_needed（首次同步上传后建基线）。
-//   - 客户端 mtime 大于服务端 mtime → upload_needed。
-//   - 客户端 mtime 小于服务端 mtime → download_needed。
-//   - 相等 → in_sync。
-//   - 哈希不同且服务端 mtime 更大 → conflict_detected。
+//   - 本端无记录 + 客户端有文件 → upload_needed
+//   - 服务端无记录 + 客户端提交了 → upload_needed（首次同步上传后建基线）
+//   - 客户端 mtime 大于服务端 mtime → upload_needed
+//   - 客户端 mtime 小于服务端 mtime → download_needed
+//   - 相等 → in_sync
+//   - 哈希不同且服务端 mtime 更大 → conflict_detected
 func (h *Handler) Check(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {
@@ -252,7 +252,7 @@ func (h *Handler) Check(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// classifyFile 把文件分为 markdown、attachment 和 config。
+// classifyFile 把文件分为 markdown、attachment 和 config
 //   - markdown: *.md
 //   - config  : 路径以 .obsidian/ 开头
 //   - attachment: 其余（图片、pdf、mp4 等）
@@ -267,7 +267,7 @@ func classifyFile(path string) string {
 	return "attachment"
 }
 
-// isSafeRelativePath 防止路径逃逸：禁绝对路径、禁 .. 上一级。
+// isSafeRelativePath 防止路径逃逸：禁绝对路径、禁 .. 上一级
 func isSafeRelativePath(p string) bool {
 	_, ok := normalizeRelativePath(p)
 	return ok
@@ -288,7 +288,7 @@ func normalizeRelativePath(p string) (string, bool) {
 	return clean, true
 }
 
-// Download 处理 GET /api/sync/download?path=xxx。
+// Download 处理 GET /api/sync/download?path=xxx
 func (h *Handler) Download(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {
@@ -354,13 +354,13 @@ func (h *Handler) Download(c *gin.Context) {
 	}
 }
 
-// DeleteRequest 删除请求。
+// DeleteRequest 删除请求
 type DeleteRequest struct {
 	Path string `json:"path"`
 }
 
-// Delete 处理 POST /api/sync/delete。
-// 正文立即从服务端存储移除；数据库墓碑保留到设备游标允许压缩。
+// Delete 处理 POST /api/sync/delete
+// 正文立即从服务端存储移除；数据库墓碑保留到设备游标允许压缩
 func (h *Handler) Delete(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {
@@ -498,7 +498,7 @@ func discardDeletedContent(targetPath, stagedPath string) {
 	}
 }
 
-// MarshalCheckResponse 给测试用，把 CheckResponse 序列化为 JSON。
+// MarshalCheckResponse 给测试用，把 CheckResponse 序列化为 JSON
 func MarshalCheckResponse(r CheckResponse) ([]byte, error) {
 	return json.Marshal(r)
 }

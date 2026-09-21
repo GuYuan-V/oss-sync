@@ -295,7 +295,7 @@ func TestAuthBoundary_InvalidDidRejected(t *testing.T) {
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	// 构造携带非法设备标识（含感叹号）的令牌。
+	// 构造携带非法设备标识（含感叹号）的令牌
 	claims := jwt.Claims{UserID: user.ID, Username: user.Username, Role: user.Role, DeviceID: jwt.DeviceID("bad!id")}
 	tok, _ := jwt.Sign(cfg.Auth.JWTSecret, claims, 3600*time.Second)
 	r := gin.New()

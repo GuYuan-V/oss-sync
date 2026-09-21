@@ -1,4 +1,4 @@
-// Package webui 提供登录页面、控制台与管理员视图的渲染。
+// Package webui 提供登录页面、控制台与管理员视图的渲染
 package webui
 
 import (
@@ -25,16 +25,16 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
-// sessionCookie 是登录后网页会话的 HttpOnly cookie。
+// sessionCookie 是登录后网页会话的 HttpOnly cookie
 const sessionCookie = "oss_web_session"
 
-// csrfCookie 是 double-submit CSRF token cookie（非 HttpOnly，供 JS 读取）。
+// csrfCookie 是 double-submit CSRF token cookie（非 HttpOnly，供 JS 读取）
 const csrfCookie = "oss_csrf"
 
 //go:embed templates/*.html templates/partials/*.html assets/*
 var webFS embed.FS
 
-// Handler 持有控制台依赖。
+// Handler 持有控制台依赖
 type Handler struct {
 	DB            *gorm.DB
 	Cfg           *config.Config
@@ -46,18 +46,18 @@ type Handler struct {
 	pluginManager *serverplugin.Manager
 }
 
-// SetUpdateService 注入共享更新服务（直接注入，不代理 Bearer token）。
+// SetUpdateService 注入共享更新服务（直接注入，不代理 Bearer token）
 func (h *Handler) SetUpdateService(svc *update.Service, up *update.Updater) {
 	h.updateSvc = svc
 	h.updater = up
 }
 
-// SetPluginManager 注入服务插件管理器。
+// SetPluginManager 注入服务插件管理器
 func (h *Handler) SetPluginManager(manager *serverplugin.Manager) {
 	h.pluginManager = manager
 }
 
-// layoutData 是所有控制台页面共用的外壳数据。
+// layoutData 是所有控制台页面共用的外壳数据
 type layoutData struct {
 	Page             string // 要渲染的页面模板名，如 "overview"
 	Title            string
@@ -72,7 +72,7 @@ type layoutData struct {
 	PluginAdminPages []serverplugin.PluginAdminPage
 	CurrentVault     *vaultNav // 进入仓库页后为当前仓库导航
 	Flash            string
-	FlashKind        string // success 或 error。
+	FlashKind        string // success 或 error
 	ConsoleThemeName string
 	Language         string
 	ContentHTML      template.HTML
@@ -82,7 +82,7 @@ func (ld layoutData) T(key string, args ...any) string {
 	return translate(ld.Language, key, args...)
 }
 
-// vaultNav 侧边栏"当前仓库"菜单的上下文。
+// vaultNav 侧边栏"当前仓库"菜单的上下文
 type vaultNav struct {
 	ID   string
 	Name string
@@ -120,7 +120,7 @@ func New(db *gorm.DB, cfg *config.Config) (*Handler, error) {
 	}, nil
 }
 
-// Register 注册公开页面、登录会话和受保护的控制台路由。
+// Register 注册公开页面、登录会话和受保护的控制台路由
 func (h *Handler) Register(r *gin.Engine) {
 	r.GET("/ui/assets/console.css", h.styles)
 	r.GET("/ui/assets/app.js", h.script("app.js", "text/javascript; charset=utf-8"))
@@ -128,14 +128,14 @@ func (h *Handler) Register(r *gin.Engine) {
 	r.GET("/ui/assets/theme.js", h.script("theme.js", "text/javascript; charset=utf-8"))
 	r.GET("/ui/themes/:theme/*filepath", h.consoleThemeAsset)
 
-	// 登录、注册、登出（公开）。
+	// 登录、注册、登出（公开）
 	r.GET("/login", h.loginPage)
 	r.POST("/login", h.loginSubmit)
 	r.GET("/register", h.registerPage)
 	r.POST("/register", h.registerSubmit)
 	r.POST("/logout", h.logout)
 
-	// 受保护的控制台。
+	// 受保护的控制台
 	console := r.Group("/dashboard", h.requireSession)
 	{
 		console.GET("", h.overviewPage)
@@ -184,7 +184,7 @@ func (h *Handler) Register(r *gin.Engine) {
 		console.POST("/account/password", h.changePassword)
 	}
 
-	// 管理员控制台。
+	// 管理员控制台
 	adminGroup := console.Group("/admin", h.requireAdmin)
 	{
 		adminGroup.GET("", h.adminUsersPage)
@@ -226,7 +226,7 @@ func (h *Handler) Register(r *gin.Engine) {
 		adminGroup.POST("/backups/:id/delete", h.deleteBackup)
 	}
 
-	// 旧 /admin 路由保留重定向，统一指向控制台与登录入口。
+	// 旧 /admin 路由保留重定向，统一指向控制台与登录入口
 	r.GET("/admin/login", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/login")
 	})
@@ -256,7 +256,7 @@ func (h *Handler) sessionUser(c *gin.Context) *models.User {
 	return user
 }
 
-// setSessionCookie 设置登录会话 cookie 与 CSRF cookie。
+// setSessionCookie 设置登录会话 cookie 与 CSRF cookie
 func (h *Handler) setSessionCookie(c *gin.Context, user *models.User) {
 	token, expiresIn, err := auth.IssueWebToken(h.Cfg, *user)
 	if err != nil {
@@ -271,7 +271,7 @@ func (h *Handler) setSessionCookie(c *gin.Context, user *models.User) {
 		Secure:   requestIsHTTPS(c),
 		SameSite: http.SameSiteLaxMode,
 	})
-	// CSRF token 与会话同生命周期。
+	// CSRF token 与会话同生命周期
 	if _, err := c.Cookie(csrfCookie); err != nil {
 		http.SetCookie(c.Writer, &http.Cookie{
 			Name:     csrfCookie,
@@ -296,7 +296,7 @@ func randomToken() string {
 	return hex.EncodeToString(b)
 }
 
-// requireSession 要求已登录，并校验状态修改请求的 CSRF token。
+// requireSession 要求已登录，并校验状态修改请求的 CSRF token
 func (h *Handler) requireSession(c *gin.Context) {
 	user := h.sessionUser(c)
 	if user == nil {
@@ -359,8 +359,8 @@ func requestedWebLanguage(c *gin.Context) string {
 	if accept == "" {
 		return ""
 	}
-	// 遍历所有语言段，按 q 值选择客户端偏好最高的支持语言。
-	// q=0 表示客户端明确不接受该语言，必须排除。
+	// 遍历所有语言段，按 q 值选择客户端偏好最高的支持语言
+	// q=0 表示客户端明确不接受该语言，必须排除
 	bestLang := ""
 	bestQ := -1.0
 	for _, part := range strings.Split(accept, ",") {
@@ -376,7 +376,7 @@ func requestedWebLanguage(c *gin.Context) string {
 			}
 		}
 		tag := strings.TrimSpace(piece)
-		// 取主语言子标签：zh-CN → zh, en-US → en。
+		// 取主语言子标签：zh-CN → zh, en-US → en
 		if idx := strings.Index(tag, "-"); idx > 0 {
 			tag = tag[:idx]
 		}
@@ -401,7 +401,7 @@ func (h *Handler) t(c *gin.Context, key string, args ...any) string {
 
 // 渲染
 
-// render 使用统一布局渲染控制台页面。page 为页面模板名。
+// render 使用统一布局渲染控制台页面；page 为页面模板名
 func (h *Handler) render(c *gin.Context, status int, page, title string, activeGroup, activePage string, data any) {
 	u := h.webUser(c)
 	ld := layoutData{
@@ -460,7 +460,7 @@ func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 	}
 }
 
-// hasAccessibleTheme 判断当前用户是否可访问至少一个使用目标博客主题的仓库。内置主题设置为全局导航入口，不依赖当前仓库页面。
+// hasAccessibleTheme 判断当前用户是否可访问至少一个使用目标博客主题的仓库；内置主题设置为全局导航入口，不依赖当前仓库页面
 func (h *Handler) hasAccessibleTheme(u *models.User, themeName string) bool {
 	var count int64
 	query := h.DB.Model(&models.VaultSetting{}).
@@ -524,7 +524,7 @@ func pluginHasNoAssociations(db *gorm.DB, pluginID string) bool {
 	return db.Model(&models.ServerPluginAssociation{}).Where("plugin_id = ?", pluginID).Count(&count).Error == nil && count == 0
 }
 
-// renderWithLayout 渲染页面内容并把结果注入统一布局。
+// renderWithLayout 渲染页面内容并把结果注入统一布局
 func (h *Handler) renderWithLayout(c *gin.Context, status int, ld layoutData, data any) {
 	pageData := struct {
 		Layout layoutData
@@ -622,7 +622,7 @@ func (h *Handler) logout(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/login")
 }
 
-// renderAuth 渲染登录/注册等无侧边栏页面。
+// renderAuth 渲染登录/注册等无侧边栏页面
 func (h *Handler) renderAuth(c *gin.Context, status int, page string, data any) {
 	language := requestedWebLanguage(c)
 	if language == "" {

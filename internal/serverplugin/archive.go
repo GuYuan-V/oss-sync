@@ -10,7 +10,7 @@ import (
 	"sort"
 )
 
-// Package 持有已校验的插件包及其解包后的文件。
+// Package 持有已校验的插件包及其解包后的文件
 type Package struct {
 	Manifest      Manifest
 	ManifestBytes []byte

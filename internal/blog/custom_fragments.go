@@ -1,4 +1,3 @@
-// 公开博客自定义页眉与页脚片段的清洗结果。
 package blog
 
 import (

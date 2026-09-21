@@ -1,4 +1,3 @@
-// 公开博客主题使用的嵌入资源。
 package blog
 
 import (
@@ -131,7 +130,7 @@ func (h *Handler) serveDefaultTheme(c *gin.Context, filename string) bool {
 	return true
 }
 
-// serveBuiltinTheme 提供内置主题（default / papertrail）的静态资源。
+// serveBuiltinTheme 提供内置主题（default / papertrail）的静态资源
 func (h *Handler) serveBuiltinTheme(c *gin.Context, theme, filename string) bool {
 	switch theme {
 	case "default":

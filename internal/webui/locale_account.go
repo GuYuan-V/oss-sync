@@ -1,4 +1,3 @@
-// 账户文案
 package webui
 
 func init() {

@@ -1,5 +1,5 @@
-// Package router 从功能处理器组装 HTTP 传输层。
-// 端点行为归各功能包所有，本包负责注册顺序、进程级中间件与健康检查。
+// Package router 从功能处理器组装 HTTP 传输层
+// 端点行为归各功能包所有，本包负责注册顺序、进程级中间件与健康检查
 package router
 
 import (
@@ -25,7 +25,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/webui"
 )
 
-// Dependencies 声明路由组装所需的运行时服务，显式边界避免处理器直接触及进程入口。
+// Dependencies 声明路由组装所需的运行时服务，显式边界避免处理器直接触及进程入口
 type Dependencies struct {
 	Cfg           *config.Config
 	DB            *gorm.DB
@@ -34,7 +34,7 @@ type Dependencies struct {
 	PluginManager *serverplugin.Manager
 }
 
-// Build 创建 Gin 引擎，安装进程级中间件并注册启用的功能路由。
+// Build 创建 Gin 引擎，安装进程级中间件并注册启用的功能路由
 func Build(deps Dependencies) (*gin.Engine, error) {
 	if deps.Cfg == nil {
 		return nil, fmt.Errorf("router: nil config")
@@ -51,7 +51,7 @@ func Build(deps Dependencies) (*gin.Engine, error) {
 		r.Use(deps.PluginManager.Middleware(deps.Cfg))
 	}
 
-	// 超过该阈值的 multipart 请求体由 Gin 写入临时文件，不再常驻内存。
+	// 超过该阈值的 multipart 请求体由 Gin 写入临时文件，不再常驻内存
 	r.MaxMultipartMemory = deps.Cfg.Server.MaxMultipartMemoryMB << 20
 	registerHealthRoutes(r, deps.DB)
 
@@ -110,7 +110,7 @@ func Build(deps Dependencies) (*gin.Engine, error) {
 	return r, nil
 }
 
-// registerHealthRoutes 在功能路由之前暴露存活与就绪检查。
+// registerHealthRoutes 在功能路由之前暴露存活与就绪检查
 func registerHealthRoutes(r *gin.Engine, db *gorm.DB) {
 	r.GET("/healthz", healthz)
 	r.GET("/readyz", readyz(db))

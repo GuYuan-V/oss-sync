@@ -1,4 +1,3 @@
-// 概览文案
 package webui
 
 func init() {

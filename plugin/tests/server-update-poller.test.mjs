@@ -113,7 +113,7 @@ test("poll distinguishes rolled_back vs failed via version mismatch", async () =
     };
     const p2 = new ServerUpdatePoller(depsFailed, { expectedVersion: "1.2.4", intervalMs: 1, maxAttempts: 2, maxDurationMs: 1000 }, async () => {});
     const out2 = await p2.poll();
-    // 版本一致的失败沿失败分支返回，断言兼容两种终态。
+    // 版本一致的失败沿失败分支返回，断言兼容两种终态
     assert.ok(out2.kind === "failed" || out2.kind === "rolled_back");
   } finally { await cleanup(); }
 });
@@ -156,7 +156,7 @@ test("poll validates 401/403 as stale-role auth_error and respects cleanup on di
     assert.equal(out.kind, "auth_error");
     assert.equal(sleepCalls, 0);
 
-    // 插件卸载时 dispose 立即中止轮询。
+    // 插件卸载时 dispose 立即中止轮询
     let calls = 0;
     const depsLong = {
       getStatus: async () => { calls++; return { version: "1.0.0", state: "in_progress", exec_path: "", backup_path: "", update_in_progress: true }; },

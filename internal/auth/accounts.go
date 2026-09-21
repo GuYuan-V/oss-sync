@@ -1,4 +1,3 @@
-// 账号创建、凭据校验与令牌签发集中在本文件。
 package auth
 
 import (
@@ -20,7 +19,7 @@ import (
 
 var registrationMu sync.Mutex
 
-// ValidateAccountInput 校验 API 与 Web 共用的注册限制。
+// ValidateAccountInput 校验 API 与 Web 共用的注册限制
 func ValidateAccountInput(username, password string) error {
 	usernameLength := utf8.RuneCountInString(strings.TrimSpace(username))
 	passwordLength := utf8.RuneCountInString(password)
@@ -30,19 +29,19 @@ func ValidateAccountInput(username, password string) error {
 	if passwordLength < 8 {
 		return errors.New("密码至少需要 8 个字符")
 	}
-	// bcrypt 最多接受 72 字节，超长的 UTF-8 输入直接拒绝。
+	// bcrypt 最多接受 72 字节，超长的 UTF-8 输入直接拒绝
 	if len([]byte(password)) > 72 {
 		return errors.New("密码的 UTF-8 编码不能超过 72 字节")
 	}
 	return nil
 }
 
-// IsUsernameTakenError 判断是否为用户名唯一约束冲突。
+// IsUsernameTakenError 判断是否为用户名唯一约束冲突
 func IsUsernameTakenError(err error) bool {
 	return errors.Is(err, gorm.ErrDuplicatedKey)
 }
 
-// CreateAccount 在同一事务内创建账号及其默认设置。
+// CreateAccount 在同一事务内创建账号及其默认设置
 func CreateAccount(db *gorm.DB, username, password, role string) (*models.User, error) {
 	username = strings.TrimSpace(username)
 	role = strings.ToLower(strings.TrimSpace(role))
@@ -78,8 +77,8 @@ func CreateAccount(db *gorm.DB, username, password, role string) (*models.User, 
 	return &user, nil
 }
 
-// CreateAccountForAnonymousRegistration 在匿名注册时创建账号，首个账号为 admin。
-// 角色判定与写入共用进程锁与数据库事务，避免并发产生多个 admin。
+// CreateAccountForAnonymousRegistration 在匿名注册时创建账号，首个账号为 admin
+// 角色判定与写入共用进程锁与数据库事务，避免并发产生多个 admin
 func CreateAccountForAnonymousRegistration(db *gorm.DB, username, password string) (*models.User, error) {
 	if err := ValidateAccountInput(username, password); err != nil {
 		return nil, err
@@ -122,7 +121,7 @@ func CreateAccountForAnonymousRegistration(db *gorm.DB, username, password strin
 	return user, nil
 }
 
-// AuthenticateCredentials 按用户名查库并比对密码哈希。
+// AuthenticateCredentials 按用户名查库并比对密码哈希
 func AuthenticateCredentials(db *gorm.DB, username, password string) (*models.User, error) {
 	var user models.User
 	if err := db.Where("username = ?", strings.TrimSpace(username)).First(&user).Error; err != nil {
@@ -135,17 +134,17 @@ func AuthenticateCredentials(db *gorm.DB, username, password string) (*models.Us
 	return &user, nil
 }
 
-// AuthenticateToken 校验 Web 控制台 Cookie 中的 JWT。
+// AuthenticateToken 校验 Web 控制台 Cookie 中的 JWT
 func AuthenticateToken(db *gorm.DB, cfg *config.Config, token string) (*models.User, error) {
 	return authenticateBearer(db, cfg, token)
 }
 
-// AuthenticateIdentityToken 校验 Bearer 令牌并返回可选的设备绑定。
+// AuthenticateIdentityToken 校验 Bearer 令牌并返回可选的设备绑定
 func AuthenticateIdentityToken(db *gorm.DB, cfg *config.Config, token string) (*Identity, error) {
 	return authenticateBearerIdentity(db, cfg, token)
 }
 
-// IssueToken 为用户签发 API 用的 JWT。
+// IssueToken 为用户签发 API 用的 JWT
 func IssueToken(cfg *config.Config, user models.User) (string, int64, error) {
 	return issueToken(cfg, jwt.Claims{
 		UserID:       user.ID,
@@ -155,7 +154,7 @@ func IssueToken(cfg *config.Config, user models.User) (string, int64, error) {
 	}, time.Duration(cfg.Auth.JWTTTLHours)*time.Hour)
 }
 
-// IssueWebToken 签发有效期更短的 Web 控制台会话 JWT。
+// IssueWebToken 签发有效期更短的 Web 控制台会话 JWT
 func IssueWebToken(cfg *config.Config, user models.User) (string, int64, error) {
 	return issueToken(cfg, jwt.Claims{
 		UserID:       user.ID,
@@ -165,7 +164,7 @@ func IssueWebToken(cfg *config.Config, user models.User) (string, int64, error) 
 	}, time.Duration(cfg.Auth.EffectiveWebSessionTTLHours())*time.Hour)
 }
 
-// IssueDeviceToken 签发绑定归一化客户端设备 ID 的 JWT。
+// IssueDeviceToken 签发绑定归一化客户端设备 ID 的 JWT
 func IssueDeviceToken(cfg *config.Config, user models.User, deviceID jwt.DeviceID) (string, int64, error) {
 	normalized := deviceauth.NormalizeClientID(string(deviceID))
 	if normalized == "" {
@@ -188,7 +187,7 @@ func issueToken(cfg *config.Config, claims jwt.Claims, ttl time.Duration) (strin
 	return token, int64(ttl / time.Second), nil
 }
 
-// ChangePassword 校验旧密码后写入新密码，并递增 token 版本使此前签发的 JWT 全部失效。
+// ChangePassword 校验旧密码后写入新密码，并递增 token 版本使此前签发的 JWT 全部失效
 func ChangePassword(db *gorm.DB, userID uint, oldPassword, newPassword string) error {
 	var user models.User
 	if err := db.First(&user, userID).Error; err != nil {
@@ -204,7 +203,7 @@ func ChangePassword(db *gorm.DB, userID uint, oldPassword, newPassword string) e
 	return updatePassword(db, userID, newPassword)
 }
 
-// SetPassword 重置用户密码并使此前签发的 JWT 全部失效。
+// SetPassword 重置用户密码并使此前签发的 JWT 全部失效
 func SetPassword(db *gorm.DB, userID uint, newPassword string) error {
 	var user models.User
 	if err := db.First(&user, userID).Error; err != nil {

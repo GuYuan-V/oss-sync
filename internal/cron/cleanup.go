@@ -1,4 +1,4 @@
-// 墓碑、临时文件与快照的定时清理。
+// Package cron 提供后端周期性任务的注册、调度与清理
 package cron
 
 import (
@@ -33,7 +33,7 @@ func NewCleanup(db *gorm.DB, cfg *config.Config) *Cleanup {
 	return &Cleanup{DB: db, Cfg: cfg, now: time.Now}
 }
 
-// CompactTombstones 清理已删除文件的残留正文，并在所有活跃设备确认后删除墓碑。
+// CompactTombstones 清理已删除文件的残留正文，并在所有活跃设备确认后删除墓碑
 func (c *Cleanup) CompactTombstones() error {
 	type vaultOwner struct {
 		UserID  uint
@@ -101,7 +101,7 @@ func (c *Cleanup) compactTombstonesForVault(userID uint, vaultID string, now tim
 	}
 
 	maxCompacted := state.CompactedRevision
-	// 回收站保留期（天），仅对回收站正文类型墓碑生效。
+	// 回收站保留期（天），仅对回收站正文类型墓碑生效
 	retentionDays := 0
 	if vaultID != "" {
 		days, rerr := recycle.RetentionDays(c.DB, vaultID)
@@ -121,7 +121,7 @@ func (c *Cleanup) compactTombstonesForVault(userID uint, vaultID string, now tim
 			return err
 		}
 		for _, f := range files {
-			// 回收站正文在保留期内必须保留，等待恢复。
+			// 回收站正文在保留期内必须保留，等待恢复
 			if vaultID != "" && f.StorageKey != "" &&
 				strings.HasPrefix(filepath.ToSlash(f.StorageKey), "vaults/"+vaultID+"/recycle/") {
 				if !f.DeletedAt.Valid ||
@@ -154,7 +154,7 @@ func (c *Cleanup) compactTombstonesForVault(userID uint, vaultID string, now tim
 	})
 }
 
-// PurgeOrphanAttachments 清理超过宽限期且未被引用的旧版附件。
+// PurgeOrphanAttachments 清理超过宽限期且未被引用的旧版附件
 func (c *Cleanup) PurgeOrphanAttachments() error {
 	var users []models.User
 	if err := c.DB.Find(&users).Error; err != nil {
@@ -209,7 +209,7 @@ func (c *Cleanup) purgeOrphansForVault(userID uint, vaultID string, now time.Tim
 
 	grace := 24 * time.Hour
 	for _, a := range attachments {
-		// 已进入 Revision 协议的附件必须走同步删除，确保其他设备收到墓碑。
+		// 已进入 Revision 协议的附件必须走同步删除，确保其他设备收到墓碑
 		if a.Revision > 0 {
 			continue
 		}
@@ -235,7 +235,7 @@ func (c *Cleanup) purgeOrphansForVault(userID uint, vaultID string, now time.Tim
 	return nil
 }
 
-// extractAttachmentRefs 提取 Markdown、Obsidian、frontmatter 和 HTML 中的附件引用。
+// extractAttachmentRefs 提取 Markdown、Obsidian、frontmatter 和 HTML 中的附件引用
 func extractAttachmentRefs(content, mdPath string) []string {
 	refs := map[string]struct{}{}
 	dir := path.Dir(mdPath)
@@ -276,7 +276,7 @@ var (
 	yamlImageRe     = regexp.MustCompile(`(?m)^\s*(?:cover|image|banner|thumbnail)\s*:\s*(\S+)`)
 )
 
-// splitFrontmatter 分离文档开头的 frontmatter。
+// splitFrontmatter 分离文档开头的 frontmatter
 func splitFrontmatter(content string) (frontmatter, body string) {
 	if !strings.HasPrefix(content, "---\n") && !strings.HasPrefix(content, "---\r\n") {
 		return "", content
@@ -295,7 +295,7 @@ func splitFrontmatter(content string) (frontmatter, body string) {
 	return fm, body
 }
 
-// resolveRel 以 Markdown 文件所在目录为基准解析附件路径。
+// resolveRel 以 Markdown 文件所在目录为基准解析附件路径
 func resolveRel(dir, ref string) string {
 	if strings.HasPrefix(ref, "/") {
 		return strings.TrimPrefix(ref, "/")
@@ -311,7 +311,7 @@ func normalizeRel(p string) string {
 	return path.Clean(p)
 }
 
-// PurgeExpiredHistory 清理超过保留期的文件历史快照。
+// PurgeExpiredHistory 清理超过保留期的文件历史快照
 func (c *Cleanup) PurgeExpiredHistory() error {
 	var vaultIDs []string
 	if err := c.DB.Model(&models.Vault{}).Distinct("id").Pluck("id", &vaultIDs).Error; err != nil {

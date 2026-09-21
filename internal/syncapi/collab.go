@@ -1,4 +1,3 @@
-// 协作接口
 package syncapi
 
 import (
@@ -15,7 +14,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
-// collabOut 协作关系输出。
+// collabOut 协作关系输出
 type collabOut struct {
 	ID            uint   `json:"id"`
 	FileID        uint   `json:"file_id"`
@@ -70,7 +69,7 @@ func (h *Handler) collabOuts(rows []models.Collaboration) ([]collabOut, error) {
 	return out, nil
 }
 
-// CollabList 列出当前用户在该仓库的协作关系（owner/manager 看全部，协作者看与自己相关）。
+// CollabList 列出当前用户在该仓库的协作关系（owner/manager 看全部，协作者看与自己相关）
 func (h *Handler) CollabList(c *gin.Context) {
 	u, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
@@ -118,7 +117,7 @@ func (h *Handler) CollabList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"collaborations": out})
 }
 
-// CollabInbox 列出当前用户收到的跨仓库协作关系。
+// CollabInbox 列出当前用户收到的跨仓库协作关系
 func (h *Handler) CollabInbox(c *gin.Context) {
 	u, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
@@ -137,7 +136,7 @@ func (h *Handler) CollabInbox(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"collaborations": out})
 }
 
-// CollabInvite 邀请用户协作 Markdown 文件。
+// CollabInvite 邀请用户协作 Markdown 文件
 func (h *Handler) CollabInvite(c *gin.Context) {
 	u, vault, _, _, ok := h.requireVaultActorSync(c)
 	if !ok {
@@ -170,7 +169,7 @@ func (h *Handler) CollabInvite(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
-	// 通知邀请双方，并唤醒旧客户端绑定的 Vault 事件通道。
+	// 通知邀请双方，并唤醒旧客户端绑定的 Vault 事件通道
 	h.publishCollaborationEvent(collaboration.Event{
 		VaultID: vault.ID, FileID: row.FileID, Kind: "invited", At: time.Now().UnixMilli(),
 	}, []uint{row.OwnerID, row.CollaboratorID})
@@ -182,7 +181,7 @@ func (h *Handler) CollabInvite(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{})
 }
 
-// CollabRespond 被邀请者接受或拒绝。协作者即使尚未获得 Vault 成员资格也能响应邀请。
+// CollabRespond 被邀请者接受或拒绝；协作者即使尚未获得 Vault 成员资格也能响应邀请
 func (h *Handler) CollabRespond(c *gin.Context) {
 	u, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
@@ -218,7 +217,7 @@ func (h *Handler) CollabRespond(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// CollabRevoke 撤回邀请或解除协作（owner/manager）。
+// CollabRevoke 撤回邀请或解除协作（owner/manager）
 func (h *Handler) CollabRevoke(c *gin.Context) {
 	u, _, _, _, ok := h.requireVaultActorSync(c)
 	if !ok {
@@ -244,7 +243,7 @@ func (h *Handler) CollabRevoke(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// CollabLeave 供已接受的协作者主动结束协作。
+// CollabLeave 供已接受的协作者主动结束协作
 func (h *Handler) CollabLeave(c *gin.Context) {
 	u, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
@@ -270,8 +269,8 @@ func (h *Handler) CollabLeave(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// CollabSSE 建立 SSE 事件流。由于 EventSource 不能带 Authorization 头，
-// HTTPS 或本机回环连接允许短期 JWT 查询参数 token + client_id。
+// CollabSSE 建立 SSE 事件流；由于 EventSource 不能带 Authorization 头，
+// HTTPS 或本机回环连接允许短期 JWT 查询参数 token + client_id
 func (h *Handler) CollabSSE(c *gin.Context) {
 	user, vault, ok := h.collabSSEAuthorize(c)
 	if !ok {
@@ -286,7 +285,7 @@ func (h *Handler) CollabSSE(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
 
-	// 先发一条 ready 事件。
+	// 先发一条 ready 事件
 	fmt.Fprintf(c.Writer, "event: ready\ndata: {\"vault_id\":%q}\n\n", vault.ID)
 	c.Writer.Flush()
 
@@ -311,7 +310,7 @@ func (h *Handler) CollabSSE(c *gin.Context) {
 	}
 }
 
-// CollabPoll 长轮询协作事件：wait=30，返回 changed/revoked。
+// CollabPoll 长轮询协作事件：wait=30，返回 changed/revoked
 func (h *Handler) CollabPoll(c *gin.Context) {
 	_, vault, ok := h.collabSSEAuthorize(c)
 	if !ok {
@@ -334,7 +333,7 @@ func (h *Handler) CollabPoll(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"changed": false, "version": version, "vault_id": vault.ID})
 }
 
-// collabSSEAuthorize 校验 SSE/轮询身份：Bearer 或短期 token 查询参数。
+// collabSSEAuthorize 校验 SSE/轮询身份：Bearer 或短期 token 查询参数
 func (h *Handler) collabSSEAuthorize(c *gin.Context) (*models.User, models.Vault, bool) {
 	user, ok := h.collabEventUser(c)
 	if !ok {
@@ -342,7 +341,7 @@ func (h *Handler) collabSSEAuthorize(c *gin.Context) (*models.User, models.Vault
 	}
 	vault, _, err := vaultaccess.Resolve(h.DB, user.ID, c.Param("vault_id"))
 	if err != nil {
-		// 允许参与协作的用户订阅事件（无需 Vault 成员资格）。
+		// 允许参与协作的用户订阅事件（无需 Vault 成员资格）
 		var collabCount int64
 		if err2 := h.DB.Model(&models.Collaboration{}).
 			Where("vault_id = ? AND collaborator_id = ?", c.Param("vault_id"), user.ID).

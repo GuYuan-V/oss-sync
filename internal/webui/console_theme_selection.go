@@ -1,4 +1,3 @@
-// 控制台主题选择
 package webui
 
 import (

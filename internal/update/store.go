@@ -1,4 +1,3 @@
-// 更新存储
 package update
 
 import (
@@ -14,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// CheckedCandidate 是一次已校验的更新候选，携带过期时间与校验标识。
+// CheckedCandidate 是一次已校验的更新候选，携带过期时间与校验标识
 type CheckedCandidate struct {
 	ID        string    `json:"id"`
 	Candidate Candidate `json:"candidate"`
@@ -126,7 +125,7 @@ func acquireFileLock(root string) (func(), error) {
 			_ = f.Sync()
 			_ = f.Close()
 			release := func() {
-				// 仅当锁仍归当前进程所有时删除。
+				// 仅当锁仍归当前进程所有时删除
 				if data, err := os.ReadFile(lockPath); err == nil {
 					var cur lockMeta
 					if json.Unmarshal(data, &cur) == nil && cur.PID == selfPID {
@@ -142,7 +141,7 @@ func acquireFileLock(root string) (func(), error) {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		// 锁已存在，先确认持有者。
+		// 锁已存在，先确认持有者
 		data, err := os.ReadFile(lockPath)
 		if err != nil {
 			time.Sleep(10 * time.Millisecond)
@@ -150,12 +149,12 @@ func acquireFileLock(root string) (func(), error) {
 		}
 		var meta lockMeta
 		if err := json.Unmarshal(data, &meta); err != nil {
-			// 兼容纯数字 PID 的旧格式。
+			// 兼容纯数字 PID 的旧格式
 			var pid int
 			if _, err := fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &pid); err == nil {
 				meta.PID = pid
 			} else {
-				// 锁内容损坏时无法确认持有者，保守等待而不抢占。
+				// 锁内容损坏时无法确认持有者，保守等待而不抢占
 				time.Sleep(10 * time.Millisecond)
 				continue
 			}
@@ -164,7 +163,7 @@ func acquireFileLock(root string) (func(), error) {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		// 持有者已退出，尝试清理陈旧锁，但需确认持有者未变化。
+		// 持有者已退出，尝试清理陈旧锁，但需确认持有者未变化
 		curData, err := os.ReadFile(lockPath)
 		if err != nil {
 			continue
@@ -183,7 +182,7 @@ func acquireFileLock(root string) (func(), error) {
 			continue
 		}
 		_ = os.Remove(lockPath)
-		// 清理后立即重试，不等待。
+		// 清理后立即重试，不等待
 		continue
 	}
 	return nil, newUpdateError(CodeCorruptedState, "failed to acquire state lock", nil)
@@ -211,7 +210,7 @@ func atomicWriteJSON(path string, v any) error {
 	return nil
 }
 
-// SetAtomicWriteJSONFn 注入 atomicWriteJSON，供测试使用。
+// SetAtomicWriteJSONFn 注入 atomicWriteJSON，供测试使用
 func SetAtomicWriteJSONFn(fn func(string, any) error) {
 	if fn == nil {
 		atomicWriteJSONFn = atomicWriteJSON
@@ -244,7 +243,7 @@ func isAllowedTransition(from, to OperationState) bool {
 	if from.IsTerminal() || from == to {
 		return false
 	}
-	// 任意活跃阶段均允许进入失败态。
+	// 任意活跃阶段均允许进入失败态
 	if to == StateFailed {
 		switch from {
 		case StateInProgress, StatePrepare, StateFetchRelease, StateSelectAsset, StateDownload, StateVerify, StateBackup, StateSwap, StateChecking:
@@ -253,11 +252,11 @@ func isAllowedTransition(from, to OperationState) bool {
 			return false
 		}
 	}
-	// 仅允许从发布检查阶段进入已是最新态。
+	// 仅允许从发布检查阶段进入已是最新态
 	if to == StateUpToDate {
 		return from == StateFetchRelease || from == StateChecking
 	}
-	// 持久化操作的线性状态图。
+	// 持久化操作的线性状态图
 	linear := map[OperationState]OperationState{
 		StateInProgress:   StatePrepare,
 		StatePrepare:      StateFetchRelease,
@@ -271,7 +270,7 @@ func isAllowedTransition(from, to OperationState) bool {
 	if nxt, ok := linear[from]; ok && to == nxt {
 		return true
 	}
-	// 兼容旧入口：允许 idle 与 checking 进入进行中。
+	// 兼容旧入口：允许 idle 与 checking 进入进行中
 	if from == StateIdle && to == StateInProgress {
 		return true
 	}
@@ -310,7 +309,7 @@ func (s *persistedState) retainHistory() {
 	}
 }
 
-// PublicOperation 是对外暴露的精简操作视图，不含下载 URL 与本地路径。
+// PublicOperation 是对外暴露的精简操作视图，不含下载 URL 与本地路径
 type PublicOperation struct {
 	ID        string         `json:"id"`
 	State     OperationState `json:"state"`
@@ -320,7 +319,7 @@ type PublicOperation struct {
 	Error     string         `json:"error,omitempty"`
 }
 
-// ManagerStatus 是对外暴露的精简状态，不含 GitHub/可执行路径。
+// ManagerStatus 是对外暴露的精简状态，不含 GitHub/可执行路径
 type ManagerStatus struct {
 	Active  *PublicOperation  `json:"active,omitempty"`
 	History []PublicOperation `json:"history"`

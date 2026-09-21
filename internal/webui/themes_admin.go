@@ -1,4 +1,3 @@
-// 主题管理
 package webui
 
 import (
@@ -23,7 +22,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/serverplugin"
 )
 
-// themeRow 模板管理页行。
+// themeRow 模板管理页行
 type themeRow struct {
 	Name      string
 	Source    string

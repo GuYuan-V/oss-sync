@@ -1,4 +1,4 @@
-// Obsidian 插件入口。
+// Obsidian 插件入口
 
 import {
   App,
@@ -85,7 +85,7 @@ export default class OSSPlugin extends Plugin {
   private readonly diagnostics = new Diagnostics((event) => {
     if (this.settings.diagnosticsEnabled) {
       console.log("[oss-sync]", event.kind, JSON.stringify(event));
-      // 同时用 warn 级别输出，确保过滤 debug 的控制台仍可见关键协作失败。
+      // 同时用 warn 级别输出，确保过滤 debug 的控制台仍可见关键协作失败
       if (event.kind === "api_error" || event.kind === "collab_upload_attempt") {
         console.warn("[oss-sync]", event.kind, JSON.stringify(event));
       }
@@ -266,7 +266,7 @@ export default class OSSPlugin extends Plugin {
             new Notice(this.t("sync.error", { error: this.localizedError(error) }));
           });
         }
-        // 管理员自动检查更新，有新版本时用 Notice 提示。
+        // 管理员自动检查更新，有新版本时用 Notice 提示
         if (this.isAdmin()) {
           void this.autoCheckUpdates();
         }
@@ -363,7 +363,7 @@ export default class OSSPlugin extends Plugin {
     } else {
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
     }
-    // 旧版本遗留的密码在加载后不保留。
+    // 旧版本遗留的密码在加载后不保留
     this.settings.password = "";
     if (!this.settings.clientId) {
       this.settings.clientId = createClientID();
@@ -436,9 +436,9 @@ export default class OSSPlugin extends Plugin {
       at: Date.now(),
       enabled,
     });
-    // 立即输出 runtime_info 以便控制台可关联版本。
+    // 立即输出 runtime_info 以便控制台可关联版本
     this.emitRuntimeInfo();
-    // 输出一条测试事件，确保控制台可见。
+    // 输出一条测试事件，确保控制台可见
     this.diagnostics.record({
       kind: "collab_upload_attempt",
       at: Date.now(),
@@ -462,7 +462,7 @@ export default class OSSPlugin extends Plugin {
     if (!hasOrdinary && !hasCollab) return;
     this.conflictWarningLast.set(key, now);
     new Notice(this.t("notice.conflictEditWarning", { path: key }), 6000);
-    // 自动揭示侧边栏，帮助用户第一时间发现。
+    // 自动揭示侧边栏，帮助用户第一时间发现
     void this.activateSidebar().catch(() => {});
   }
 
@@ -512,17 +512,17 @@ export default class OSSPlugin extends Plugin {
     return this.api.hasToken();
   }
 
-  /** 当前登录用户是否服务端管理员；在线更新仅对管理员开放。 */
+  /** 当前登录用户是否服务端管理员；在线更新仅对管理员开放*/
   isAdmin(): boolean {
     return this.settings.role === "admin";
   }
 
-  /** 查询 GitHub Release 并返回当前/远端版本对比结果。 */
+  /** 查询 GitHub Release 并返回当前/远端版本对比结果*/
   async checkPluginUpdate(): Promise<UpdateCheckResult> {
     return checkForUpdates(this.settings.updateRepo, this.manifest.version, this.githubReleaseSource());
   }
 
-  /** 下载最新 Release 三件套、原子替换并重载插件；失败时回滚。 */
+  /** 下载最新 Release 三件套、原子替换并重载插件；失败时回滚*/
   async updatePluginFromRelease(): Promise<void> {
     const source = this.githubReleaseSource();
     const check = await checkForUpdates(this.settings.updateRepo, this.manifest.version, source);
@@ -553,7 +553,7 @@ export default class OSSPlugin extends Plugin {
   }
 
   createServerUpdatePoller(opts: ServerUpdatePollerOptions): ServerUpdatePoller {
-    // 先清理旧轮询器，避免计时器泄漏。
+    // 先清理旧轮询器，避免计时器泄漏
     this.serverUpdatePoller?.dispose();
     const poller = new ServerUpdatePoller(
       {
@@ -572,7 +572,7 @@ export default class OSSPlugin extends Plugin {
   }
 
   private async applyPluginUpdateFiles(files: UpdateFile[]): Promise<void> {
-    // 重载前停止同步与协作引擎，避免旧实例在替换文件后继续轮询。
+    // 重载前停止同步与协作引擎，避免旧实例在替换文件后继续轮询
     const reload = getPluginReloadController(this.app);
     const restartCollaboration = this.collabManager.isRunning();
     this.syncEngine.stop();
@@ -587,7 +587,7 @@ export default class OSSPlugin extends Plugin {
         files,
       });
     } catch (error) {
-      // 替换前失败时当前实例仍存活，恢复被暂停的后台任务。
+      // 替换前失败时当前实例仍存活，恢复被暂停的后台任务
       if (this.loaded) {
         this.syncEngine.start();
         if (restartCollaboration) this.collabManager.start();
@@ -718,7 +718,7 @@ export default class OSSPlugin extends Plugin {
       item.setTitle(this.t(existing ? "menu.unshare" : "menu.share"));
       item.setIcon(existing ? "x" : "share");
     } catch {
-      // 分享状态加载失败时保留默认分享操作。
+      // 分享状态加载失败时保留默认分享操作
     }
   }
 
@@ -870,7 +870,7 @@ export default class OSSPlugin extends Plugin {
         plugin_id: pluginID,
         command_id: hook.id ?? "",
       });
-      // 响应基于调用时的文档快照计算，不覆盖其后产生的新编辑。
+      // 响应基于调用时的文档快照计算，不覆盖其后产生的新编辑
       if (editor.getValue() !== content || view?.file !== file || file?.path !== path) {
         new Notice(this.t("notice.pluginCommandDocumentChanged"));
         return;
@@ -976,7 +976,7 @@ interface PluginManagerController {
   enablePlugin(id: string): Promise<void>;
 }
 
-/** 包装未公开的 app.plugins，实现 disablePlugin/enablePlugin 无感重载。 */
+/** 包装未公开的 app.plugins，实现 disablePlugin/enablePlugin 无感重载*/
 function getPluginReloadController(app: App): ReloadController {
   const manager = Reflect.get(app, "plugins") as Partial<PluginManagerController> | null | undefined;
   if (

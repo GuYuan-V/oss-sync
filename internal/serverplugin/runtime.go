@@ -25,7 +25,7 @@ const (
 
 var ErrInvalidModule = errors.New("invalid server plugin wasm module")
 
-// Runtime 编译并调用服务端插件，不向其开放宿主导入。
+// Runtime 编译并调用服务端插件，不向其开放宿主导入
 type Runtime struct {
 	runtime wazero.Runtime
 }

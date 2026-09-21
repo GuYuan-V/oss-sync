@@ -74,7 +74,7 @@ func TestChangePasswordInvalidatesOldToken(t *testing.T) {
 	if _, err := auth.AuthenticateToken(db, cfg, oldToken); err == nil {
 		t.Fatal("old token remained valid after password change")
 	}
-	// 旧密码不能再登录。
+	// 旧密码不能再登录
 	if _, err := auth.AuthenticateCredentials(db, "change-me", "password123"); err == nil {
 		t.Fatal("old password still authenticates")
 	}

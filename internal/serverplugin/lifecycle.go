@@ -290,8 +290,8 @@ func restorePluginError(err error) error {
 	return fmt.Errorf("restore plugin files after failed delete: %w", err)
 }
 
-// applyMigrations 将待定迁移批次放在单个事务内执行，同时兼容 SQLite 与 PostgreSQL。
-// 后续生命周期钩子可能产生外部副作用，已提交的迁移必须保持向后兼容。
+// applyMigrations 将待定迁移批次放在单个事务内执行，同时兼容 SQLite 与 PostgreSQL
+// 后续生命周期钩子可能产生外部副作用，已提交的迁移必须保持向后兼容
 func (m *Manager) applyMigrations(ctx context.Context, pluginID string, migrations []RegisteredMigration) error {
 	if len(migrations) == 0 {
 		return nil

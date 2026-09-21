@@ -119,7 +119,7 @@ func TestPluginManagerRunsExecutablePluginThroughLifecycle(t *testing.T) {
 	}
 }
 
-// 打包真实 SDK 示例而非整个测试运行体，带竞态检测的测试二进制体积可能超出生产包体积上限。
+// 打包真实 SDK 示例而非整个测试运行体，带竞态检测的测试二进制体积可能超出生产包体积上限
 func buildExamplePlugin(t *testing.T) []byte {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "plugin.exe")

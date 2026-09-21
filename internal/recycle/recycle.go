@@ -1,5 +1,4 @@
-// Package recycle 将删除内容移入 Vault 回收站并保留墓碑。
-// Restore 负责恢复，cleanup 负责永久删除过期条目。
+// Package recycle 将删除内容移入 Vault 回收站并保留墓碑
 package recycle
 
 import (
@@ -17,7 +16,7 @@ import (
 
 var ErrRetentionExpired = errors.New("recycle retention has expired")
 
-// RetentionDays 返回仓库的回收站保留天数，0 表示继承系统默认值。
+// RetentionDays 返回策略解析后的回收站保留天数，仓库设置可进一步缩短保留期
 func RetentionDays(db *gorm.DB, vaultID string) (int, error) {
 	var setting models.VaultSetting
 	err := db.Where("vault_id = ?", vaultID).First(&setting).Error
@@ -58,12 +57,12 @@ func CheckRestorable(db *gorm.DB, file models.File, now time.Time) error {
 	return nil
 }
 
-// Key 返回某 File 在回收站中的存储键。
+// Key 返回某 File 在回收站中的存储键
 func Key(vaultID string, fileID uint) string {
 	return filepath.ToSlash(filepath.Join("vaults", vaultID, "recycle", strconv.FormatUint(uint64(fileID), 10)))
 }
 
-// DiskPath 返回回收站正文的绝对路径。
+// DiskPath 返回回收站正文的绝对路径
 func DiskPath(dataDir string, file models.File) string {
 	if file.StorageKey == "" {
 		return ""
@@ -71,7 +70,7 @@ func DiskPath(dataDir string, file models.File) string {
 	return filepath.Join(dataDir, filepath.FromSlash(file.StorageKey))
 }
 
-// MoveIn 将 contentPath 移入回收站，返回回收站存储键。
+// MoveIn 将 contentPath 移入回收站，返回回收站存储键
 func MoveIn(dataDir, vaultID string, fileID uint, contentPath string) (string, error) {
 	key := Key(vaultID, fileID)
 	dest := filepath.Join(dataDir, filepath.FromSlash(key))
@@ -87,7 +86,7 @@ func MoveIn(dataDir, vaultID string, fileID uint, contentPath string) (string, e
 	return key, nil
 }
 
-// MoveOut 将回收站正文移回 contentPath。
+// MoveOut 将回收站正文移回 contentPath
 func MoveOut(dataDir string, file models.File, contentPath string) error {
 	src := DiskPath(dataDir, file)
 	if src == "" {
@@ -105,7 +104,7 @@ func MoveOut(dataDir string, file models.File, contentPath string) error {
 	return nil
 }
 
-// Remove 删除回收站正文，忽略不存在的情况。
+// Remove 删除回收站正文，忽略不存在的情况
 func Remove(dataDir string, file models.File) error {
 	abs := DiskPath(dataDir, file)
 	if abs == "" {
@@ -118,7 +117,7 @@ func Remove(dataDir string, file models.File) error {
 	return nil
 }
 
-// CleanupVault 删除某仓库的全部回收站正文。
+// CleanupVault 删除某仓库的全部回收站正文
 func CleanupVault(dataDir, vaultID string) error {
 	return os.RemoveAll(filepath.Join(dataDir, "vaults", vaultID, "recycle"))
 }

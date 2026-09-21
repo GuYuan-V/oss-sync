@@ -46,7 +46,7 @@ func TestCheckCapability_DevelopmentVersionRejected(t *testing.T) {
 	withVersion(t, "1.2.3")
 	err = CheckCapability(exe, "linux", "amd64")
 	if err != nil {
-		// 合法版本不得报开发版本错误，其余平台相关错误允许。
+		// 合法版本不得报开发版本错误，其余平台相关错误允许
 		if IsDevelopmentVersionError(err) {
 			t.Fatalf("valid version should not be development error, got %v", err)
 		}
@@ -114,7 +114,7 @@ func TestCheckCapability_UnwritableDirectory(t *testing.T) {
 	if err := os.WriteFile(exe, []byte("bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// 以文件冒充父目录，构造不可写的目录场景。
+	// 以文件冒充父目录，构造不可写的目录场景
 	fileAsDir := filepath.Join(dir, "file-as-dir")
 	if err := os.WriteFile(fileAsDir, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)

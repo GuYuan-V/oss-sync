@@ -1,4 +1,3 @@
-// 运行时配置
 package settingspolicy
 
 import (
@@ -40,8 +39,8 @@ func CustomFragmentsEnabled(db *gorm.DB) bool {
 	return system.CustomFragmentsEnabled
 }
 
-// HistoryRetentionDaysForVault 返回仓库所属用户的文件历史保留天数。
-// 0 表示不清理。
+// HistoryRetentionDaysForVault 返回仓库所属用户的文件历史保留天数
+// 0 表示不清理
 func HistoryRetentionDaysForVault(db *gorm.DB, vaultID string) (int, error) {
 	var vault models.Vault
 	if err := db.Select("owner_id").Where("id = ?", vaultID).First(&vault).Error; err != nil {

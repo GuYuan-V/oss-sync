@@ -1,4 +1,3 @@
-// 系统管理
 package webui
 
 import (

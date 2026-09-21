@@ -69,7 +69,7 @@ func TestBrokerPublishToDeliversEventOnSeparateTopic(t *testing.T) {
 func TestBrokerWaitVersion(t *testing.T) {
 	b := NewBroker()
 	b.Publish(Event{VaultID: "w", Kind: "changed"})
-	// version 已经是 1，last=0 应立即返回。
+	// version 已经是 1，last=0 应立即返回
 	v, changed := b.WaitVersion("w", 0, 2*time.Second)
 	if !changed || v != 1 {
 		t.Fatalf("wait version: v=%d changed=%v", v, changed)

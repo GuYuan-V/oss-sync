@@ -1,4 +1,3 @@
-// 账户设置
 package webui
 
 import (

@@ -1,4 +1,3 @@
-// 公开博客发现与首页渲染。
 package blog
 
 import (
@@ -17,7 +16,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
-// PaperTrailConfig 是 papertrail 博客设置的结构化配置。
+// PaperTrailConfig 是 papertrail 博客设置的结构化配置
 type PaperTrailConfig struct {
 	LogoURL     string             `json:"logo_url"`
 	LogoSize    int                `json:"logo_size"`
@@ -27,7 +26,7 @@ type PaperTrailConfig struct {
 	Buttons     []PaperTrailButton `json:"buttons"`
 }
 
-// PaperTrailButton 博客自定义按钮。
+// PaperTrailButton 博客自定义按钮
 type PaperTrailButton struct {
 	Label    string `json:"label"`
 	URL      string `json:"url"`
@@ -35,7 +34,7 @@ type PaperTrailButton struct {
 	Position int    `json:"position"`
 }
 
-// ParsePaperTrailConfig 从 ThemeConfig 解析结构化配置。
+// ParsePaperTrailConfig 从 ThemeConfig 解析结构化配置
 func ParsePaperTrailConfig(themeConfig map[string]any) PaperTrailConfig {
 	cfg := PaperTrailConfig{}
 	if themeConfig == nil {
@@ -100,7 +99,7 @@ func parsePaperTrailLogoSize(raw string) int {
 	return value
 }
 
-// HomePost 首页文章条目。
+// HomePost 首页文章条目
 type HomePost struct {
 	Title   string
 	Summary string
@@ -109,7 +108,7 @@ type HomePost struct {
 	Time    time.Time
 }
 
-// PublicBlog 描述未登录首页上可发现的一个 Vault。
+// PublicBlog 描述未登录首页上可发现的一个 Vault
 type PublicBlog struct {
 	Name        string
 	Description string
@@ -122,7 +121,7 @@ type publicHomeData struct {
 	Blogs []PublicBlog
 }
 
-// handleHome 列出显式开启公开博客的全部 Vault。
+// handleHome 列出显式开启公开博客的全部 Vault
 func (h *Handler) handleHome(c *gin.Context) {
 	var settings []models.VaultSetting
 	if err := h.DB.Where("is_public_blog = ?", true).Order("updated_at desc").Find(&settings).Error; err != nil {
@@ -166,7 +165,7 @@ func (h *Handler) renderPublicHome(c *gin.Context, data publicHomeData) {
 	}
 }
 
-// homePosts 列出仓库中已单篇分享且目标仍存在的 Markdown 文章。
+// homePosts 列出仓库中已单篇分享且目标仍存在的 Markdown 文章
 func (h *Handler) homePosts(userID uint, vaultID string) []HomePost {
 	var shares []models.Share
 	if err := h.DB.Where(
@@ -201,7 +200,7 @@ func (h *Handler) homePosts(userID uint, vaultID string) []HomePost {
 	return posts
 }
 
-// extractPostMeta 提取文章标题与摘要；标题优先使用 frontmatter，否则使用文件名。
+// extractPostMeta 提取文章标题与摘要；标题优先使用 frontmatter，否则使用文件名
 func extractPostMeta(raw, fallbackTitle string) (string, string) {
 	title := basenameNoExt(fallbackTitle)
 	summary := ""
@@ -238,7 +237,7 @@ func extractPostMeta(raw, fallbackTitle string) (string, string) {
 	return title, summary
 }
 
-// handleVaultBlog 处理 /b/:vault_id 公开博客入口。
+// handleVaultBlog 处理 /b/:vault_id 公开博客入口
 func (h *Handler) handleVaultBlog(c *gin.Context) {
 	vaultID := c.Param("vault_id")
 	var vault models.Vault

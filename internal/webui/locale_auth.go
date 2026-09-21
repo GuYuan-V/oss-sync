@@ -1,4 +1,3 @@
-// 认证文案
 package webui
 
 func init() {

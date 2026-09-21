@@ -1,4 +1,4 @@
-// 文件修改记录弹窗：展示指定路径在服务端的历史版本列表。
+// 文件修改记录弹窗：展示指定路径在服务端的历史版本列表
 import { App, Modal, Notice } from "obsidian";
 import type OSSPlugin from "./main";
 import type { HistoryEntry } from "./api";

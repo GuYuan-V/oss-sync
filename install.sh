@@ -106,7 +106,7 @@ download_release_image() {
   checksums_url="${RELEASE_BASE_URL%/}/checksums.txt"
   download_url="${RELEASE_BASE_URL%/}/$asset"
   if [[ -n "$RELEASE_PROXY" ]]; then
-    # 受限网络下校验文件与镜像都必须经代理下载。
+    # 受限网络下校验文件与镜像都必须经代理下载
     checksums_url="${RELEASE_PROXY%/}/$checksums_url"
     download_url="${RELEASE_PROXY%/}/$download_url"
   fi
@@ -124,7 +124,7 @@ download_release_image() {
     if [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]]; then
       script_url="${RELEASE_BASE_URL%/}/$script"
     else
-      # 校验文件未包含该脚本哈希时退回固定地址下载，且无法校验。
+      # 校验文件未包含该脚本哈希时退回固定地址下载，且无法校验
       script_url="${MANAGEMENT_BASE_URL%/}/$script"
     fi
     if [[ -n "$RELEASE_PROXY" ]]; then script_url="${RELEASE_PROXY%/}/$script_url"; fi

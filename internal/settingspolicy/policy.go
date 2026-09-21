@@ -1,4 +1,4 @@
-// 设置策略
+// Package settingspolicy 解析系统、用户与仓库设置并计算生效策略值
 package settingspolicy
 
 import (

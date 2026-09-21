@@ -1,4 +1,3 @@
-// 更新服务
 package update
 
 import (
@@ -15,7 +14,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// Service 串联 Manager 已校验候选的下载与 helper 交接。
+// Service 串联 Manager 已校验候选的下载与 helper 交接
 type Service struct {
 	mgr *Manager
 	up  *Updater
@@ -25,15 +24,15 @@ type Service struct {
 	shutdownFired atomic.Bool
 }
 
-// NewService 创建 Service，mgr 与 up 均不得为空。
+// NewService 创建 Service，mgr 与 up 均不得为空
 func NewService(mgr *Manager, up *Updater, cfg *config.Config) *Service {
 	return &Service{mgr: mgr, up: up, cfg: cfg}
 }
 
-// Manager 返回持久化的管理器。
+// Manager 返回持久化的管理器
 func (s *Service) Manager() *Manager { return s.mgr }
 
-// SetOnShutdown 注入关闭回调，仅在 helper 启动成功后触发。
+// SetOnShutdown 注入交接调用成功返回后异步执行的关闭回调
 func (s *Service) SetOnShutdown(fn func()) {
 	s.onShutdown = fn
 	s.shutdownFired.Store(false)
@@ -49,8 +48,8 @@ func (s *Service) triggerShutdown() {
 	}()
 }
 
-// StartHelperUpdate 校验已检查候选、下载精确资产、暂存并交接给 helper。
-// 关闭信号仅在 helper 启动成功后发出。
+// StartHelperUpdate 校验已检查候选、下载精确资产、暂存并交接给 helper
+// InitiateHelperHandoff 返回 nil 错误后请求关闭；保留可恢复标记的分支也可能返回成功
 func (s *Service) StartHelperUpdate(ctx context.Context, checkID, downloadSource, customProxy string) (*Operation, error) {
 	if s.mgr == nil {
 		return nil, fmt.Errorf("manager is nil")
@@ -68,7 +67,7 @@ func (s *Service) StartHelperUpdate(ctx context.Context, checkID, downloadSource
 	if err := cand.Validate(); err != nil {
 		return nil, err
 	}
-	// 变更前先做能力检查。
+	// 变更前先做能力检查
 	if err := CheckHandoffCapability(s.up.exe); err != nil {
 		return nil, err
 	}
@@ -77,7 +76,7 @@ func (s *Service) StartHelperUpdate(ctx context.Context, checkID, downloadSource
 	if err != nil {
 		return nil, err
 	}
-	// 把候选资产下载到临时目录。
+	// 把候选资产下载到临时目录
 	tmpDir, err := os.MkdirTemp(filepath.Dir(s.up.exe), ".oss-download-*")
 	if err != nil {
 		return nil, fmt.Errorf("create download dir: %w", err)
@@ -95,8 +94,8 @@ func (s *Service) StartHelperUpdate(ctx context.Context, checkID, downloadSource
 	if err != nil {
 		return nil, err
 	}
-	// downloadAsset 已在解包前校验发布资产的 digest。暂存可执行文件的字节与压缩包不同，
-	// 此处重新计算其 digest，供暂存阶段与 helper 发现后续篡改。
+	// downloadAsset 已在解包前校验发布资产的 digest；暂存可执行文件的字节与压缩包不同，
+	// 此处重新计算其 digest，供暂存阶段与 helper 发现后续篡改
 	binaryDigest, err := fileDigest(prepared)
 	if err != nil {
 		return nil, fmt.Errorf("hash prepared executable: %w", err)
@@ -127,7 +126,7 @@ func (s *Service) readyURL() string {
 	return fmt.Sprintf("http://%s:%d/readyz", host, port)
 }
 
-// CheckInfo 为 WebUI 检查更新的结果，携带持久化的 check_id。
+// CheckInfo 为 WebUI 检查更新的结果，携带持久化的 check_id
 type CheckInfo struct {
 	CheckID         string     `json:"check_id"`
 	Candidate       *Candidate `json:"candidate"`
@@ -139,13 +138,13 @@ type CheckInfo struct {
 	Note            string     `json:"note,omitempty"`
 }
 
-// Check 按配置的更新源检查最新 Release，严格校验平台资产并颁发持久化的 check_id。
-// 其校验逻辑与 /api/admin/update/check 一致，返回可序列化的 CheckInfo。
+// Check 按配置的更新源检查最新 Release，严格校验平台资产并颁发持久化的 check_id
+// 其校验逻辑与 /api/admin/update/check 一致，返回可序列化的 CheckInfo
 func (s *Service) Check(ctx context.Context) (*CheckInfo, error) {
 	return s.CheckWithSource(ctx, "", "")
 }
 
-// CheckWithSource 按选定下载源检查最新 Release。
+// CheckWithSource 按选定下载源检查最新 Release
 func (s *Service) CheckWithSource(ctx context.Context, source, customProxy string) (*CheckInfo, error) {
 	if s.mgr == nil {
 		return nil, newUpdateError(CodeCorruptedState, "manager not initialized", ErrCorruptedState)
@@ -156,7 +155,7 @@ func (s *Service) CheckWithSource(ctx context.Context, source, customProxy strin
 	if s.up.gh == nil {
 		return nil, newUpdateError(CodeCorruptedState, "github client not initialized", ErrCorruptedState)
 	}
-	// 调用方负责超时，此处追加 30 秒兜底。
+	// 调用方负责超时，此处追加 30 秒兜底
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	source, customProxy = s.effectiveSource(source, customProxy)

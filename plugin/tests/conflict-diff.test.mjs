@@ -6,7 +6,7 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-// 打包纯 diff 模块，使测试驱动真实导出函数。
+// 打包纯 diff 模块，使测试驱动真实导出函数
 async function loadConflictDiff() {
   const dir = await mkdtemp(join(tmpdir(), "oss-conflict-diff-"));
   const outfile = join(dir, "conflict-diff.mjs");
@@ -24,7 +24,7 @@ async function loadConflictDiff() {
   };
 }
 
-// 行辅助函数：变更行携带原始 `text`（不带 -/+ 标记，由渲染侧补充），省略行携带 `count`。
+// 行辅助函数：变更行携带原始 `text`（不带 -/+ 标记，由渲染侧补充），省略行携带 `count`
 const ctx = (text) => ({ kind: "context", text });
 const rem = (text) => ({ kind: "removed", text });
 const add = (text) => ({ kind: "added", text });

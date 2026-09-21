@@ -1,4 +1,3 @@
-// 严格的语义化版本解析与比较。
 package version
 
 import (
@@ -8,7 +7,7 @@ import (
 	"strings"
 )
 
-// SemVer 表示严格解析后的语义化版本。
+// SemVer 表示严格解析后的语义化版本
 type SemVer struct {
 	Major      int
 	Minor      int
@@ -18,7 +17,7 @@ type SemVer struct {
 	Raw        string
 }
 
-// String 返回规范化的版本字符串（不含 v 前缀）。
+// String 返回规范化的版本字符串（不含 v 前缀）
 func (v SemVer) String() string {
 	s := fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
 	if v.Prerelease != "" {
@@ -30,13 +29,13 @@ func (v SemVer) String() string {
 	return s
 }
 
-// IsValid 判断字符串是否为严格 SemVer（允许可选的 v/V 前缀）。
+// IsValid 判断字符串是否为严格 SemVer（允许可选的 v/V 前缀）
 func IsValid(s string) bool {
 	_, err := Parse(s)
 	return err == nil
 }
 
-// Parse 严格解析版本字符串，允许可选的 v/V 前缀。
+// Parse 严格解析版本字符串，允许可选的 v/V 前缀
 func Parse(s string) (SemVer, error) {
 	raw := s
 	s = strings.TrimSpace(s)
@@ -50,7 +49,7 @@ func Parse(s string) (SemVer, error) {
 		}
 	}
 
-	// 分离 Build 元数据。
+	// 分离 Build 元数据
 	var build string
 	if idx := strings.Index(s, "+"); idx >= 0 {
 		build = s[idx+1:]
@@ -63,7 +62,7 @@ func Parse(s string) (SemVer, error) {
 		}
 	}
 
-	// 分离 Prerelease。
+	// 分离 Prerelease
 	var prerelease string
 	if idx := strings.Index(s, "-"); idx >= 0 {
 		prerelease = s[idx+1:]
@@ -149,8 +148,8 @@ func isIdentChar(c rune) bool {
 		c == '-'
 }
 
-// Compare 比较两个版本字符串，返回 -1/0/1，任一非法时返回错误。
-// 比较忽略 Build 元数据，Prerelease 按 SemVer 规范排序。
+// Compare 比较两个版本字符串，返回 -1/0/1，任一非法时返回错误
+// 比较忽略 Build 元数据，Prerelease 按 SemVer 规范排序
 func Compare(a, b string) (int, error) {
 	av, err := Parse(a)
 	if err != nil {
@@ -163,7 +162,7 @@ func Compare(a, b string) (int, error) {
 	return compareParsed(av, bv), nil
 }
 
-// MustCompare 供测试或确定合法输入时使用，非法输入返回 0。
+// MustCompare 供测试或确定合法输入时使用，非法输入返回 0
 func MustCompare(a, b string) int {
 	c, _ := Compare(a, b)
 	return c
@@ -188,14 +187,14 @@ func compareParsed(a, b SemVer) int {
 		}
 		return 1
 	}
-	// 预发布版本优先级的比较规则如下。
+	// 预发布版本优先级的比较规则如下
 	aPreEmpty := a.Prerelease == ""
 	bPreEmpty := b.Prerelease == ""
 	if aPreEmpty && bPreEmpty {
 		return 0
 	}
 	if aPreEmpty {
-		return 1 // 正式版优先于预发布版。
+		return 1 // 正式版优先于预发布版
 	}
 	if bPreEmpty {
 		return -1
@@ -215,7 +214,7 @@ func comparePrerelease(a, b string) int {
 	}
 	for i := 0; i < n; i++ {
 		if i >= len(ap) {
-			return -1 // 标识段较少者优先级较低。
+			return -1 // 标识段较少者优先级较低
 		}
 		if i >= len(bp) {
 			return 1
@@ -236,7 +235,7 @@ func comparePrerelease(a, b string) int {
 		}
 		if xNum != yNum {
 			if xNum {
-				return -1 // 纯数字标识段优先于字母标识段。
+				return -1 // 纯数字标识段优先于字母标识段
 			}
 			return 1
 		}
@@ -248,7 +247,7 @@ func comparePrerelease(a, b string) int {
 	return 0
 }
 
-// Normalize 去除空白与可选的 v/V 前缀后返回规范化版本字符串。
+// Normalize 去除空白与可选的 v/V 前缀后返回规范化版本字符串
 func Normalize(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) > 0 && (s[0] == 'v' || s[0] == 'V') {

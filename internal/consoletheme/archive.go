@@ -1,4 +1,3 @@
-// 控制台主题压缩包的校验与解压。
 package consoletheme
 
 import (

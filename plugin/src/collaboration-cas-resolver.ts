@@ -256,11 +256,11 @@ export async function resolvePersistedCollaborationConflict(
     const content = resolution.content;
     const encoded = new TextEncoder().encode(content);
     const expectedHash = await deps.vault.hashBytes(encoded);
-    // 覆盖前先校验本地哈希，本地已变化时不直接覆盖。
-    // 写入前使用 readExact 读取最新内容，避免覆盖并发编辑。
+    // 覆盖前先校验本地哈希，本地已变化时不直接覆盖
+    // 写入前使用 readExact 读取最新内容，避免覆盖并发编辑
     const opRaw = deps.createOperationID?.() ?? createValidOperationID();
     const op = isValidOperationID(opRaw) ? opRaw : createValidOperationID();
-    // 先持久化 pending，使写文件与上传之间崩溃后仍可恢复。
+    // 先持久化 pending，使写文件与上传之间崩溃后仍可恢复
     deps.baseline.setCollaboration(vaultId, fileId, {
       ...entry,
       localHash: expectedHash,
@@ -293,7 +293,7 @@ export async function resolvePersistedCollaborationConflict(
       deps.onChange();
     } catch (error) {
       if (isCollaborationConflictError(error)) {
-        // 收到 409 时拉取最新远端并记为新的冲突。
+        // 收到 409 时拉取最新远端并记为新的冲突
         try {
           const fetched = await deps.api.downloadCollabContent(vaultId, fileId);
           if (fetched) {
@@ -313,13 +313,13 @@ export async function resolvePersistedCollaborationConflict(
             deps.onChange();
           }
         } catch {
-          // 保留 pending 以便后续重试。
+          // 保留 pending 以便后续重试
         }
         const message = localizeError(error, deps.plugin.t.bind(deps.plugin), deps.plugin.t("common.unknownError"));
         new Notice(deps.plugin.t("collab.uploadFailed", { error: message }));
         return;
       }
-      // 传输失败时保留 pending 与冲突，后续重试仍可继续。
+      // 传输失败时保留 pending 与冲突，后续重试仍可继续
       const message = localizeError(error as Error, deps.plugin.t.bind(deps.plugin), deps.plugin.t("common.unknownError"));
       new Notice(deps.plugin.t("collab.uploadFailed", { error: message }));
     }
@@ -340,7 +340,7 @@ export async function resolvePersistedCollaborationConflict(
       return;
     }
     const bytes = new Uint8Array(fetched.content);
-    // 冲突创建后本地已变化时，转为 pending 暂存而不直接覆盖。
+    // 冲突创建后本地已变化时，转为 pending 暂存而不直接覆盖
     const fresh = await deps.vault.readExact(entry.localPath);
     if (fresh && fresh.hash !== entry.localHash) {
       await stashPending(deps, entry, fresh.hash);

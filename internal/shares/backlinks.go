@@ -1,4 +1,3 @@
-// 分享反链
 package shares
 
 import (

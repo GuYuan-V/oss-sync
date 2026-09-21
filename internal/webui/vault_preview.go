@@ -1,4 +1,3 @@
-// 仓库预览
 package webui
 
 import (

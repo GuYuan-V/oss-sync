@@ -1,4 +1,3 @@
-// Basic 凭据解析辅助函数。
 package auth
 
 import (
@@ -6,7 +5,7 @@ import (
 	"strings"
 )
 
-// parseBasic 解码 base64 编码的 user:password 载荷。
+// parseBasic 解码 base64 编码的 user:password 载荷
 func parseBasic(payload string) (string, string, bool) {
 	dec, err := base64.StdEncoding.DecodeString(payload)
 	if err != nil {

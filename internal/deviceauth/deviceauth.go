@@ -1,5 +1,5 @@
 // Package deviceauth 提供设备登记、状态与仓库授权等纯逻辑，
-// 不依赖 HTTP 和 auth，供 auth、devices、syncapi 等包共享。
+// 不依赖 HTTP 和 auth，供 auth、devices、syncapi 等包共享
 package deviceauth
 
 import (
@@ -14,13 +14,13 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// 设备请求头名称。
+// 设备请求头名称
 const (
 	ClientIDHeader   = "X-OSS-Client-ID"
 	DeviceNameHeader = "X-OSS-Device-Name"
 )
 
-// 设备状态常量。
+// 设备状态常量
 const (
 	DeviceStatusPending  = "pending"
 	DeviceStatusApproved = "approved"
@@ -28,18 +28,18 @@ const (
 )
 
 var (
-	// ErrRevoked 设备已吊销。
+	// ErrRevoked 设备已吊销
 	ErrRevoked = errors.New("device has been revoked")
-	// ErrDevicePending 设备尚未批准。
+	// ErrDevicePending 设备尚未批准
 	ErrDevicePending = errors.New("device is pending authorization")
-	// ErrDeviceUnknown 设备未登记。
+	// ErrDeviceUnknown 设备未登记
 	ErrDeviceUnknown = errors.New("device is not registered")
-	// ErrVaultNotAuthorized 设备未被授权访问该仓库。
+	// ErrVaultNotAuthorized 设备未被授权访问该仓库
 	ErrVaultNotAuthorized = errors.New("device is not authorized for vault")
 )
 
-// RegisterDevice 在登录时登记或更新设备。新设备创建为 pending；
-// 已吊销设备返回 ErrRevoked；迁移前遗留的空状态设备保留为 approved。
+// RegisterDevice 在登录时登记或更新设备；新设备创建为 pending；
+// 已吊销设备返回 ErrRevoked；迁移前遗留的空状态设备保留为 approved
 func RegisterDevice(db *gorm.DB, userID uint, clientID, deviceName string, now time.Time) (string, error) {
 	clientID = NormalizeClientID(clientID)
 	if clientID == "" {
@@ -74,7 +74,7 @@ func RegisterDevice(db *gorm.DB, userID uint, clientID, deviceName string, now t
 		updates["name"] = deviceName
 	}
 	if device.Status == "" {
-		// 迁移前遗留设备默认 approved，避免锁住现有用户。
+		// 迁移前遗留设备默认 approved，避免锁住现有用户
 		updates["status"] = DeviceStatusApproved
 	}
 	if err := db.Model(&models.ClientDevice{}).Where("id = ?", device.ID).Updates(updates).Error; err != nil {
@@ -83,7 +83,7 @@ func RegisterDevice(db *gorm.DB, userID uint, clientID, deviceName string, now t
 	return device.Status, nil
 }
 
-// GetDevice 返回设备当前状态与服务端确认的设备名。
+// GetDevice 返回设备当前状态与服务端确认的设备名
 func GetDevice(db *gorm.DB, userID uint, clientID string) (string, string, error) {
 	clientID = NormalizeClientID(clientID)
 	var device models.ClientDevice
@@ -102,7 +102,7 @@ func GetDevice(db *gorm.DB, userID uint, clientID string) (string, string, error
 	return status, device.Name, nil
 }
 
-// CheckApproved 校验设备已批准且未吊销（用于仓库创建等无仓库上下文操作）。
+// CheckApproved 校验设备已批准且未吊销（用于仓库创建等无仓库上下文操作）
 func CheckApproved(db *gorm.DB, userID uint, clientID string) error {
 	clientID = NormalizeClientID(clientID)
 	if clientID == "" {
@@ -127,7 +127,7 @@ func CheckApproved(db *gorm.DB, userID uint, clientID string) error {
 	return nil
 }
 
-// CheckVaultAccess 校验设备已批准、未吊销且被授权访问该仓库。
+// CheckVaultAccess 校验设备已批准、未吊销且被授权访问该仓库
 func CheckVaultAccess(db *gorm.DB, userID uint, clientID, vaultID string) error {
 	if err := CheckApproved(db, userID, clientID); err != nil {
 		return err
@@ -143,7 +143,7 @@ func CheckVaultAccess(db *gorm.DB, userID uint, clientID, vaultID string) error 
 	return err
 }
 
-// CheckActive 兼容旧调用：只校验设备未吊销。
+// CheckActive 兼容旧调用：只校验设备未吊销
 func CheckActive(db *gorm.DB, userID uint, clientID string) error {
 	clientID = NormalizeClientID(clientID)
 	if clientID == "" {
@@ -165,7 +165,7 @@ func CheckActive(db *gorm.DB, userID uint, clientID string) error {
 	return nil
 }
 
-// Touch 记录设备活动并维护设备对仓库的同步游标。
+// Touch 记录设备活动并维护设备对仓库的同步游标
 func Touch(
 	db *gorm.DB,
 	userID uint,
@@ -247,7 +247,7 @@ func Touch(
 	})
 }
 
-// ReplaceVaultAccesses 事务内替换设备的仓库授权列表。
+// ReplaceVaultAccesses 事务内替换设备的仓库授权列表
 func ReplaceVaultAccesses(
 	db *gorm.DB,
 	userID uint,
@@ -280,7 +280,7 @@ func ReplaceVaultAccesses(
 	})
 }
 
-// GrantAccess 为单个仓库增加设备授权（幂等）。
+// GrantAccess 为单个仓库增加设备授权（幂等）
 func GrantAccess(db *gorm.DB, userID uint, clientID, vaultID string, grantedBy uint) error {
 	clientID = NormalizeClientID(clientID)
 	if clientID == "" {
@@ -299,7 +299,7 @@ func GrantAccess(db *gorm.DB, userID uint, clientID, vaultID string, grantedBy u
 	).FirstOrCreate(&access).Error
 }
 
-// RevokeAccess 撤销设备对单个仓库的授权。
+// RevokeAccess 撤销设备对单个仓库的授权
 func RevokeAccess(db *gorm.DB, userID uint, clientID, vaultID string) error {
 	return db.Where(
 		"user_id = ? AND client_id = ? AND vault_id = ?",
@@ -307,13 +307,13 @@ func RevokeAccess(db *gorm.DB, userID uint, clientID, vaultID string) error {
 	).Delete(&models.DeviceVaultAccess{}).Error
 }
 
-// RevokeAllDeviceAccesses 撤销设备全部仓库授权（吊销设备时调用）。
+// RevokeAllDeviceAccesses 撤销设备全部仓库授权（吊销设备时调用）
 func RevokeAllDeviceAccesses(db *gorm.DB, userID uint, clientID string) error {
 	return db.Where("user_id = ? AND client_id = ?", userID, clientID).
 		Delete(&models.DeviceVaultAccess{}).Error
 }
 
-// NormalizeClientID 校验并规整客户端设备 ID。
+// NormalizeClientID 校验并规整客户端设备 ID
 func NormalizeClientID(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" || len(value) > 64 {
@@ -330,7 +330,7 @@ func NormalizeClientID(value string) string {
 	return value
 }
 
-// DecodeDeviceName 解码请求头中 URL 编码的设备名。
+// DecodeDeviceName 解码请求头中 URL 编码的设备名
 func DecodeDeviceName(value string) string {
 	decoded, err := url.QueryUnescape(value)
 	if err != nil {
@@ -347,14 +347,14 @@ func truncateRunes(value string, limit int) string {
 	return string(runes[:limit])
 }
 
-// ValidStatus 校验设备状态取值。
+// ValidStatus 校验设备状态取值
 func ValidStatus(status string) bool {
 	return status == DeviceStatusPending ||
 		status == DeviceStatusApproved ||
 		status == DeviceStatusRevoked
 }
 
-// EffectiveStatus 兼容迁移前遗留的状态字段。
+// EffectiveStatus 兼容迁移前遗留的状态字段
 func EffectiveStatus(revokedAt sql.NullTime, status string) string {
 	switch status {
 	case DeviceStatusPending, DeviceStatusApproved, DeviceStatusRevoked:

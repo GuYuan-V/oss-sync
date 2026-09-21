@@ -1,4 +1,3 @@
-// 更新交接
 package update
 
 import (
@@ -17,13 +16,13 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// HelperFlag 为隐藏的 helper 启动标记，可跳过常规配置与数据库初始化。
+// HelperFlag 为隐藏的 helper 启动标记，可跳过常规配置与数据库初始化
 const HelperFlag = "--oss-update-helper"
 
 const helperMarkerExt = ".handoff.json"
 
-// HandoffMarker 为 helper 收到的持久化交接引用。
-// 其中不含令牌，仅保存文件路径与操作 ID。
+// HandoffMarker 为 helper 收到的持久化交接引用
+// 其中不含令牌，仅保存文件路径与操作 ID
 type HandoffMarker struct {
 	OpID          string   `json:"op_id"`
 	ManagerRoot   string   `json:"manager_root"`
@@ -32,14 +31,14 @@ type HandoffMarker struct {
 	BackupPath    string   `json:"backup_path"`
 	HelperPath    string   `json:"helper_path"`
 	TargetVersion string   `json:"target_version"`
-	Digest        string   `json:"digest"` // 暂存可执行文件的 SHA-256，而非发布压缩包。
+	Digest        string   `json:"digest"` // 暂存可执行文件的 SHA-256，而非发布压缩包
 	ParentPID     int      `json:"parent_pid"`
 	ReadyURL      string   `json:"ready_url"`
 	OrigArgs      []string `json:"orig_args"`
 	WorkDir       string   `json:"work_dir"`
 }
 
-// IsHelperInvocation 判断当前进程是否为 helper 调用。
+// IsHelperInvocation 判断当前进程是否为 helper 调用
 func IsHelperInvocation() (bool, string) {
 	args := os.Args[1:]
 	for i, a := range args {
@@ -56,27 +55,27 @@ func IsHelperInvocation() (bool, string) {
 	return false, ""
 }
 
-// helperMarkerDir 返回与可执行文件同文件系统的暂存目录。
+// helperMarkerDir 返回与可执行文件同文件系统的暂存目录
 func helperMarkerDir(execPath string) string {
 	return filepath.Join(filepath.Dir(execPath), ".oss-update-pending")
 }
 
-// helperMarkerPath 返回指定操作的标记文件路径。
+// helperMarkerPath 返回指定操作的标记文件路径
 func helperMarkerPath(execPath, opID string) string {
 	dir := helperMarkerDir(execPath)
 	return filepath.Join(dir, opID+helperMarkerExt)
 }
 
-// atomicWriteMarker 错误传播测试用的注入点。
+// atomicWriteMarker 错误传播测试用的注入点
 var openFileForSyncFn = func(name string) (*os.File, error) { return os.OpenFile(name, os.O_RDWR, 0) }
 var syncFileFn = func(f *os.File) error { return f.Sync() }
 var openDirFn = func(name string) (*os.File, error) { return os.Open(name) }
 var syncDirFn = func(f *os.File) error { return f.Sync() }
 var removeFileFn = os.Remove
 
-// atomicWriteMarker 把标记序列化为 JSON，经 fsync 与改名原子写入。
+// atomicWriteMarker 把标记序列化为 JSON，经 fsync 与改名原子写入
 // 临时文件与目录的同步或打开错误一律向上返回；仅在操作系统明确报告不支持目录同步时
-// （例如 Windows 上的 syscall.EINVAL）保留一条窄例外。其余错误均返回并清理临时文件。
+// （例如 Windows 上的 syscall.EINVAL）保留一条窄例外；其余错误均返回并清理临时文件
 func atomicWriteMarker(markerPath string, marker HandoffMarker) error {
 	data, err := json.Marshal(marker)
 	if err != nil {
@@ -90,7 +89,7 @@ func atomicWriteMarker(markerPath string, marker HandoffMarker) error {
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}
-	// 同步临时文件，错误直接返回。
+	// 同步临时文件，错误直接返回
 	if f, err := openFileForSyncFn(tmp); err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("open temp for sync: %w", err)
@@ -109,15 +108,15 @@ func atomicWriteMarker(markerPath string, marker HandoffMarker) error {
 		_ = os.Remove(tmp)
 		return err
 	}
-	// 同步目录，打开或同步错误直接返回，仅保留 Windows 不支持目录同步的窄例外。
+	// 同步目录，打开或同步错误直接返回，仅保留 Windows 不支持目录同步的窄例外
 	df, err := openDirFn(dir)
 	if err != nil {
 		return fmt.Errorf("open dir for sync: %w", err)
 	}
 	if err := syncDirFn(df); err != nil {
 		_ = df.Close()
-		// 仅限 Windows 的窄例外：目录同步可能不受支持。
-		// Windows 上可能返回 EINVAL 或 ENOSYS，此处视为非致命错误。
+		// 仅限 Windows 的窄例外：目录同步可能不受支持
+		// Windows 上可能返回 EINVAL 或 ENOSYS，此处视为非致命错误
 		if runtime.GOOS == "windows" && isWindowsDirSyncUnsupported(err) {
 			return nil
 		}
@@ -134,15 +133,15 @@ func isWindowsDirSyncUnsupported(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	// Windows 目录 fsync 常不受支持；在 Windows 上打开目录同步常报拒绝访问。
-	// 窄例外的判定条件为仅限 Windows，且仅匹配已知的不支持提示。
+	// Windows 目录 fsync 常不受支持；在 Windows 上打开目录同步常报拒绝访问
+	// 窄例外的判定条件为仅限 Windows，且仅匹配已知的不支持提示
 	if runtime.GOOS != "windows" {
 		return false
 	}
 	return strings.Contains(msg, "invalid") || strings.Contains(msg, "not supported") || strings.Contains(msg, "enotsup") || strings.Contains(msg, "einval") || strings.Contains(msg, "access is denied") || strings.Contains(msg, "denied")
 }
 
-// isSafePath 确认 p 位于 base 目录内，且不存在路径穿越。
+// isSafePath 确认 p 位于 base 目录内，且不存在路径穿越
 func isSafePath(base, p string) bool {
 	if p == "" {
 		return false
@@ -189,9 +188,9 @@ func validateMarkerSafe(m *HandoffMarker) error {
 	return nil
 }
 
-// ResumePendingHandoffs 在常规启动时发现持久化的待处理标记，并在校验操作有效性与标记安全性后恢复 helper。
-// 其覆盖的场景为标记已写入但 helper 尚未启动的崩溃，此时直接启动 helper 继续执行。
-// 损坏或非活跃的标记一律不处理，既不回滚也不删除。
+// ResumePendingHandoffs 在常规启动时发现持久化的待处理标记，并在校验操作有效性与标记安全性后恢复 helper
+// 其覆盖的场景为标记已写入但 helper 尚未启动的崩溃，此时直接启动 helper 继续执行
+// 损坏或非活跃的标记一律不处理，既不回滚也不删除
 func ResumePendingHandoffs(execPath string) (int, error) {
 	dir := helperMarkerDir(execPath)
 	entries, err := os.ReadDir(dir)
@@ -207,13 +206,13 @@ func ResumePendingHandoffs(execPath string) (int, error) {
 			continue
 		}
 		markerPath := filepath.Join(dir, e.Name())
-		// 行动前先校验操作有效性与标记安全性。
+		// 行动前先校验操作有效性与标记安全性
 		_, _, err := recoverActiveMarker(markerPath)
 		if err != nil {
-			// 损坏或非活跃标记一律不处理。
+			// 损坏或非活跃标记一律不处理
 			continue
 		}
-		// 读入标记，校验路径安全性、digest 与目标版本。
+		// 读入标记，校验路径安全性、digest 与目标版本
 		data, err := os.ReadFile(markerPath)
 		if err != nil {
 			continue
@@ -225,9 +224,9 @@ func ResumePendingHandoffs(execPath string) (int, error) {
 		if err := validateMarkerSafe(&m); err != nil {
 			continue
 		}
-		// 统一由 helper 收尾：启动 helper 完成等待、替换、探测与回滚。
+		// 统一由 helper 收尾：启动 helper 完成等待、替换、探测与回滚
 		if err := launchHelperFn(m.ExecPath, markerPath); err != nil {
-			// 普通启动阶段无法拉起 helper 时（如进程创建失败），主进程直接回滚。
+			// 普通启动阶段无法拉起 helper 时（如进程创建失败），主进程直接回滚
 			_ = recordRollback(&m, fmt.Sprintf("resume launch failed: %v", err))
 			continue
 		}
@@ -236,10 +235,10 @@ func ResumePendingHandoffs(execPath string) (int, error) {
 	return resumed, nil
 }
 
-// CheckHandoffCapability 校验当前平台与可执行文件位置是否支持基于 helper 的自更新。
-// 在发生任何变更前返回带 CodeUnsupportedPlatform 等编码的类型化 UpdateError。
+// CheckHandoffCapability 校验当前平台与可执行文件位置是否支持基于 helper 的自更新
+// 在发生任何变更前返回带 CodeUnsupportedPlatform 等编码的类型化 UpdateError
 func CheckHandoffCapability(execPath string) error {
-	// 仅支持 linux、darwin 与 windows，其余 GOOS 视为不支持。
+	// 仅支持 linux、darwin 与 windows，其余 GOOS 视为不支持
 	switch runtime.GOOS {
 	case "linux", "darwin", "windows":
 	default:
@@ -248,8 +247,8 @@ func CheckHandoffCapability(execPath string) error {
 	return CheckCurrentCapability(execPath)
 }
 
-// verifyStagedFile 校验 digest、可执行文件魔数与精确的 --version 输出，全程无需联网。
-// 调用方须保证 stagedPath 与目标可执行文件位于同一文件系统。
+// verifyStagedFile 校验 digest、可执行文件魔数与精确的 --version 输出，全程无需联网
+// 调用方须保证 stagedPath 与目标可执行文件位于同一文件系统
 func verifyStagedFile(stagedPath, digest, wantVersion string) error {
 	if stagedPath == "" {
 		return errors.New("staged path is empty")
@@ -265,7 +264,7 @@ func verifyStagedFile(stagedPath, digest, wantVersion string) error {
 	if err := checkExecutableMagic(stagedPath, runtime.GOOS); err != nil {
 		return fmt.Errorf("staged magic check failed: %w", err)
 	}
-	// 版本必须规范化后精确相等，禁止子串匹配（如 1.2.3 与 1.2.30 不得混淆）。
+	// 版本必须规范化后精确相等，禁止子串匹配（如 1.2.3 与 1.2.30 不得混淆）
 	if wantVersion != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -287,7 +286,7 @@ func verifyStagedFile(stagedPath, digest, wantVersion string) error {
 
 var verifyStagedFileFn = verifyStagedFile
 
-// prepareStaging 把候选二进制与当前可执行文件副本复制到可执行文件所在文件系统，随后校验暂存文件。
+// prepareStaging 把候选二进制与当前可执行文件副本复制到可执行文件所在文件系统，随后校验暂存文件
 func prepareStaging(candidatePath, execPath, opID, wantVersion, digest string) (staged, backup, helperCopy string, err error) {
 	if err := CheckHandoffCapability(execPath); err != nil {
 		return "", "", "", err
@@ -300,22 +299,22 @@ func prepareStaging(candidatePath, execPath, opID, wantVersion, digest string) (
 	backup = filepath.Join(dir, "backup-"+opID)
 	helperCopy = filepath.Join(dir, "helper-"+opID)
 
-	// 把候选文件复制到暂存位置。
+	// 把候选文件复制到暂存位置
 	if err := copyFile(candidatePath, staged); err != nil {
 		return "", "", "", fmt.Errorf("stage candidate: %w", err)
 	}
-	// 保证暂存文件在 Unix 上可执行。
+	// 保证暂存文件在 Unix 上可执行
 	_ = os.Chmod(staged, 0o755)
 	if err := verifyStagedFileFn(staged, digest, wantVersion); err != nil {
 		_ = os.Remove(staged)
 		return "", "", "", err
 	}
-	// 把当前二进制复制为备份。
+	// 把当前二进制复制为备份
 	if err := copyFile(execPath, backup); err != nil {
 		_ = os.Remove(staged)
 		return "", "", "", fmt.Errorf("backup current: %w", err)
 	}
-	// 复制 helper 副本（与当前二进制相同），提高恢复能力。
+	// 复制 helper 副本（与当前二进制相同），提高恢复能力
 	if err := copyFile(execPath, helperCopy); err != nil {
 		_ = os.Remove(staged)
 		_ = os.Remove(backup)
@@ -324,16 +323,16 @@ func prepareStaging(candidatePath, execPath, opID, wantVersion, digest string) (
 	return staged, backup, helperCopy, nil
 }
 
-// launchHelper 以分离方式启动 helper 进程，helper 仅接收标记路径。
+// launchHelper 以分离方式启动 helper 进程，helper 仅接收标记路径
 var launchHelperFn = launchHelper
 
 func launchHelper(execPath, markerPath string) error {
 	if markerPath == "" {
 		return errors.New("marker path empty")
 	}
-	// 优先使用同文件系统的 helper 副本，不存在时回退到当前可执行文件。
+	// 优先使用同文件系统的 helper 副本，不存在时回退到当前可执行文件
 	helperBin := execPath
-	// 读取标记，确认 HelperPath 是否存在。
+	// 读取标记，确认 HelperPath 是否存在
 	if data, err := os.ReadFile(markerPath); err == nil {
 		var m HandoffMarker
 		if json.Unmarshal(data, &m) == nil && m.HelperPath != "" {
@@ -353,12 +352,12 @@ func launchHelper(execPath, markerPath string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("launch helper: %w", err)
 	}
-	// 不等待 helper，helper 独立运行。
+	// 不等待 helper，helper 独立运行
 	_ = cmd.Process.Release()
 	return nil
 }
 
-// waitForParent 轮询至父进程退出或超时。
+// waitForParent 轮询至父进程退出或超时
 var waitForParentFn = waitForParent
 
 func waitForParent(parentPID int, timeout time.Duration) error {
@@ -375,16 +374,16 @@ func waitForParent(parentPID int, timeout time.Duration) error {
 	return nil
 }
 
-// atomicReplace 执行暂存文件到可执行文件路径的替换。
+// atomicReplace 执行暂存文件到可执行文件路径的替换
 var atomicReplaceFn = atomicReplace
 
 func atomicReplace(stagedPath, execPath string) error {
 	return swapBinary(stagedPath, execPath)
 }
 
-// recoverActiveMarker 校验标记是否引用仍活跃的持久化操作。
-// 有效时返回标记与操作；已终态或非活跃时返回错误。
-// 标记缺失或操作非活跃表示这是一次常规启动，不回滚。
+// recoverActiveMarker 校验标记是否引用仍活跃的持久化操作
+// 有效时返回标记与操作；已终态或非活跃时返回错误
+// 标记缺失或操作非活跃表示这是一次常规启动，不回滚
 func recoverActiveMarker(markerPath string) (*HandoffMarker, *Operation, error) {
 	data, err := os.ReadFile(markerPath)
 	if err != nil {
@@ -401,7 +400,7 @@ func recoverActiveMarker(markerPath string) (*HandoffMarker, *Operation, error) 
 	if err != nil && !errors.Is(err, ErrCorruptedState) {
 		return nil, nil, fmt.Errorf("open manager: %w", err)
 	}
-	// 状态损坏时 NewManager 仍返回可用实例，直接用于查询。
+	// 状态损坏时 NewManager 仍返回可用实例，直接用于查询
 	if mgr == nil {
 		return nil, nil, errors.New("manager unavailable")
 	}
@@ -412,7 +411,7 @@ func recoverActiveMarker(markerPath string) (*HandoffMarker, *Operation, error) 
 	if op.IsTerminal() {
 		return nil, nil, fmt.Errorf("operation already terminal %s", op.State)
 	}
-	// 同时确认该操作仍为当前活跃操作。
+	// 同时确认该操作仍为当前活跃操作
 	active := mgr.ActiveOperation()
 	if active == nil || active.ID != m.OpID {
 		return nil, nil, errors.New("operation not active")
@@ -420,13 +419,13 @@ func recoverActiveMarker(markerPath string) (*HandoffMarker, *Operation, error) 
 	return &m, op, nil
 }
 
-// InitiateHelperHandoff 暂存候选文件、创建持久化标记并启动 helper。
-// 在任何变更前先做能力检查，交接前校验 digest、魔数与 --version。
-// mgr 为持久化的 Manager；checkID 为已校验的候选；candidatePath 为从已验证发布资产中解出的本地新二进制文件。
-// binaryDigest 为下载解包后重新计算的可执行文件摘要，而非 Candidate.Digest 中的资产摘要。
-// readyURL 为待探测的 /readyz 地址。
-// origArgs 与 workDir 记录重启所需的运行时上下文。
-// 成功返回活跃的 Operation，能力不足时返回类型化错误。
+// InitiateHelperHandoff 暂存候选文件、创建持久化标记并启动 helper
+// 在任何变更前先做能力检查，交接前校验 digest、魔数与 --version
+// mgr 为持久化的 Manager；checkID 为已校验的候选；candidatePath 为从已验证发布资产中解出的本地新二进制文件
+// binaryDigest 为下载解包后重新计算的可执行文件摘要，而非 Candidate.Digest 中的资产摘要
+// readyURL 为待探测的 /readyz 地址
+// origArgs 与 workDir 记录重启所需的运行时上下文
+// 成功返回活跃的 Operation，能力不足时返回类型化错误
 func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidatePath string, binaryDigest string, readyURL string, origArgs []string, workDir string) (*Operation, error) {
 	if mgr == nil {
 		return nil, errors.New("manager is nil")
@@ -447,12 +446,12 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 	if err := cand.Validate(); err != nil {
 		return nil, err
 	}
-	// 先创建持久化操作，其为唯一的事实来源。
+	// 先创建持久化操作，其为唯一的事实来源
 	op, err := mgr.StartOperation(checkID, cand.Version)
 	if err != nil {
 		return nil, err
 	}
-	// 交接前把状态推进到备份阶段，替换与完成由 helper 收尾。
+	// 交接前把状态推进到备份阶段，替换与完成由 helper 收尾
 	seq := []OperationState{StatePrepare, StateFetchRelease, StateSelectAsset, StateDownload, StateVerify, StateBackup}
 	for _, nxt := range seq {
 		cur, _ := mgr.GetOperation(op.ID)
@@ -461,22 +460,22 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 		}
 		if isAllowedTransition(cur.State, nxt) {
 			if _, err := mgr.Transition(op.ID, nxt, ""); err != nil {
-				// 状态推进失败时置为失败并中止。
+				// 状态推进失败时置为失败并中止
 				_, _ = mgr.Transition(op.ID, StateFailed, err.Error())
 				return nil, err
 			}
 		}
 	}
-	// 在可执行文件所在文件系统暂存文件，交接前完成校验。
+	// 在可执行文件所在文件系统暂存文件，交接前完成校验
 	staged, backup, helperCopy, err := prepareStaging(candidatePath, u.exe, op.ID, cand.Version, binaryDigest)
 	if err != nil {
 		_, _ = mgr.Transition(op.ID, StateFailed, err.Error())
 		return nil, err
 	}
-	// 备份路径仅用于内部诊断，不对外暴露。Manager 未提供经 Transition 修改该字段的接口，此处保留局部变量备查。
+	// 备份路径仅用于内部诊断，不对外暴露；Manager 未提供经 Transition 修改该字段的接口，此处保留局部变量备查
 	_ = backup
 	_ = helperCopy
-	// 创建交接标记。
+	// 创建交接标记
 	if workDir == "" {
 		workDir, _ = os.Getwd()
 	}
@@ -504,14 +503,14 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 		return nil, err
 	}
 	if err := atomicWriteMarker(markerPath, marker); err != nil {
-		// 标记可能已持久化（改名后的目录同步或打开失败），需按是否可恢复分别处理。
+		// 标记可能已持久化（改名后的目录同步或打开失败），需按是否可恢复分别处理
 		if _, statErr := os.Stat(markerPath); statErr == nil {
-			// 改名后标记仍存在，可能已持久化。先尝试删除以验证清理是否成功。
+			// 改名后标记仍存在，可能已持久化；先尝试删除以验证清理是否成功
 			rmErr := removeFileFn(markerPath)
 			_, statAfter := os.Stat(markerPath)
 			stillDurable := statAfter == nil
 			if stillDurable {
-				// 标记仍存在，清理未被证实，保持为可恢复的已提交交接，不置为失败。
+				// 标记仍存在，清理未被证实，保持为可恢复的已提交交接，不置为失败
 				if cur, _ := mgr.GetOperation(op.ID); cur != nil && isAllowedTransition(cur.State, StateSwap) {
 					_, _ = mgr.Transition(op.ID, StateSwap, "")
 				}
@@ -520,7 +519,7 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 				}
 				return op, nil
 			}
-			// 标记已删除，再持久化终态。两者都成功才算清理完成。
+			// 标记已删除，再持久化终态；两者都成功才算清理完成
 			transOp, transErr := mgr.Transition(op.ID, StateFailed, err.Error())
 			_ = transOp
 			if transErr == nil && rmErr == nil {
@@ -529,7 +528,7 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 				_ = removeFileFn(helperCopy)
 				return nil, fmt.Errorf("write marker: %w", err)
 			}
-			// 标记已删除但终态持久化失败，此时无可恢复标记，按失败返回不产生矛盾。
+			// 标记已删除但终态持久化失败，此时无可恢复标记，按失败返回不产生矛盾
 			_ = removeFileFn(staged)
 			_ = removeFileFn(backup)
 			_ = removeFileFn(helperCopy)
@@ -538,7 +537,7 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 			}
 			return nil, fmt.Errorf("write marker: %w", err)
 		}
-		// 标记确定未持久化（改名前失败），持久化终态并清理暂存文件后返回。
+		// 标记确定未持久化（改名前失败），持久化终态并清理暂存文件后返回
 		_, _ = mgr.Transition(op.ID, StateFailed, err.Error())
 		_ = removeFileFn(staged)
 		_ = removeFileFn(backup)
@@ -546,17 +545,17 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 		_ = removeFileFn(markerPath)
 		return nil, fmt.Errorf("write marker: %w", err)
 	}
-	// 进入替换阶段，表示交接进行中。
+	// 进入替换阶段，表示交接进行中
 	if cur, _ := mgr.GetOperation(op.ID); isAllowedTransition(cur.State, StateSwap) {
 		_, _ = mgr.Transition(op.ID, StateSwap, "")
 	}
 	if err := launchHelperFn(u.exe, markerPath); err != nil {
-		// 先删除标记再持久化失败态，两者都被证实时才按失败返回。
+		// 先删除标记再持久化失败态，两者都被证实时才按失败返回
 		rmErr := removeFileFn(markerPath)
 		_, statAfter := os.Stat(markerPath)
 		stillDurable := statAfter == nil
 		if stillDurable {
-			// 标记仍存在，保持为可恢复的已提交交接，不置为失败。
+			// 标记仍存在，保持为可恢复的已提交交接，不置为失败
 			if fresh, gErr := mgr.GetOperation(op.ID); gErr == nil {
 				return fresh, nil
 			}
@@ -568,7 +567,7 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 			_ = removeFileFn(helperCopy)
 			return nil, fmt.Errorf("helper launch failure: %w", err)
 		}
-		// 标记已删除但终态持久化失败，此时无可恢复标记，按失败返回。
+		// 标记已删除但终态持久化失败，此时无可恢复标记，按失败返回
 		_ = removeFileFn(helperCopy)
 		if transErr != nil {
 			return nil, fmt.Errorf("helper launch failure: %w (terminal persist failed: %v)", err, transErr)
@@ -581,18 +580,18 @@ func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidateP
 	return op, nil
 }
 
-// recordSuccess 把操作置为完成并清理标记。
+// recordSuccess 把操作置为完成并清理标记
 func recordSuccess(m *HandoffMarker) error {
 	mgr, err := NewManager(m.ManagerRoot)
 	if err != nil && !errors.Is(err, ErrCorruptedState) {
 		return err
 	}
-	// 状态图要求经 Swap 到达 Done，状态靠前时逐步推进。
+	// 状态图要求经 Swap 到达 Done，状态靠前时逐步推进
 	op, err := mgr.GetOperation(m.OpID)
 	if err != nil {
 		return err
 	}
-	// 沿线性状态链尽力推进到 Done。
+	// 沿线性状态链尽力推进到 Done
 	chain := []OperationState{StatePrepare, StateFetchRelease, StateSelectAsset, StateDownload, StateVerify, StateBackup, StateSwap, StateDone}
 	for _, want := range chain {
 		cur, _ := mgr.GetOperation(m.OpID)
@@ -604,13 +603,13 @@ func recordSuccess(m *HandoffMarker) error {
 		}
 		if isAllowedTransition(cur.State, want) {
 			if _, err := mgr.Transition(m.OpID, want, ""); err != nil {
-				// 非直接后继时继续寻找下一个允许的迁移。
+				// 非直接后继时继续寻找下一个允许的迁移
 				continue
 			}
 		}
 		_ = op
 	}
-	// 尚未终态时保证最终到达 Done。
+	// 尚未终态时保证最终到达 Done
 	cur, _ := mgr.GetOperation(m.OpID)
 	if !cur.IsTerminal() {
 		if isAllowedTransition(cur.State, StateDone) {
@@ -619,7 +618,7 @@ func recordSuccess(m *HandoffMarker) error {
 			_, _ = mgr.Transition(m.OpID, StateSwap, "")
 			_, _ = mgr.Transition(m.OpID, StateDone, "")
 		} else {
-			// 不允许经失败态到达完成态，此处再次沿状态链顺序推进。
+			// 不允许经失败态到达完成态，此处再次沿状态链顺序推进
 			for _, want := range chain {
 				c, _ := mgr.GetOperation(m.OpID)
 				if c.IsTerminal() {
@@ -633,31 +632,31 @@ func recordSuccess(m *HandoffMarker) error {
 	}
 	_ = os.Remove(m.StagedPath)
 	_ = os.Remove(m.HelperPath)
-	// 成功后保留备份，删除标记即表示交接完成。
+	// 成功后保留备份，删除标记即表示交接完成
 	_ = os.Remove(markerPathFor(m))
 	return nil
 }
 
-// recordRollback 恢复旧二进制、拉起旧服务，并把操作置为失败或已回滚。
+// recordRollback 恢复旧二进制、拉起旧服务，并把操作置为失败或已回滚
 func recordRollback(m *HandoffMarker, cause string) error {
 	mgr, err := NewManager(m.ManagerRoot)
 	if err != nil && !errors.Is(err, ErrCorruptedState) {
 		return err
 	}
-	// 仅在标记仍有效时恢复备份。
+	// 仅在标记仍有效时恢复备份
 	if _, err := os.Stat(m.BackupPath); err == nil {
 		_ = swapBinary(m.BackupPath, m.ExecPath)
 	}
-	// 按原始参数拉起旧服务。
+	// 按原始参数拉起旧服务
 	relaunchOldServerFn(m)
 	if mgr != nil {
 		cur, _ := mgr.GetOperation(m.OpID)
 		if cur != nil && !cur.IsTerminal() {
-			// 允许时直接进入失败态。
+			// 允许时直接进入失败态
 			if isAllowedTransition(cur.State, StateFailed) {
 				_, _ = mgr.Transition(m.OpID, StateFailed, cause)
 			} else {
-				// 沿状态链推进到允许进入失败态的位置。
+				// 沿状态链推进到允许进入失败态的位置
 				chain := []OperationState{StatePrepare, StateFetchRelease, StateSelectAsset, StateDownload, StateVerify, StateBackup, StateSwap}
 				for _, want := range chain {
 					c, _ := mgr.GetOperation(m.OpID)
@@ -688,7 +687,7 @@ func markerPathFor(m *HandoffMarker) string {
 
 var relaunchOldServerFn = relaunchOldServer
 
-// 跨包测试用的注入点。
+// 跨包测试用的注入点
 func SetLaunchHelperFn(fn func(string, string) error) {
 	if fn == nil {
 		launchHelperFn = launchHelper
@@ -760,7 +759,7 @@ func SetRemoveFileFn(fn func(string) error) {
 	}
 }
 
-// relaunchOldServer 按原始上下文启动恢复后的可执行文件。
+// relaunchOldServer 按原始上下文启动恢复后的可执行文件
 func relaunchOldServer(m *HandoffMarker) {
 	if m.ExecPath == "" {
 		return
@@ -769,7 +768,7 @@ func relaunchOldServer(m *HandoffMarker) {
 	if len(args) == 0 {
 		args = []string{m.ExecPath}
 	}
-	// 首个参数固定为可执行文件路径。
+	// 首个参数固定为可执行文件路径
 	cmd := exec.Command(m.ExecPath, args[1:]...)
 	cmd.Env = os.Environ()
 	if m.WorkDir != "" {

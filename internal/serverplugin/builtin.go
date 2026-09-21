@@ -10,7 +10,7 @@ import (
 //go:embed assets/papertrail-settings.json
 var builtinAssets embed.FS
 
-// BuiltinManifests 返回服务端内置的宿主插件。
+// BuiltinManifests 返回服务端内置的宿主插件
 func BuiltinManifests() []Manifest {
 	settings := []blog.ThemeSettingField{}
 	if raw, err := builtinAssets.ReadFile("assets/papertrail-settings.json"); err == nil {

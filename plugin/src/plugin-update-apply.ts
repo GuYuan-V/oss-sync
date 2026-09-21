@@ -1,7 +1,7 @@
-// 插件文件原子替换与无感重载。
+// 插件文件原子替换与无感重载
 //
 // 流程：备份现有三件套 → 先写临时文件再 rename 覆盖目标（每步失败都回滚）→
-// disablePlugin/enablePlugin 重载 → 校验新版本实例已加载，失败则恢复备份并重新启用旧版本。
+// disablePlugin/enablePlugin 重载 → 校验新版本实例已加载，失败则恢复备份并重新启用旧版本
 
 import {
   manifestVersionFromText,
@@ -18,7 +18,7 @@ export interface PluginFileAdapter {
 export interface ReloadController {
   disablePlugin(id: string): Promise<void>;
   enablePlugin(id: string): Promise<void>;
-  /** 插件实例是否已按目标版本加载。 */
+  /** 插件实例是否已按目标版本加载*/
   isLoaded(id: string, expectedVersion?: string | null): boolean;
 }
 
@@ -40,7 +40,7 @@ function textOf(content: ArrayBuffer): string {
   return new TextDecoder().decode(content);
 }
 
-/** 原子替换插件文件并重载插件；任何一步失败都会恢复旧文件并重新启用旧版本。 */
+/** 原子替换插件文件并重载插件；任何一步失败都会恢复旧文件并重新启用旧版本*/
 export async function applyPluginUpdate(options: ApplyUpdateOptions): Promise<void> {
   const backup = await readBackup(options.adapter, options.dir, options.files);
   await replacePluginFiles(options.adapter, options.dir, options.files, backup);
@@ -53,7 +53,7 @@ export async function applyPluginUpdate(options: ApplyUpdateOptions): Promise<vo
   try {
     await options.reload.disablePlugin(options.pluginID);
   } catch {
-    // 插件可能已禁用或未加载，继续尝试启用。
+    // 插件可能已禁用或未加载，继续尝试启用
   }
 
   try {
@@ -77,12 +77,12 @@ async function rollbackAndReload(
   try {
     await options.reload.disablePlugin(options.pluginID);
   } catch {
-    // 忽略重载失败，原插件保持禁用状态即可。
+    // 忽略重载失败，原插件保持禁用状态即可
   }
   try {
     await options.reload.enablePlugin(options.pluginID);
   } catch {
-    // 旧版本也可能加载失败，不掩盖原始错误。
+    // 旧版本也可能加载失败，不掩盖原始错误
   }
 }
 
@@ -102,7 +102,7 @@ async function readBackup(
   return backup;
 }
 
-/** 先写临时文件，再逐个 rename 覆盖目标；任一步失败都恢复已覆盖的目标并清理临时文件。 */
+/** 先写临时文件，再逐个 rename 覆盖目标；任一步失败都恢复已覆盖的目标并清理临时文件*/
 async function replacePluginFiles(
   adapter: PluginFileAdapter,
   dir: string,
@@ -132,7 +132,7 @@ async function replacePluginFiles(
   await removePaths(adapter, dir, temps).catch(() => undefined);
 }
 
-/** 恢复已覆盖的 files[0..upTo) 目标文件。 */
+/** 恢复已覆盖的 files[0..upTo) 目标文件*/
 async function restoreTargets(
   adapter: PluginFileAdapter,
   dir: string,

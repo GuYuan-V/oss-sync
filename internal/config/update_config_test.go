@@ -57,7 +57,7 @@ func TestUpdateConfig_EffectiveBounded(t *testing.T) {
 	if got := c.EffectiveCheckTTL(); got != 600*time.Second {
 		t.Errorf("EffectiveCheckTTL = %v", got)
 	}
-	// 越界值回退到默认值。
+	// 越界值回退到默认值
 	c = UpdateConfig{TimeoutSeconds: 1, UpdateTimeoutSeconds: 10, CheckTTLSeconds: 10, CheckLimit: 200, CheckWindowSeconds: 5}
 	if got := c.EffectiveTimeout(); got != 15*time.Second {
 		t.Errorf("out of bounds EffectiveTimeout should default, got %v", got)
@@ -85,14 +85,14 @@ func TestUpdateConfig_Validate_Repo(t *testing.T) {
 		}
 	}
 	invalid := []string{"", "owner", "owner/", "/repo", "owner/repo/extra", "owner//repo", "-owner/repo", "owner/-repo", "owner/repo with space"}
-	// 空值允许使用默认值，仅校验其余非法形式。
+	// 空值允许使用默认值，仅校验其余非法形式
 	for _, r := range invalid[1:] {
 		c := UpdateConfig{GitHubRepo: r}
 		if err := c.validate(); err == nil {
 			t.Errorf("invalid repo %q should fail", r)
 		}
 	}
-	// 校验边界约束。
+	// 校验边界约束
 	c := UpdateConfig{TimeoutSeconds: 200}
 	if err := c.validate(); err == nil {
 		t.Error("timeout out of bounds should fail")

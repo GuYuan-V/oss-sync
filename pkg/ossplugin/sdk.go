@@ -1,4 +1,4 @@
-// Package ossplugin 为受信 OSS Sync 扩展提供公开 Go SDK。
+// Package ossplugin 为受信 OSS Sync 扩展提供公开 Go SDK
 package ossplugin
 
 import (

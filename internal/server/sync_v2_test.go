@@ -179,7 +179,7 @@ func deviceTokenFor(t *testing.T, router *gin.Engine, username, password, client
 		t.Fatalf("login device %s: %d %v", clientID, code, login)
 	}
 	devToken := login["token"].(string)
-	// 用纯用户管理 token 批准，userToken 未绑定设备。
+	// 用纯用户管理 token 批准，userToken 未绑定设备
 	code, _ = doJSON(t, router, http.MethodPut,
 		"/api/devices/"+url.PathEscape(clientID)+"/authorization",
 		userToken,
@@ -188,10 +188,10 @@ func deviceTokenFor(t *testing.T, router *gin.Engine, username, password, client
 	if code != http.StatusOK {
 		t.Fatalf("approve device %s after login: %d", clientID, code)
 	}
-	// 重新登录，使 token 携带已批准状态，保证拿到最新 token。
+	// 重新登录，使 token 携带已批准状态，保证拿到最新 token
 	code, login2 := loginAsDevice(t, router, username, password, clientID, "device-"+clientID)
 	if code != http.StatusOK {
-		// 批准后原 token 按数据库校验仍有效，回退使用。
+		// 批准后原 token 按数据库校验仍有效，回退使用
 		return devToken
 	}
 	return login2["token"].(string)
@@ -571,7 +571,7 @@ func TestSyncV2IncrementalDeleteAndRename(t *testing.T) {
 	if !deletedFile.IsDeleted {
 		t.Fatal("delete did not create a synchronization tombstone")
 	}
-	// 删除后正文进入回收站，原始 files 路径不再存在。
+	// 删除后正文进入回收站，原始 files 路径不再存在
 	if _, err := os.Stat(recycle.DiskPath(dataDir, deletedFile)); os.IsNotExist(err) {
 		t.Fatalf("deleted content missing from recycle bin: %v", err)
 	}
@@ -778,7 +778,7 @@ func TestDeviceManagementAndExplicitCursorAcknowledgement(t *testing.T) {
 		t.Fatalf("login device-a: %d %v", code, loginA)
 	}
 	deviceAToken := loginA["token"].(string)
-	// 用 loginA 的 token 操作 device-a，保证 token 为已批准态。
+	// 用 loginA 的 token 操作 device-a，保证 token 为已批准态
 	tokenA = deviceAToken
 
 	code, created := uploadV2(

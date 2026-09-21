@@ -1,4 +1,3 @@
-// 更新候选
 package update
 
 import (
@@ -9,7 +8,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// Candidate 表示一次可用的更新候选，来源于 GitHub Release。
+// Candidate 表示一次可用的更新候选，来源于 GitHub Release
 type Candidate struct {
 	Version     string `json:"version"` // 规范化版本（无 v 前缀）
 	Tag         string `json:"tag"`     // 原始 tag（含 v 前缀如有）
@@ -25,7 +24,7 @@ type Candidate struct {
 	Digest      string `json:"digest"` // sha256:<64 hex>
 }
 
-// Operation 表示一次更新操作的记录。
+// Operation 表示一次更新操作的记录
 type Operation struct {
 	ID         string         `json:"id"`
 	State      OperationState `json:"state"`
@@ -36,12 +35,12 @@ type Operation struct {
 	BackupPath string         `json:"backup_path,omitempty"`
 }
 
-// IsTerminal 判断操作是否已进入终态（成功/失败/已是最新）。
+// IsTerminal 判断操作是否已进入终态（成功/失败/已是最新）
 func (o Operation) IsTerminal() bool {
 	return o.State.IsTerminal()
 }
 
-// NewCandidate 为唯一的生产构造函数，要求真实的 release/asset ID 与 sha256 digest。
+// NewCandidate 为唯一的生产构造函数，要求真实的 release/asset ID 与 sha256 digest
 func NewCandidate(tag, goos, goarch, assetURL, releaseURL string, size int64, releaseID, assetID int64, digest string) (*Candidate, error) {
 	if tag == "" {
 		return nil, newUpdateError(CodeInvalidVersion, "tag is empty", ErrInvalidVersion)
@@ -110,7 +109,7 @@ func NewCandidate(tag, goos, goarch, assetURL, releaseURL string, size int64, re
 	return c, nil
 }
 
-// Validate 严格校验候选的完整性：版本、资产名精确匹配、大小、HTTPS URL、不可变 ID 与 digest。
+// Validate 严格校验候选的完整性：版本、资产名精确匹配、大小、HTTPS URL、不可变 ID 与 digest
 func (c Candidate) Validate() error {
 	norm := version.Normalize(c.Version)
 	if norm == "" {
@@ -166,7 +165,7 @@ func (c Candidate) Validate() error {
 	if !isValidDigest(c.Digest) {
 		return newUpdateError(CodeInvalidAsset, fmt.Sprintf("digest %q is missing or malformed, want sha256:<64 hex>", c.Digest), ErrInvalidAsset)
 	}
-	// 统一转为小写后比较，保证 digest 稳定可比。
+	// 统一转为小写后比较，保证 digest 稳定可比
 	if c.Digest != strings.ToLower(c.Digest) {
 		return newUpdateError(CodeInvalidAsset, fmt.Sprintf("digest %q must be lowercase", c.Digest), ErrInvalidAsset)
 	}

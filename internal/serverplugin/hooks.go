@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// RunHook 按名称依次触发已注册的动作与过滤器。
+// RunHook 按名称依次触发已注册的动作与过滤器
 func (m *Manager) RunHook(ctx context.Context, name string, payload any) (any, error) {
 	if !validExtensionName(name) {
 		return nil, fmt.Errorf("invalid plugin hook %q", name)
@@ -50,7 +50,7 @@ func (m *Manager) RunHook(ctx context.Context, name string, payload any) (any, e
 	return current, nil
 }
 
-// ApplyHook 沿用博客宿主原有契约，底层改用动态注册实现。
+// ApplyHook 沿用博客宿主原有契约，底层改用动态注册实现
 func (m *Manager) ApplyHook(ctx context.Context, hook string, payload blog.PluginHookPayload) (string, error) {
 	registrations := m.matchingHooks(hook)
 	if len(registrations) == 0 {
@@ -86,7 +86,7 @@ func (m *Manager) ApplyHook(ctx context.Context, hook string, payload blog.Plugi
 	return content, nil
 }
 
-// RenderAdminPage 调用指定插件管理页注册的回调。
+// RenderAdminPage 调用指定插件管理页注册的回调
 func (m *Manager) RenderAdminPage(ctx context.Context, pluginID, slug string) (string, error) {
 	registration, ok := m.RegistrationFor(pluginID)
 	if !ok {

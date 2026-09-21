@@ -1,4 +1,3 @@
-// Scheduler 提供后端周期性任务的注册与生命周期管理。
 package cron
 
 import (
@@ -18,6 +17,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/reconcile"
 )
 
+// Scheduler 提供后端周期性任务的注册与生命周期管理
 type Scheduler struct {
 	cron          *cron.Cron
 	cl            *Cleanup
@@ -26,7 +26,7 @@ type Scheduler struct {
 	pluginEntries map[string][]cron.EntryID
 }
 
-// AddPluginTask 向宿主调度器注册受信可执行插件任务。
+// AddPluginTask 向宿主调度器注册受信可执行插件任务
 func (s *Scheduler) AddPluginTask(pluginID, name, schedule string, task func()) error {
 	if strings.TrimSpace(schedule) == "" || task == nil {
 		return errors.New("plugin task schedule and callback are required")

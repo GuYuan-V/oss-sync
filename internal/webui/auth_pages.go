@@ -1,4 +1,3 @@
-// 认证页面
 package webui
 
 import (
@@ -14,7 +13,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultbackup"
 )
 
-// registerView 注册页数据。
+// registerView 注册页数据
 type registerView struct {
 	RegistrationEnabled bool
 	Username            string
@@ -60,7 +59,7 @@ func (h *Handler) registerSubmit(c *gin.Context) {
 		h.renderAuth(c, http.StatusBadRequest, "register", view)
 		return
 	}
-	// 原子化首注判定与创建，避免并发产生多个 admin（跨 web/API 入口）。
+	// 原子化首注判定与创建，避免并发产生多个 admin（跨 web/API 入口）
 	user, err := auth.CreateAccountForAnonymousRegistration(h.DB, username, password)
 	if err != nil {
 		if auth.IsUsernameTakenError(err) {
@@ -80,12 +79,11 @@ func (h *Handler) registerSubmit(c *gin.Context) {
 	h.renderAuth(c, http.StatusOK, "register", view)
 }
 
-// errorsIsNotFound 判断是否为 gorm.ErrRecordNotFound。
 func errorsIsNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
 }
 
-// vaultbackupPurge 在事务内删除仓库并生成备份。
+// vaultbackupPurge 在事务内删除仓库并生成备份
 func vaultbackupPurge(tx *gorm.DB, h *Handler, vault models.Vault) (models.VaultBackup, error) {
 	return vaultbackup.PurgeWithTx(tx, h.Cfg.Storage.DataDir, vault)
 }

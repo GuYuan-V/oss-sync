@@ -1,4 +1,3 @@
-// 协作成员页面
 package webui
 
 import (

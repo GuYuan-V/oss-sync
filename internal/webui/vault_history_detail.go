@@ -1,4 +1,3 @@
-// 历史详情
 package webui
 
 import (

@@ -1,4 +1,4 @@
-// Package admin 提供管理员账号与主题管理接口。
+// Package admin 提供管理员账号与主题管理接口
 package admin
 
 import (
@@ -14,18 +14,18 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// Handler 持有 admin 路由依赖。
+// Handler 持有 admin 路由依赖
 type Handler struct {
 	DB  *gorm.DB
 	Cfg *config.Config
 }
 
-// New 创建 admin 路由处理器。
+// New 创建 admin 路由处理器
 func New(db *gorm.DB, cfg *config.Config) *Handler {
 	return &Handler{DB: db, Cfg: cfg}
 }
 
-// Register 挂载管理员路由。
+// Register 挂载管理员路由
 func (h *Handler) Register(r *gin.Engine) {
 	g := r.Group("/api/admin", auth.Middleware(h.DB, h.Cfg), h.requireAdmin)
 	{

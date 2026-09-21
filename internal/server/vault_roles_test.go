@@ -26,7 +26,7 @@ func TestVaultRolesAuthorizeSyncAndManagement(t *testing.T) {
 	if code != http.StatusNoContent {
 		t.Fatalf("add manager: %d", code)
 	}
-	// 设备属于 manager 用户，由 manager 自己批准并授权该仓库。
+	// 设备属于 manager 用户，由 manager 自己批准并授权该仓库
 	approveDevice(t, router, managerUserToken, "manager-device", vaultID)
 	code, mgrDevLogin := loginAsDevice(t, router, "vault-manager", "password123", "manager-device", "Manager Device")
 	if code != http.StatusOK {

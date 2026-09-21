@@ -93,7 +93,7 @@ function findByClass(element, className) {
 async function loadConflictModal() {
   const dir = await mkdtemp(join(tmpdir(), "oss-conflict-modal-"));
   const outfile = join(dir, "conflict-modal.mjs");
-  // 生产代码调用 createTextNode，此处提供最小 document 桩。
+  // 生产代码调用 createTextNode，此处提供最小 document 桩
   globalThis.document = { createTextNode: (t) => new FakeTextNode(t) };
   await build({
     entryPoints: ["src/conflict-modal.ts"],

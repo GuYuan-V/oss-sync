@@ -19,18 +19,18 @@ func TestHistoryAndRecycleFlow(t *testing.T) {
 	histToken := deviceTokenFor(t, router, "hist-user", "password123", "hist-dev", userToken, []string{vaultID})
 	_ = deviceTokenFor(t, router, "hist-user", "password123", "device-test", userToken, []string{vaultID})
 
-	// 创建文件。
+	// 创建文件
 	code, created := uploadV2(t, router, histToken, vaultID, "Notes/Hist.md", "# v1", 0, "hist-dev", "create-hist")
 	if code != http.StatusOK {
 		t.Fatalf("create: %d %v", code, created)
 	}
-	// 修改文件。
+	// 修改文件
 	code, modified := uploadV2(t, router, histToken, vaultID, "Notes/Hist.md", "# v2", revisionOf(t, created), "hist-dev", "modify-hist")
 	if code != http.StatusOK {
 		t.Fatalf("modify: %d %v", code, modified)
 	}
 
-	// 历史列表应有 create + modify 两条。
+	// 历史列表应有 create + modify 两条
 	histPath := "/api/vaults/" + url.PathEscape(vaultID) + "/sync/history?path=" + url.QueryEscape("Notes/Hist.md") + "&client_id=hist-dev"
 	code, list := doJSONAsDevice(t, router, http.MethodGet, histPath, histToken, "hist-dev", "hist-pc", nil)
 	if code != http.StatusOK {
@@ -40,7 +40,7 @@ func TestHistoryAndRecycleFlow(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("history rows=%d want 2: %v", len(rows), list)
 	}
-	// 版本倒序：第一条是 modify，第二条是 create。
+	// 版本倒序：第一条是 modify，第二条是 create
 	modifyRow := rows[0].(map[string]any)
 	createRow := rows[1].(map[string]any)
 	if modifyRow["action"] != "modify" || createRow["action"] != "create" {
@@ -50,7 +50,7 @@ func TestHistoryAndRecycleFlow(t *testing.T) {
 		t.Fatalf("history actor info: %v", modifyRow)
 	}
 
-	// 历史详情应返回快照内容与 diff（对比当前 # v2）。
+	// 历史详情应返回快照内容与 diff（对比当前 # v2）
 	modifyID := uint64(modifyRow["id"].(float64))
 	detailPath := "/api/vaults/" + url.PathEscape(vaultID) + "/sync/history/" + strconv.FormatUint(modifyID, 10) +
 		"?mode=current&path=" + url.QueryEscape("Notes/Hist.md") + "&client_id=hist-dev"
@@ -62,7 +62,7 @@ func TestHistoryAndRecycleFlow(t *testing.T) {
 		t.Fatalf("history diff missing: %v", detail)
 	}
 
-	// 从 modify 历史（快照为 # v1）恢复，内容回到 # v1。
+	// 从 modify 历史（快照为 # v1）恢复，内容回到 # v1
 	restorePath := "/api/vaults/" + url.PathEscape(vaultID) + "/sync/history/" + strconv.FormatUint(modifyID, 10) +
 		"/restore?path=" + url.QueryEscape("Notes/Hist.md") + "&client_id=hist-dev"
 	code, _ = doJSONAsDevice(t, router, http.MethodPost, restorePath, histToken, "hist-dev", "hist-pc", nil)
@@ -73,7 +73,7 @@ func TestHistoryAndRecycleFlow(t *testing.T) {
 		t.Fatalf("restored content: %q", got.Body.String())
 	}
 
-	// 删除进回收站，恢复操作已推进 revision，以当前 revision 作为 base。
+	// 删除进回收站，恢复操作已推进 revision，以当前 revision 作为 base
 	restoredResp := downloadV2(t, router, histToken, vaultID, "Notes/Hist.md", 0)
 	currentRev, _ := strconv.ParseInt(restoredResp.Header().Get("X-OSS-Revision"), 10, 64)
 	code, deleted := doJSONAsDevice(t, router, http.MethodPost,
@@ -97,7 +97,7 @@ func TestHistoryAndRecycleFlow(t *testing.T) {
 	}
 	fileID := uint64(items[0].(map[string]any)["id"].(float64))
 
-	// 从回收站恢复。
+	// 从回收站恢复
 	code, _ = doJSONAsDevice(t, router, http.MethodPost,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/recycle-bin/"+strconv.FormatUint(fileID, 10)+"/restore?client_id=hist-dev",
 		histToken, "hist-dev", "hist-pc", nil)
@@ -108,7 +108,7 @@ func TestHistoryAndRecycleFlow(t *testing.T) {
 		t.Fatalf("recycle restored content: %d %q", got.Code, got.Body.String())
 	}
 
-	// 再删除并永久删除（回收站恢复再次推进 revision）。
+	// 再删除并永久删除（回收站恢复再次推进 revision）
 	restoredAgain := downloadV2(t, router, histToken, vaultID, "Notes/Hist.md", 0)
 	currentRev2, _ := strconv.ParseInt(restoredAgain.Header().Get("X-OSS-Revision"), 10, 64)
 	code, _ = doJSONAsDevice(t, router, http.MethodPost,
@@ -152,19 +152,19 @@ func TestParticipantCannotRestoreHistoryOrRecycle(t *testing.T) {
 		t.Fatalf("register member: %d", code)
 	}
 	memberUserToken := memberLogin["token"].(string)
-	// 成员先加入仓库，再批准设备。
+	// 成员先加入仓库，再批准设备
 	code, _ = doJSON(t, router, http.MethodPost, "/api/vaults/"+url.PathEscape(vaultID)+"/members", ownerDev, map[string]string{"username": "hist-member", "role": "participant"})
 	if code != http.StatusNoContent {
 		t.Fatalf("add participant: %d", code)
 	}
-	// 加入成员后再建设备。
+	// 加入成员后再建设备
 	memberDev := deviceTokenFor(t, router, "hist-member", "password123", "member-dev", memberUserToken, []string{vaultID})
 
 	code, created := uploadV2(t, router, ownerDev, vaultID, "Restrict.md", "x", 0, "owner-dev", "create-restrict")
 	if code != http.StatusOK {
 		t.Fatalf("owner create: %d", code)
 	}
-	// participant 只读历史，不能恢复。
+	// participant 只读历史，不能恢复
 	histPath := "/api/vaults/" + url.PathEscape(vaultID) + "/sync/history?path=" + url.QueryEscape("Restrict.md") + "&client_id=member-dev"
 	code, list := doJSONAsDevice(t, router, http.MethodGet, histPath, memberDev, "member-dev", "member-pc", nil)
 	if code != http.StatusOK {
@@ -178,7 +178,7 @@ func TestParticipantCannotRestoreHistoryOrRecycle(t *testing.T) {
 		t.Fatalf("participant history restore: %d", code)
 	}
 
-	// 删除后 participant 不能恢复回收站。
+	// 删除后 participant 不能恢复回收站
 	code, _ = doJSONAsDevice(t, router, http.MethodPost,
 		"/api/vaults/"+url.PathEscape(vaultID)+"/sync/delete",
 		ownerDev, "owner-dev", "owner-pc",
@@ -215,7 +215,7 @@ func TestAcceptedCollaboratorCanReadOnlyCollaboratedFileHistory(t *testing.T) {
 		t.Fatalf("register collaborator: %d", code)
 	}
 	collabUserToken := collaboratorLogin["token"].(string)
-	// 协作者虽非仓库成员，读协作文件历史仍需设备。
+	// 协作者虽非仓库成员，读协作文件历史仍需设备
 	collabDev := deviceTokenFor(t, router, "history-collaborator", "password123", "collab-device", collabUserToken, []string{})
 	var owner, collaborator models.User
 	var file models.File
@@ -235,11 +235,11 @@ func TestAcceptedCollaboratorCanReadOnlyCollaboratedFileHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 用户是单文件的接受态协作者，但不是 Vault 成员。
+	// 用户是单文件的接受态协作者，但不是 Vault 成员
 	listPath := "/api/vaults/" + url.PathEscape(vaultID) + "/sync/history?path=Shared.md&client_id=collab-device"
-	// 协作者打开该文件历史。
+	// 协作者打开该文件历史
 	code, list := doJSONAsDevice(t, router, http.MethodGet, listPath, collabDev, "collab-device", "collab-pc", nil)
-	// 列表与详情可读，恢复仍禁止。
+	// 列表与详情可读，恢复仍禁止
 	if code != http.StatusOK {
 		t.Fatalf("collaborator history list: %d %v", code, list)
 	}

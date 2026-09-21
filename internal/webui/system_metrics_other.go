@@ -43,7 +43,7 @@ func readProcStatSample() (cpuSample, bool) {
 		var idle uint64
 		for i, field := range fields[1:] {
 			if i >= 8 {
-				// guest 与 guest_nice 已计入 user 与 nice，此处不再重复累计。
+				// guest 与 guest_nice 已计入 user 与 nice，此处不再重复累计
 				break
 			}
 			val, err := strconv.ParseUint(field, 10, 64)
@@ -51,7 +51,7 @@ func readProcStatSample() (cpuSample, bool) {
 				return cpuSample{}, false
 			}
 			total += val
-			// idle 累计 /proc/stat 中序号为 4 与 5 的字段，对应索引 3 与 4。
+			// idle 累计 /proc/stat 中序号为 4 与 5 的字段，对应索引 3 与 4
 			if i == 3 || i == 4 {
 				idle += val
 			}
@@ -94,7 +94,7 @@ func readProcMemInfo() (int64, int64, bool) {
 		if err != nil {
 			continue
 		}
-		// /proc/meminfo 数值单位为 kB，此处换算为字节。
+		// /proc/meminfo 数值单位为 kB，此处换算为字节
 		valBytes := val * 1024
 		switch key {
 		case "MemTotal":
@@ -115,7 +115,7 @@ func readProcMemInfo() (int64, int64, bool) {
 		return 0, 0, false
 	}
 	if !hasAvail {
-		// 缺少 MemAvailable 时按 free、buffers 与 cached 之和估算可用内存。
+		// 缺少 MemAvailable 时按 free、buffers 与 cached 之和估算可用内存
 		available = free + buffers + cached
 	}
 	if available > total {
@@ -163,7 +163,7 @@ func cpuModelName() string {
 			}
 		}
 	}
-	// 缺少 model name 时回退读取 Hardware 字段，并忽略 processor 数值行。
+	// 缺少 model name 时回退读取 Hardware 字段，并忽略 processor 数值行
 	if _, err := f.Seek(0, 0); err == nil {
 		scanner = bufio.NewScanner(f)
 		for scanner.Scan() {

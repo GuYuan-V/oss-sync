@@ -1,4 +1,4 @@
-// Package shares 提供公开分享的创建与管理接口。
+// Package shares 提供公开分享的创建与管理接口
 package shares
 
 import (
@@ -75,7 +75,7 @@ func (h *Handler) Register(r *gin.Engine) {
 	}
 }
 
-// CreateWeb 是网页控制台使用的分享创建服务，校验文件存在并生成分享 ID。
+// CreateWeb 是网页控制台使用的分享创建服务，校验文件存在并生成分享 ID
 func (h *Handler) CreateWeb(userID uint, vaultID, targetPath string, isFolder, allowCopy bool) (string, error) {
 	targetPath = strings.TrimSpace(targetPath)
 	if targetPath == "" || !isSafeSharePath(targetPath) {

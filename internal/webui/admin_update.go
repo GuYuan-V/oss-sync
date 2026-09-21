@@ -1,4 +1,3 @@
-// 管理更新
 package webui
 
 import (
@@ -16,7 +15,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// adminUpdateStatus 供模板与 JSON 状态接口共用。
+// adminUpdateStatus 供模板与 JSON 状态接口共用
 type adminUpdateStatus struct {
 	CurrentVersion string                   `json:"current_version"`
 	Commit         string                   `json:"commit,omitempty"`
@@ -34,7 +33,7 @@ type adminUpdateStatus struct {
 	IsUpdating     bool                     `json:"is_updating"`
 }
 
-// buildUpdateStatus 返回当前版本与持久化操作状态（不含本地路径/GitHub 元数据）。
+// buildUpdateStatus 返回当前版本与持久化操作状态（不含本地路径/GitHub 元数据）
 func (h *Handler) buildUpdateStatus() adminUpdateStatus {
 	s := adminUpdateStatus{
 		CurrentVersion: version.Version,
@@ -75,13 +74,13 @@ func (h *Handler) buildUpdateStatus() adminUpdateStatus {
 	return s
 }
 
-// adminUpdateStatusJSON 供前端轮询更新状态，路由为 GET /dashboard/admin/system/update/status。
+// adminUpdateStatusJSON 供前端轮询更新状态，路由为 GET /dashboard/admin/system/update/status
 func (h *Handler) adminUpdateStatusJSON(c *gin.Context) {
 	s := h.buildUpdateStatus()
 	c.JSON(http.StatusOK, s)
 }
 
-// adminUpdateCheck 处理检查更新请求，路由为 POST /dashboard/admin/system/update/check。
+// adminUpdateCheck 处理检查更新请求，路由为 POST /dashboard/admin/system/update/check
 func (h *Handler) adminUpdateCheck(c *gin.Context) {
 	if h.updateSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"ok": false, "code": "service_unavailable", "error": h.t(c, "err.update_service_unavailable")})
@@ -140,7 +139,7 @@ func (h *Handler) adminUpdateCheck(c *gin.Context) {
 	})
 }
 
-// adminUpdateTrigger 处理触发更新请求，路由为 POST /dashboard/admin/system/update。
+// adminUpdateTrigger 处理触发更新请求，路由为 POST /dashboard/admin/system/update
 func (h *Handler) adminUpdateTrigger(c *gin.Context) {
 	if h.updateSvc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"ok": false, "code": "service_unavailable", "error": h.t(c, "err.update_service_unavailable")})
@@ -150,7 +149,7 @@ func (h *Handler) adminUpdateTrigger(c *gin.Context) {
 	if checkID == "" {
 		checkID = strings.TrimSpace(c.PostForm("checkId"))
 	}
-	// 兼容 fetch 以 JSON 提交的 check_id。
+	// 兼容 fetch 以 JSON 提交的 check_id
 	if checkID == "" && strings.Contains(c.GetHeader("Content-Type"), "application/json") {
 		var j struct {
 			CheckID  string `json:"check_id"`
@@ -171,7 +170,7 @@ func (h *Handler) adminUpdateTrigger(c *gin.Context) {
 		expected = strings.TrimSpace(c.PostForm("version"))
 	}
 	if expected == "" && strings.Contains(c.GetHeader("Content-Type"), "application/json") {
-		// 请求体已被读取，expected_version 改从查询参数补充。
+		// 请求体已被读取，expected_version 改从查询参数补充
 		expected = strings.TrimSpace(c.Query("expected_version"))
 		if expected == "" {
 			expected = strings.TrimSpace(c.Query("version"))

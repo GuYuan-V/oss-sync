@@ -50,7 +50,7 @@ function makeVault(initial = new Map()) {
   return vault;
 }
 
-// 引擎上传成功后经 baselineFromAcknowledgement 落库 baseText，含空文本。
+// 引擎上传成功后经 baselineFromAcknowledgement 落库 baseText，含空文本
 test("sync-engine upload success captures acknowledged baseText via baselineFromAcknowledgement", async () => {
   const vault = makeVault(new Map([["note.md", {bytes:enc("hello"), mtime:1000}]]));
   const api = {
@@ -348,7 +348,7 @@ test("resolver local mutation guard leaves canonical untouched and records confl
       createOperationID:()=>"id",
       now:()=>1,
     };
-    const expectedHash=await shaHex(enc("old local")); // 预期哈希取旧值，正本已变更，用于触发 stale 分支。
+    const expectedHash=await shaHex(enc("old local")); // 预期哈希取旧值，正本已变更，用于触发 stale 分支
     const resolver=new resolverMod.OrdinarySyncConflictResolver(deps);
     await resolver.resolve({path:"note.md", expectedHash, remote:{path:"note.md", type:"markdown", hash:await shaHex(enc("remote")), size:6, mtime:30, revision:2, deleted:false}});
     assert.equal(conflictCalled,true);
@@ -373,7 +373,7 @@ test("resolver upload-time 409 uses fresh ID and authoritative revision", async 
       removePendingForPath:(p)=>{ pending=pending.filter(o=>o.path!==p); },
     };
     let pending=[{id:"old-pending", kind:"upsert", path:"note.md", createdAt:1}];
-    // 按真实 BaselineStore 语义按路径去重后写入 pending。
+    // 按真实 BaselineStore 语义按路径去重后写入 pending
     baseline.putPending = (op)=>{ pending = pending.filter(o=> o.path!==op.path && o.oldPath!==op.path); pending.push(op); };
     const deps={
       vaultId:"v1",

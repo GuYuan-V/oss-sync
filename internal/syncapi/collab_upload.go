@@ -1,4 +1,3 @@
-// 协作上传
 package syncapi
 
 import (
@@ -38,7 +37,7 @@ type collabUploadRequest struct {
 	OperationID  string `json:"operation_id"`
 }
 
-// CollabUpload 按版本号比较并写入已接受的协作内容，冲突时返回当前版本。
+// CollabUpload 按版本号比较并写入已接受的协作内容，冲突时返回当前版本
 func (h *Handler) CollabUpload(c *gin.Context) {
 	user, clientID, ok := h.requireCollaborationDevice(c)
 	if !ok {

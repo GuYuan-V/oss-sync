@@ -18,7 +18,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
-// RegisterRoutes 挂载插件公开与鉴权两套命名空间。
+// RegisterRoutes 挂载插件公开与鉴权两套命名空间
 func (m *Manager) RegisterRoutes(r *gin.Engine, cfg *config.Config) {
 	r.GET("/api/plugin-capabilities", auth.Middleware(m.db, cfg), m.capabilities)
 	r.POST("/api/plugin-hooks/:hook", auth.Middleware(m.db, cfg), m.applyHookHTTP)

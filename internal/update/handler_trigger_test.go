@@ -47,7 +47,7 @@ func newHandlerTestSetup(t *testing.T) (*Handler, *Manager, string, func()) {
 		t.Fatalf("NewUpdater: %v", err)
 	}
 	svc := NewService(mgr, up, cfg)
-	// 桩 helper 启动，不拉起真实进程。
+	// 桩 helper 启动，不拉起真实进程
 	origLaunch := launchHelperFn
 	launchHelperFn = func(string, string) error { return nil }
 	t.Cleanup(func() { launchHelperFn = origLaunch })
@@ -117,7 +117,7 @@ func TestHandler_Trigger_MissingCheckID(t *testing.T) {
 
 func TestHandler_Trigger_StaleCheckID(t *testing.T) {
 	h, mgr, _, _ := newHandlerTestSetup(t)
-	// 以 1 毫秒有效期签发，随后等待其过期。
+	// 以 1 毫秒有效期签发，随后等待其过期
 	assetName, _ := AssetName("9.9.9", runtime.GOOS, runtime.GOARCH)
 	content := fakeExecBytes()
 	l := strings.ToLower(assetName)
@@ -216,7 +216,7 @@ func TestHandler_Check_CreatesDurableCheckID(t *testing.T) {
 		Update:  config.UpdateConfig{GitHubRepo: "fake/oss-sync"},
 	}
 	mgr, _ := NewManager(dataDir)
-	// 桩 GitHub Release 接口。
+	// 桩 GitHub Release 接口
 	content := fakeExecBytes()
 	assetName, _ := AssetName("9.9.9", runtime.GOOS, runtime.GOARCH)
 	var serveContent []byte
@@ -267,7 +267,7 @@ func TestHandler_Check_CreatesDurableCheckID(t *testing.T) {
 	if resp["candidate"] == nil {
 		t.Errorf("candidate missing")
 	}
-	// 校验落盘，签发的 check_id 必须可回查。
+	// 校验落盘，签发的 check_id 必须可回查
 	checkID := resp["check_id"].(string)
 	if _, err := mgr.ValidateChecked(checkID); err != nil {
 		t.Errorf("durable check not found: %v", err)

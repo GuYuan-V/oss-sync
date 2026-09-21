@@ -1,4 +1,4 @@
-// Package devices 提供设备审批、吊销与 Vault 访问接口。
+// Package devices 提供设备审批、吊销与 Vault 访问接口
 package devices
 
 import (
@@ -55,7 +55,7 @@ type VaultCursorOut struct {
 	LastSyncAt     string `json:"last_sync_at,omitempty"`
 }
 
-// AccessOut 表示设备被授权访问的仓库。
+// AccessOut 表示设备被授权访问的仓库
 type AccessOut struct {
 	VaultID   string `json:"vault_id"`
 	VaultName string `json:"vault_name"`
@@ -227,7 +227,7 @@ func (h *Handler) Rename(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"client_id": clientID, "name": req.Name})
 }
 
-// authorizeRequest 批准设备并设置仓库授权，或吊销设备。
+// authorizeRequest 批准设备并设置仓库授权，或吊销设备
 type authorizeRequest struct {
 	UserID   *uint    `json:"user_id"`
 	Name     string   `json:"name"`
@@ -235,8 +235,8 @@ type authorizeRequest struct {
 	VaultIDs []string `json:"vault_ids"`
 }
 
-// Authorize 处理 PUT /api/devices/:client_id/authorization。
-// 用户批准自己的设备并选择授权仓库；管理员可跨用户管理。
+// Authorize 处理 PUT /api/devices/:client_id/authorization
+// 用户批准自己的设备并选择授权仓库；管理员可跨用户管理
 func (h *Handler) Authorize(c *gin.Context) {
 	actor, ok := auth.RequireUser(c)
 	if !ok {
@@ -272,7 +272,7 @@ func (h *Handler) Authorize(c *gin.Context) {
 		return
 	}
 
-	// 校验授权仓库均属于目标用户可访问的仓库。
+	// 校验授权仓库均属于目标用户可访问的仓库
 	vaultIDs := make([]string, 0, len(req.VaultIDs))
 	if req.Status == deviceauth.DeviceStatusApproved {
 		for _, raw := range req.VaultIDs {
@@ -397,7 +397,7 @@ func (h *Handler) Revoke(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// MinActiveCursor 返回某个 Vault 活跃设备的最小同步游标和活跃设备数。
+// MinActiveCursor 返回某个 Vault 活跃设备的最小同步游标和活跃设备数
 func MinActiveCursor(
 	db *gorm.DB,
 	vaultID string,

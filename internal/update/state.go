@@ -1,4 +1,3 @@
-// 更新状态
 package update
 
 import (
@@ -7,7 +6,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// OperationState 是更新操作的有穷状态，字符串值稳定，作为 API 与持久化契约。
+// OperationState 是更新操作的有穷状态，字符串值稳定，作为 API 与持久化契约
 type OperationState string
 
 const (
@@ -26,7 +25,7 @@ const (
 	StateInProgress   OperationState = "in_progress"
 )
 
-// IsTerminal 判断是否为终态。
+// IsTerminal 判断是否为终态
 func (s OperationState) IsTerminal() bool {
 	switch s {
 	case StateDone, StateFailed, StateUpToDate:
@@ -36,7 +35,7 @@ func (s OperationState) IsTerminal() bool {
 	}
 }
 
-// IsValid 判断是否为已知状态。
+// IsValid 判断是否为已知状态
 func (s OperationState) IsValid() bool {
 	switch s {
 	case StateIdle, StatePrepare, StateFetchRelease, StateSelectAsset,
@@ -48,10 +47,10 @@ func (s OperationState) IsValid() bool {
 	}
 }
 
-// String 返回状态的字符串表示。
+// String 返回状态的字符串表示
 func (s OperationState) String() string { return string(s) }
 
-// CheckResult 是一次“检查更新”的结果，同时写入状态供 /update/status 查询。
+// CheckResult 是一次“检查更新”的结果，同时写入状态供 /update/status 查询
 type CheckResult struct {
 	CheckedAt       time.Time `json:"checked_at"`
 	CurrentVersion  string    `json:"current_version"`
@@ -61,7 +60,7 @@ type CheckResult struct {
 	Note            string    `json:"note,omitempty"`
 }
 
-// UpdateResult 是一次“执行更新”的结果。
+// UpdateResult 是一次“执行更新”的结果
 type UpdateResult struct {
 	At         time.Time      `json:"at"`
 	OK         bool           `json:"ok"`
@@ -73,7 +72,7 @@ type UpdateResult struct {
 	BackupPath string         `json:"backup_path,omitempty"`
 }
 
-// Status 是 /update/status 返回的运行时状态。
+// Status 是 /update/status 返回的运行时状态
 type Status struct {
 	Version          string         `json:"version"`
 	ExecPath         string         `json:"exec_path"`
@@ -84,7 +83,7 @@ type Status struct {
 	LastUpdate       *UpdateResult  `json:"last_update,omitempty"`
 }
 
-// Status 返回更新器的运行时状态。
+// Status 返回更新器的运行时状态
 func (u *Updater) Status() Status {
 	u.stateMu.Lock()
 	defer u.stateMu.Unlock()

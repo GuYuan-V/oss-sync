@@ -1,4 +1,3 @@
-// 博客主题的目录、压缩包、脚手架与文件管理服务。
 package blog
 
 import (
@@ -17,10 +16,10 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// BuiltinThemeNames 内置只读模板。
+// BuiltinThemeNames 内置只读模板
 var BuiltinThemeNames = []string{"default", "papertrail"}
 
-// IsBuiltinTheme 判断主题是否为内置只读模板。
+// IsBuiltinTheme 判断主题是否为内置只读模板
 func IsBuiltinTheme(name string) bool {
 	for _, b := range BuiltinThemeNames {
 		if name == b {
@@ -30,7 +29,7 @@ func IsBuiltinTheme(name string) bool {
 	return false
 }
 
-// ThemeSource 模板来源。
+// ThemeSource 模板来源
 type ThemeSource string
 
 const (
@@ -40,7 +39,7 @@ const (
 	SourceLegacy   ThemeSource = "legacy"
 )
 
-// ThemeInfo 模板目录条目。
+// ThemeInfo 模板目录条目
 type ThemeInfo struct {
 	Name               string      `json:"name"`
 	Source             ThemeSource `json:"source"`
@@ -52,7 +51,7 @@ type ThemeInfo struct {
 	SupportsPublicBlog bool        `json:"supports_public_blog"`
 }
 
-// ZIP 解压上限，用于防止解压炸弹。
+// ZIP 解压上限，用于防止解压炸弹
 const (
 	maxZipTotalBytes  = 32 << 20 // 32 MiB 总解压上限
 	maxZipEntryBytes  = 8 << 20  // 8 MiB 单文件上限
@@ -62,7 +61,7 @@ const (
 	textEditMaxFiles  = 64
 )
 
-// ListThemes 列出全部模板（内置 + 自定义）。
+// ListThemes 列出全部模板（内置 + 自定义）
 func ListThemes(db *gorm.DB, dataDir string) ([]ThemeInfo, error) {
 	out := make([]ThemeInfo, 0, len(BuiltinThemeNames)+4)
 
@@ -133,7 +132,7 @@ func themeSourceOf(dataDir, name string) ThemeSource {
 	if IsBuiltinTheme(name) {
 		return SourceBuiltin
 	}
-	return SourceLegacy // 目录存在即视为 legacy；上传/脚手架写入来源标记文件。
+	return SourceLegacy // 目录存在即视为 legacy；上传/脚手架写入来源标记文件
 }
 
 func themesUsedByVaults(db *gorm.DB, themeName string) []string {
@@ -148,7 +147,7 @@ func themesUsedByVaults(db *gorm.DB, themeName string) []string {
 	return out
 }
 
-// UploadTheme 校验并解压 ZIP 到 data/themes/<name>。
+// UploadTheme 校验并解压 ZIP 到 data/themes/<name>
 func UploadTheme(dataDir, themeName string, r io.ReaderAt, size int64) error {
 	if err := ValidateThemeName(themeName); err != nil {
 		return err
@@ -207,7 +206,7 @@ func UploadTheme(dataDir, themeName string, r io.ReaderAt, size int64) error {
 			content []byte
 		}{name: name, content: content})
 	}
-	// 必须包含 template.html。
+	// 必须包含 template.html
 	hasTemplate := false
 	for _, e := range entries {
 		if e.name == "template.html" {
@@ -232,7 +231,7 @@ func UploadTheme(dataDir, themeName string, r io.ReaderAt, size int64) error {
 	if err := os.Mkdir(dir, 0o750); err != nil {
 		return fmt.Errorf("创建主题目录: %w", err)
 	}
-	// 边写入边清理：失败时移除半成品。
+	// 边写入边清理：失败时移除半成品
 	ok := false
 	defer func() {
 		if !ok {
@@ -252,7 +251,7 @@ func UploadTheme(dataDir, themeName string, r io.ReaderAt, size int64) error {
 	return nil
 }
 
-// safeThemeEntryPath 校验 ZIP 内相对路径，禁止 ..、绝对路径、反斜杠与空段。
+// safeThemeEntryPath 校验 ZIP 内相对路径，禁止 ..、绝对路径、反斜杠与空段
 func safeThemeEntryPath(name string) bool {
 	if name == "" || strings.Contains(name, "\\") || strings.ContainsRune(name, '\x00') {
 		return false
@@ -264,7 +263,7 @@ func safeThemeEntryPath(name string) bool {
 	return true
 }
 
-// ListThemeFiles 列出主题目录内的文件（相对路径）。
+// ListThemeFiles 列出主题目录内的文件（相对路径）
 func ListThemeFiles(dataDir, themeName string) ([]string, error) {
 	if IsBuiltinTheme(themeName) {
 		return nil, errThemeReadOnly
@@ -301,7 +300,7 @@ func ListThemeFiles(dataDir, themeName string) ([]string, error) {
 	return out, nil
 }
 
-// ReadThemeFile 读取主题内文本文件（限 1 MiB）。
+// ReadThemeFile 读取主题内文本文件（限 1 MiB）
 func ReadThemeFile(dataDir, themeName, relPath string) ([]byte, error) {
 	if IsBuiltinTheme(themeName) {
 		return nil, errThemeReadOnly
@@ -320,7 +319,7 @@ func ReadThemeFile(dataDir, themeName, relPath string) ([]byte, error) {
 	return os.ReadFile(abs)
 }
 
-// SaveThemeFile 保存主题内文本文件（限 1 MiB）。
+// SaveThemeFile 保存主题内文本文件（限 1 MiB）
 func SaveThemeFile(dataDir, themeName, relPath string, content []byte) error {
 	if IsBuiltinTheme(themeName) {
 		return errThemeReadOnly
@@ -357,7 +356,7 @@ func safeThemeFilePath(dataDir, themeName, relPath string) (string, error) {
 	return abs, nil
 }
 
-// editableTextExts 允许在线编辑的文件扩展名。
+// editableTextExts 允许在线编辑的文件扩展名
 var editableTextExts = map[string]bool{
 	".html": true, ".htm": true, ".css": true, ".js": true, ".mjs": true,
 	".json": true, ".md": true, ".txt": true, ".svg": true, ".yaml": true, ".yml": true,
@@ -368,7 +367,7 @@ func isEditableTextFile(relPath string) bool {
 	return editableTextExts[ext]
 }
 
-// CreateThemeZip 将主题目录写入提供的 zip.Writer。
+// CreateThemeZip 将主题目录写入提供的 zip.Writer
 func CreateThemeZip(dataDir, themeName string, zw *zip.Writer) error {
 	if IsBuiltinTheme(themeName) {
 		return errThemeNotDownloadable
@@ -423,7 +422,7 @@ func CreateThemeZip(dataDir, themeName string, zw *zip.Writer) error {
 	})
 }
 
-// DeleteTheme 删除未被使用的自定义模板。
+// DeleteTheme 删除未被使用的自定义模板
 func DeleteTheme(db *gorm.DB, dataDir, themeName string) ([]string, error) {
 	if IsBuiltinTheme(themeName) {
 		return nil, errThemeNotDeletable
@@ -450,7 +449,7 @@ var (
 	errThemeExists          = errors.New("theme_exists: 同名模板已存在")
 )
 
-// 导出错误供 API 层返回状态码。
+// 导出错误供 API 层返回状态码
 var (
 	ErrThemeReadOnly        = errThemeReadOnly
 	ErrThemeNotDownloadable = errThemeNotDownloadable
@@ -459,7 +458,7 @@ var (
 	ErrThemeExists          = errThemeExists
 )
 
-// IsThemeReadOnly 等函数提供主题错误码判断。
+// IsThemeReadOnly 等函数提供主题错误码判断
 func IsThemeReadOnly(err error) bool        { return errors.Is(err, errThemeReadOnly) }
 func IsThemeNotDownloadable(err error) bool { return errors.Is(err, errThemeNotDownloadable) }
 func IsThemeNotDeletable(err error) bool    { return errors.Is(err, errThemeNotDeletable) }

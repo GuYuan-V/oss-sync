@@ -320,14 +320,14 @@ func TestPublicHomeEmptyStateLinksItsLayoutStyles(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	router := srv.Router()
 
-	// 尚无公开 Vault 时，/ 渲染安全的空目录页。
+	// 尚无公开 Vault 时，/ 渲染安全的空目录页
 	home := httptest.NewRecorder()
 	router.ServeHTTP(home, httptest.NewRequest(http.MethodGet, "/", nil))
 	if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), "暂无公开博客") {
 		t.Fatalf("empty public directory: status=%d body=%s", home.Code, home.Body.String())
 	}
 
-	// 样式表须包含占位页实际布局类，否则首页退化为浏览器默认样式。
+	// 样式表须包含占位页实际布局类，否则首页退化为浏览器默认样式
 	match := regexp.MustCompile(`href="([^"]+\.css(?:\?[^"]*)?)"`).FindStringSubmatch(home.Body.String())
 	if len(match) != 2 {
 		t.Fatalf("no stylesheet link found in home page: %s", home.Body.String())

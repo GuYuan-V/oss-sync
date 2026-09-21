@@ -1,4 +1,4 @@
-// Package main 启动 OSS Sync 服务并负责进程退出。
+// Package main 启动 OSS Sync 服务并负责进程退出
 package main
 
 import (
@@ -25,12 +25,12 @@ import (
 )
 
 func main() {
-	// 更新辅助进程不加载常规配置与数据库，直接执行后退出。
+	// 更新辅助进程不加载常规配置与数据库，直接执行后退出
 	if ok, marker := update.IsHelperInvocation(); ok {
 		code := update.RunHelper(marker)
 		os.Exit(code)
 	}
-	// --version 命令用于校验已下载的服务端二进制版本。
+	// --version 命令用于校验已下载的服务端二进制版本
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Println(version.Version)
 		return
@@ -46,11 +46,11 @@ func main() {
 		log.Fatalf("初始化更新器失败: %v", err)
 	}
 
-	// 服务回调是辅助进程完成后的关闭信号，管理器将交接状态持久化到 DataDir，中断的启动因此可恢复。
+	// 交接调用成功返回后请求主进程关闭，helper 等待主进程退出后执行替换
 	var updateSvc *update.Service
 	if mgr, err := update.NewManager(cfg.Storage.DataDir); err == nil {
 		updateSvc = update.NewService(mgr, updater, cfg)
-		// 校验当前操作与标记后恢复未完成的交接，覆盖写标记后崩溃且尚未启动辅助进程的情况。
+		// 校验当前操作与标记后恢复未完成的交接，覆盖写标记后崩溃且尚未启动辅助进程的情况
 		if n, err := update.ResumePendingHandoffs(updater.ExecPath()); err != nil {
 			log.Printf("[OSS] 恢复待处理更新失败: %v", err)
 		} else if n > 0 {
@@ -138,7 +138,7 @@ func main() {
 	shutdownGracefully(httpSrv, sched, db)
 }
 
-// shutdownGracefully 按定时任务、HTTP 流量、数据库的顺序停止。
+// shutdownGracefully 按定时任务、HTTP 流量、数据库的顺序停止
 func shutdownGracefully(httpSrv *http.Server, sched *cron.Scheduler, db *gorm.DB) {
 	stopCtx, cancelStop := context.WithTimeout(context.Background(), 5*time.Second)
 	if err := sched.Stop(stopCtx); err != nil {

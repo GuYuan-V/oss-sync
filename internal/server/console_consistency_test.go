@@ -11,13 +11,13 @@ import (
 	"github.com/helantianshen/oss-sync/internal/auth"
 )
 
-// TestConsoleHeadingHierarchy 覆盖全部 20 个已登录控制台模板，断言标题标签契约。
-// 布局顶栏和页面标题使用 h1，面板标题使用 h2，视觉字号由 CSS 独立控制。
+// TestConsoleHeadingHierarchy 覆盖全部 20 个已登录控制台模板，断言标题标签契约
+// 布局顶栏和页面标题使用 h1，面板标题使用 h2，视觉字号由 CSS 独立控制
 func TestConsoleHeadingHierarchy(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
-	// 先建管理员，避免后续注册账户被自动提升为 admin。
+	// 先建管理员，避免后续注册账户被自动提升为 admin
 	if _, err := auth.CreateAccount(db, "root", "admin-password-123", "admin"); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestConsoleHeadingHierarchy(t *testing.T) {
 	}
 }
 
-// TestConsoleEmptyPanelStates 断言空面板使用 .panel-empty 标记，并在有数据时消失。
+// TestConsoleEmptyPanelStates 断言空面板使用 .panel-empty 标记，并在有数据时消失
 func TestConsoleEmptyPanelStates(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -97,7 +97,7 @@ func TestConsoleEmptyPanelStates(t *testing.T) {
 	userSession, userCSRF := webLogin(t, router, "nobody", "password123")
 	adminSession, adminCSRF := webLogin(t, router, "root", "admin-password-123")
 
-	// 尚无任何数据时，各空面板渲染 .panel-empty。
+	// 尚无任何数据时，各空面板渲染 .panel-empty
 	assertPanelEmptyCount(t, router, "/dashboard/admin/vaults", adminSession, adminCSRF, 1)
 	assertPanelEmptyCount(t, router, "/dashboard/admin/devices", adminSession, adminCSRF, 1)
 	assertPanelEmptyCount(t, router, "/dashboard/admin/data", adminSession, adminCSRF, 3)
@@ -105,7 +105,7 @@ func TestConsoleEmptyPanelStates(t *testing.T) {
 	assertPanelEmptyCount(t, router, "/dashboard/vaults", userSession, userCSRF, 1)
 	assertPanelEmptyCount(t, router, "/dashboard/devices", userSession, userCSRF, 1)
 
-	// 创建仓库后：仓库级空面板。
+	// 创建仓库后：仓库级空面板
 	ownerToken := registerAndLogin(t, router, "owner", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, ownerToken)
 	ownerSession, ownerCSRF := webLogin(t, router, "owner", "password123")
@@ -114,7 +114,7 @@ func TestConsoleEmptyPanelStates(t *testing.T) {
 	assertPanelEmptyCount(t, router, "/dashboard/vaults/"+vaultID+"/recycle", ownerSession, ownerCSRF, 1)
 	assertPanelEmptyCount(t, router, "/dashboard/vaults/"+vaultID+"/shares", ownerSession, ownerCSRF, 1)
 
-	// 有数据后空状态消失（数据驱动切换）。
+	// 有数据后空状态消失（数据驱动切换）
 	vaultsPage := doForm(t, router, http.MethodGet, "/dashboard/vaults", nil, ownerSession, ownerCSRF)
 	if strings.Contains(vaultsPage.Body.String(), `class="panel-empty"`) {
 		t.Error("vaults page with 1 vault must not render .panel-empty")
@@ -126,7 +126,7 @@ func TestConsoleEmptyPanelStates(t *testing.T) {
 }
 
 // TestConsoleThemeControlsUseSharedButton 断言侧边栏/登录/注册的主题按钮
-// 使用共享 button 基类，并保留 data-theme-pref、aria-pressed 与认证页 hero h1。
+// 使用共享 button 基类，并保留 data-theme-pref、aria-pressed 与认证页 hero h1
 func TestConsoleThemeControlsUseSharedButton(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -169,7 +169,7 @@ func TestConsoleThemeControlsUseSharedButton(t *testing.T) {
 		}
 	}
 
-	// 认证页 hero h1 保持不变。
+	// 认证页 hero h1 保持不变
 	if !strings.Contains(login.Body.String(), `<h1>登录你的同步账本。</h1>`) ||
 		!strings.Contains(login.Body.String(), `<h1>一个账户，多台设备。</h1>`) {
 		t.Error("login hero h1 headings changed")
@@ -179,7 +179,7 @@ func TestConsoleThemeControlsUseSharedButton(t *testing.T) {
 	}
 }
 
-// TestConsoleModalHeadingsRemainH2 断言模态框标题仍是 h2。
+// TestConsoleModalHeadingsRemainH2 断言模态框标题仍是 h2
 func TestConsoleModalHeadingsRemainH2(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -192,13 +192,13 @@ func TestConsoleModalHeadingsRemainH2(t *testing.T) {
 	}
 	adminSession, adminCSRF := webLogin(t, router, "root", "admin-password-123")
 
-	// 非最后管理员 → 渲染重置密码模态框。
+	// 非最后管理员 → 渲染重置密码模态框
 	users := doForm(t, router, http.MethodGet, "/dashboard/admin", nil, adminSession, adminCSRF)
 	if !strings.Contains(users.Body.String(), `<h2 id="reset-title-`) {
 		t.Error("admin users reset modal must keep its h2 title")
 	}
 
-	// 脚手架自定义模板 → 渲染编辑模态框。
+	// 脚手架自定义模板 → 渲染编辑模态框
 	scaffold := doForm(t, router, http.MethodPost, "/dashboard/admin/themes/scaffold", url.Values{
 		"base": {"default"}, "name": {"test-theme"},
 	}, adminSession, adminCSRF)
@@ -211,7 +211,7 @@ func TestConsoleModalHeadingsRemainH2(t *testing.T) {
 	}
 }
 
-// assertPanelEmptyCount 断言页面中 .panel-empty 的出现次数。
+// assertPanelEmptyCount 断言页面中 .panel-empty 的出现次数
 func assertPanelEmptyCount(t *testing.T, router *gin.Engine, path string, session, csrf *http.Cookie, want int) {
 	t.Helper()
 	res := doForm(t, router, http.MethodGet, path, nil, session, csrf)
@@ -223,7 +223,7 @@ func assertPanelEmptyCount(t *testing.T, router *gin.Engine, path string, sessio
 	}
 }
 
-// stripModals 返回去掉 .modal 块后的正文，用于隔离页头/面板标题断言。
+// stripModals 返回去掉 .modal 块后的正文，用于隔离页头/面板标题断言
 func stripModals(body string) string {
 	if i := strings.Index(body, `<div class="modal"`); i >= 0 {
 		return body[:i]
@@ -231,7 +231,7 @@ func stripModals(body string) string {
 	return body
 }
 
-// dashboardHeadingBlock 返回 .dashboard-heading 区块的原始 HTML。
+// dashboardHeadingBlock 返回 .dashboard-heading 区块的原始 HTML
 func dashboardHeadingBlock(t *testing.T, body string) string {
 	t.Helper()
 	const open = `<section class="dashboard-heading">`
@@ -247,12 +247,12 @@ func dashboardHeadingBlock(t *testing.T, body string) string {
 }
 
 // cssRuleCarriesMinWidthZero 断言包含 selector 的规则块同时声明 min-width: 0，
-// 这是网格直接子项允许收缩、把横向溢出交给 .table-wrap 的契约。
+// 这是网格直接子项允许收缩、把横向溢出交给 .table-wrap 的契约
 func cssRuleCarriesMinWidthZero(css, selector string) bool {
 	return cssRuleCarries(css, selector, "min-width: 0")
 }
 
-// cssRuleCarries 断言包含 selector 的同一规则块包含所有指定声明。
+// cssRuleCarries 断言包含 selector 的同一规则块包含所有指定声明
 func cssRuleCarries(css, selector string, declarations ...string) bool {
 	for _, block := range strings.Split(css, "}") {
 		if !strings.Contains(block, selector) {

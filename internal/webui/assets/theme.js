@@ -1,5 +1,5 @@
-// theme.js 在页面首帧绘制前执行，避免主题闪烁。
-// 控制台偏好键 oss-console-theme，公开博客使用 oss-blog-theme（由各自页面调用 initTheme）。
+// theme.js 在页面首帧绘制前执行，避免主题闪烁
+// 控制台偏好键 oss-console-theme，公开博客使用 oss-blog-theme，由模板在 <html> 上写 data-theme-key 指定
 (function () {
   "use strict";
 
@@ -40,7 +40,7 @@
     },
   };
 
-  // 控制台页面默认使用控制台主题键；公开博客在页面末尾用 initTheme("oss-blog-theme") 覆盖。
+  // 控制台页面默认使用控制台主题键；公开博客模板通过 data-theme-key="oss-blog-theme" 指定博客偏好键
   var key = document.documentElement.getAttribute("data-theme-key") || "oss-console-theme";
   applyTheme(key);
 })();

@@ -1,4 +1,3 @@
-// 上传处理
 package syncapi
 
 import (
@@ -27,7 +26,7 @@ import (
 
 const fallbackMaxFileSizeMB = 100
 
-// Upload 接收 Obsidian 原始字节流，同时兼容 multipart/form-data 客户端。
+// Upload 接收 Obsidian 原始字节流，同时兼容 multipart/form-data 客户端
 func (h *Handler) Upload(c *gin.Context) {
 	u, ok := auth.RequireUser(c)
 	if !ok {

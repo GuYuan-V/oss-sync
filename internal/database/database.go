@@ -1,4 +1,4 @@
-// Package database 打开配置的 SQL 后端并执行迁移。
+// Package database 打开配置的 SQL 后端并执行迁移
 package database
 
 import (
@@ -19,7 +19,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// Init 打开配置的 SQLite 或 PostgreSQL 连接，SQLite 父目录由初始化器创建。
+// Init 打开配置的 SQLite 或 PostgreSQL 连接，SQLite 父目录由初始化器创建
 func Init(cfg *config.Config) (*gorm.DB, error) {
 	switch cfg.Database.Driver {
 	case "sqlite":
@@ -67,7 +67,7 @@ func initPostgres(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// AutoMigrate 注册模型并为旧数据执行兼容回填。
+// AutoMigrate 注册模型并为旧数据执行兼容回填
 func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&models.User{},
@@ -125,7 +125,7 @@ func backfillServerPluginMetadata(db *gorm.DB) error {
 	return nil
 }
 
-// backfillLegacyVaults 仅为存在无 Vault 归属旧内容的账号创建默认 Vault，无内容的空账号保持无 Vault。
+// backfillLegacyVaults 仅为存在无 Vault 归属旧内容的账号创建默认 Vault，无内容的空账号保持无 Vault
 func backfillLegacyVaults(db *gorm.DB) error {
 	var users []models.User
 	if err := db.Find(&users).Error; err != nil {
@@ -278,8 +278,8 @@ func backfillVaultRevisions(db *gorm.DB) error {
 	return nil
 }
 
-// backfillDeviceStates 为旧版设备补齐状态，并为已有同步绑定补齐仓库授权。
-// 未吊销的旧设备回填为 approved，避免升级后把现有设备锁在外面。
+// backfillDeviceStates 为旧版设备补齐状态，并为已有同步绑定补齐仓库授权
+// 未吊销的旧设备回填为 approved，避免升级后把现有设备锁在外面
 func backfillDeviceStates(db *gorm.DB) error {
 	if err := db.Model(&models.ClientDevice{}).
 		Where("status = '' AND revoked_at IS NULL").
@@ -315,7 +315,7 @@ func backfillDeviceStates(db *gorm.DB) error {
 	return nil
 }
 
-// backfillVaultSettings 为已有仓库补齐新默认值。
+// backfillVaultSettings 为已有仓库补齐新默认值
 func backfillVaultSettings(db *gorm.DB) error {
 	if err := db.Model(&models.VaultSetting{}).
 		Where("recycle_bin_days = 0 OR recycle_bin_days IS NULL").

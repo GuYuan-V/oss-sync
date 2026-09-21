@@ -58,7 +58,7 @@ func TestParse_Invalid(t *testing.T) {
 		"1.2.3-",
 		"a.b.c",
 		"1.2.3-",
-		"1.0.0-alpha_beta", // 下划线不合法。
+		"1.0.0-alpha_beta", // 下划线不合法
 	}
 	for _, input := range cases {
 		t.Run(input, func(t *testing.T) {
@@ -95,9 +95,9 @@ func TestCompare_Precendence(t *testing.T) {
 		{"1.0.0-alpha", "1.0.0-alpha", 0},
 		{"v1.2.3", "1.2.3", 0},
 		{"1.0.0-alpha.1", "1.0.0-alpha.1", 0},
-		{"1.0.0+build1", "1.0.0+build2", 0}, // 忽略 Build 元数据。
+		{"1.0.0+build1", "1.0.0+build2", 0}, // 忽略 Build 元数据
 		{"1.0.0-alpha+build", "1.0.0-alpha", 0},
-		{"1.0.0-1", "1.0.0-alpha", -1}, // 纯数字预发布标识段优先于字母标识段。
+		{"1.0.0-1", "1.0.0-alpha", -1}, // 纯数字预发布标识段优先于字母标识段
 		{"1.0.0-alpha.1", "1.0.0-alpha.1+build", 0},
 	}
 	for _, tc := range cases {

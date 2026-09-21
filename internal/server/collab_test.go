@@ -42,10 +42,10 @@ func readFileContent(dataDir, vaultID, path string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(dataDir, "vaults", vaultID, "files", filepath.FromSlash(path)))
 }
 
-// approveDeviceForVault 注册并批准设备，授权仓库，返回 client_id。
+// approveDeviceForVault 注册并批准设备，授权仓库，返回 client_id
 func approveDeviceForVault(t *testing.T, router *gin.Engine, token, clientID, vaultID string) {
 	t.Helper()
-	// 通过带设备头的登录请求登记设备。
+	// 通过带设备头的登录请求登记设备
 	req := newDeviceLoginRequest("strat-owner", "password123", clientID, "测试设备")
 	w := performRequest(router, req)
 	if w.Code != http.StatusOK {
@@ -67,7 +67,7 @@ func TestVaultSyncStrategy(t *testing.T) {
 	userToken := userOnlyToken(t, router, "strat-owner", "password123")
 	stratToken := deviceTokenFor(t, router, "strat-owner", "password123", "strat-device", userToken, []string{vaultID})
 
-	// 默认 user_choice：客户端选择生效。
+	// 默认 user_choice：客户端选择生效
 	code, body := doJSONAsDevice(t, router, http.MethodGet,
 		"/api/vaults/"+vaultID+"/sync/strategy?client_id=strat-device&mode=long_poll", stratToken, "strat-device", "strat-device", nil)
 	if code != http.StatusOK {
@@ -80,7 +80,7 @@ func TestVaultSyncStrategy(t *testing.T) {
 		t.Fatalf("strategy limits: %v", body)
 	}
 
-	// 管理员强制 short_poll。
+	// 管理员强制 short_poll
 	if err := db.Model(&models.SystemSetting{}).Where("id = 1").Update("sync_mode", "short_poll").Error; err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestVaultSyncStrategy(t *testing.T) {
 func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 	srv, db, dataDir := newTestServer(t)
 	router := srv.Router()
-	// collab-user 需先注册（owner 由 registerAndLogin 注册）。
+	// collab-user 需先注册（owner 由 registerAndLogin 注册）
 	if _, err := registerUser(db, "collab-user", "password123"); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// owner 邀请 collab-user。
+	// owner 邀请 collab-user
 	invite, _ := doJSON(t, router, http.MethodPost,
 		"/api/vaults/"+vaultID+"/collaborations", token,
 		map[string]any{"file_path": "Shared.md", "username": "collab-user"})
@@ -125,7 +125,7 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 		t.Fatalf("status = %q", collab.Status)
 	}
 
-	// 重复邀请应 409。
+	// 重复邀请应 409
 	dup, _ := doJSON(t, router, http.MethodPost,
 		"/api/vaults/"+vaultID+"/collaborations", token,
 		map[string]any{"file_path": "Shared.md", "username": "collab-user"})
@@ -133,7 +133,7 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 		t.Fatalf("duplicate invite: %d, want 409", dup)
 	}
 
-	// collab-user 登录并接受。
+	// collab-user 登录并接受
 	code, devLogin := loginAsDevice(t, router, "collab-user", "password123", "collab-device", "Collab Device")
 	if code != http.StatusOK {
 		t.Fatalf("collab device login: %d %v", code, devLogin)
@@ -150,7 +150,7 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 		t.Fatalf("accepted: %#v err=%v", collab, err)
 	}
 
-	// collab-user 上传正文。
+	// collab-user 上传正文
 	up, _ := doJSON(t, router, http.MethodPost,
 		"/api/vaults/"+vaultID+"/collaborations/files/"+strconv.FormatUint(uint64(file.ID), 10)+"/upload", collabToken,
 		map[string]any{
@@ -161,7 +161,7 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 	if up != http.StatusOK {
 		t.Fatalf("collab upload: %d", up)
 	}
-	// 原文件内容已更新，历史记录含协作者。
+	// 原文件内容已更新，历史记录含协作者
 	updated, _ := readFileContent(dataDir, vaultID, "Shared.md")
 	if string(updated) != "# 协作者更新" {
 		t.Fatalf("collab file content: %q", updated)
@@ -172,14 +172,14 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 长轮询协作事件。
+	// 长轮询协作事件
 	poll, _ := doJSON(t, router, http.MethodGet,
 		"/api/vaults/"+vaultID+"/collaborations/poll?after=0&wait=1", collabToken, nil)
 	if poll != http.StatusOK {
 		t.Fatalf("poll: %d", poll)
 	}
 
-	// 非协作者不能上传。
+	// 非协作者不能上传
 	if _, err := registerUser(db, "intruder", "password123"); err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 		t.Fatalf("intruder device login: %d %v", code, intruderLogin)
 	}
 	intruderToken := intruderLogin["token"].(string)
-	// 批准入侵者设备，使其走到协作鉴权分支。
+	// 批准入侵者设备，使其走到协作鉴权分支
 	code, _ = doJSON(t, router, http.MethodPut, "/api/devices/intruder-dev/authorization", intruderToken, map[string]any{"status": "approved", "vault_ids": []string{}})
 	if code != http.StatusOK {
 		t.Fatalf("approve intruder: %d", code)
@@ -200,7 +200,7 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 		t.Fatalf("intruder upload: %d, want 403", forbidden)
 	}
 
-	// owner 撤回协作。
+	// owner 撤回协作
 	revoke, _ := doJSON(t, router, http.MethodPost,
 		"/api/vaults/"+vaultID+"/collaborations/"+strconv.FormatUint(uint64(collab.ID), 10)+"/revoke", token, nil)
 	if revoke != http.StatusOK {
@@ -210,7 +210,7 @@ func TestCollaborationInviteUploadAndEvents(t *testing.T) {
 		t.Fatalf("revoked: %#v err=%v", collab, err)
 	}
 
-	// SSE 端点可用（EventSource 场景用 token 查询参数；HTTP 下应拒绝）。
+	// SSE 端点可用（EventSource 场景用 token 查询参数；HTTP 下应拒绝）
 	sse := doForm(t, router, http.MethodGet,
 		"/api/vaults/"+vaultID+"/collaborations/stream?token=abc&client_id=x", nil, nil)
 	if sse.Code != http.StatusForbidden {

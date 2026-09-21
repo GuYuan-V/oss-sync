@@ -41,7 +41,7 @@ func setCustomFragmentsEnabledForTest(t *testing.T, db *gorm.DB, enabled bool) {
 	}
 }
 
-// webLogin 通过统一登录入口建立会话，返回会话与 CSRF cookie。
+// webLogin 通过统一登录入口建立会话，返回会话与 CSRF cookie
 func webLogin(t *testing.T, router *gin.Engine, user, pass string) (*http.Cookie, *http.Cookie) {
 	t.Helper()
 	res := doForm(t, router, http.MethodPost, "/login", url.Values{
@@ -58,7 +58,7 @@ func webLogin(t *testing.T, router *gin.Engine, user, pass string) (*http.Cookie
 	return session, csrf
 }
 
-// uploadViaV1 用 v1 协议上传文件（默认仓库，无需设备授权）供控制台展示。
+// uploadViaV1 用 v1 协议上传文件（默认仓库，无需设备授权）供控制台展示
 func uploadViaV1(t *testing.T, router *gin.Engine, token, path, content string) {
 	t.Helper()
 	code, body := uploadFile(t, router, token, path, content, 1700000000000)
@@ -75,7 +75,7 @@ func TestWebConsoleLoginLogoutAndDashboard(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 未登录访问 dashboard 重定向到登录页。
+	// 未登录访问 dashboard 重定向到登录页
 	anon := doForm(t, router, http.MethodGet, "/dashboard", nil, nil)
 	if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/login" {
 		t.Fatalf("anonymous dashboard: %d %q", anon.Code, anon.Header().Get("Location"))
@@ -95,22 +95,22 @@ func TestWebConsoleLoginLogoutAndDashboard(t *testing.T) {
 		t.Fatalf("dashboard: %d body=%s", dashboard.Code, dashboard.Body)
 	}
 	body := dashboard.Body.String()
-	// 侧边栏元素：用户功能分组、SVG 图标、二级菜单、退出、主题切换。
+	// 侧边栏元素：用户功能分组、SVG 图标、二级菜单、退出、主题切换
 	for _, want := range []string{"OSS Sync", "用户设置", "仓库管理", "首页", "个人中心", "设备管理", "退出登录", "跟随系统", "app.js", `data-nav-icon="overview"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("dashboard missing %q", want)
 		}
 	}
-	// 用户名旁显示普通用户角色徽章。
+	// 用户名旁显示普通用户角色徽章
 	if !strings.Contains(body, "role--user") {
 		t.Fatalf("dashboard missing user role badge")
 	}
-	// 普通用户不能看到管理员设置菜单。
+	// 普通用户不能看到管理员设置菜单
 	if strings.Contains(body, "管理员设置") {
 		t.Fatalf("regular user sees admin menu")
 	}
 
-	// 登出会清除会话 cookie（JWT 无状态，客户端不再持有）。
+	// 登出会清除会话 cookie（JWT 无状态，客户端不再持有）
 	logout := doForm(t, router, http.MethodPost, "/logout", url.Values{}, session, csrf)
 	if logout.Code != http.StatusSeeOther || logout.Header().Get("Location") != "/login" {
 		t.Fatalf("logout: %d %q", logout.Code, logout.Header().Get("Location"))
@@ -135,7 +135,7 @@ func TestWebConsoleRequiresCSRFForStateChanges(t *testing.T) {
 	}
 	session, csrf := webLogin(t, router, "csrf-user", "password123")
 
-	// 无 CSRF 的 POST 返回 403。
+	// 无 CSRF 的 POST 返回 403
 	noCSRF := doFormRaw(t, router, http.MethodPost, "/dashboard/account/password", url.Values{
 		"old_password": {"password123"}, "new_password": {"newpass123"}, "new_password_confirm": {"newpass123"},
 	}, session, nil)
@@ -143,14 +143,14 @@ func TestWebConsoleRequiresCSRFForStateChanges(t *testing.T) {
 		t.Fatalf("POST without csrf: %d", noCSRF.Code)
 	}
 
-	// 带 CSRF 的 POST 成功。
+	// 带 CSRF 的 POST 成功
 	withCSRF := doForm(t, router, http.MethodPost, "/dashboard/account/password", url.Values{
 		"old_password": {"password123"}, "new_password": {"newpass123"}, "new_password_confirm": {"newpass123"},
 	}, session, csrf)
 	if withCSRF.Code != http.StatusSeeOther {
 		t.Fatalf("change password with csrf: %d body=%s", withCSRF.Code, withCSRF.Body)
 	}
-	// 旧密码失效、新密码生效。
+	// 旧密码失效、新密码生效
 	if _, err := auth.AuthenticateCredentials(db, "csrf-user", "password123"); err == nil {
 		t.Fatal("old password still works")
 	}
@@ -299,7 +299,7 @@ func TestWebConsoleVaultSettingsForbidForgedCustomFragmentsFromParticipantsWhenP
 	ownerToken := registerAndLogin(t, router, "forged-participant-owner", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, ownerToken)
 
-	// 策略启用期间先写入历史片段。
+	// 策略启用期间先写入历史片段
 	ownerSession, ownerCSRF := webLogin(t, router, "forged-participant-owner", "password123")
 	seed := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings", url.Values{
 		"theme_name":       {"default"},
@@ -313,7 +313,7 @@ func TestWebConsoleVaultSettingsForbidForgedCustomFragmentsFromParticipantsWhenP
 	}
 	setCustomFragmentsEnabledForTest(t, db, false)
 
-	// 加一个参与者成员。
+	// 加一个参与者成员
 	code, _ := doJSON(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
 		"username": "forged-participant", "password": "password123",
 	})
@@ -327,7 +327,7 @@ func TestWebConsoleVaultSettingsForbidForgedCustomFragmentsFromParticipantsWhenP
 	}
 	participantSession, participantCSRF := webLogin(t, router, "forged-participant", "password123")
 
-	// 参与者在策略关闭时伪造自定义片段。
+	// 参与者在策略关闭时伪造自定义片段
 	res := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/settings", url.Values{
 		"theme_name":       {"default"},
 		"recycle_bin_days": {"0"},
@@ -339,7 +339,7 @@ func TestWebConsoleVaultSettingsForbidForgedCustomFragmentsFromParticipantsWhenP
 		t.Fatalf("participant forged payload should be rejected: %d %q", res.Code, res.Header().Get("Location"))
 	}
 
-	// 已存历史片段应保持不变。
+	// 已存历史片段应保持不变
 	var setting models.VaultSetting
 	if err := db.Where("vault_id = ?", vaultID).First(&setting).Error; err != nil {
 		t.Fatal(err)
@@ -356,7 +356,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 
 	ownerToken := registerAndLogin(t, router, "files-owner", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, ownerToken)
-	// 为 files-user 办参与者授权。
+	// 为 files-user 办参与者授权
 	code, memberLogin := doJSON(t, router, http.MethodPost, "/api/auth/register", "",
 		map[string]string{"username": "files-user", "password": "password123"})
 	if code != http.StatusOK {
@@ -381,7 +381,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 根目录只展示直接文件和可进入的目录。
+	// 根目录只展示直接文件和可进入的目录
 	page := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID, nil, session, csrf)
 	if page.Code != http.StatusOK ||
 		!strings.Contains(page.Body.String(), ">Notes</a>") ||
@@ -391,7 +391,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 		t.Fatalf("vault files page: %d body=%s", page.Code, page.Body)
 	}
 
-	// 进入目录后显示直接子文件、面包屑和没有双重编码的预览链接。
+	// 进入目录后显示直接子文件、面包屑和没有双重编码的预览链接
 	folderPage := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"?dir=Notes", nil, session, csrf)
 	if folderPage.Code != http.StatusOK ||
 		!strings.Contains(folderPage.Body.String(), "根目录") ||
@@ -401,14 +401,14 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 		t.Fatalf("vault folder page: %d body=%s", folderPage.Code, folderPage.Body)
 	}
 
-	// 预览文本文件。
+	// 预览文本文件
 	preview := doForm(t, router, http.MethodGet,
 		"/dashboard/vaults/"+vaultID+"/files/download?path=Notes%2FA.md", nil, session, csrf)
 	if preview.Code != http.StatusOK || preview.Body.String() != "# Hello\n\n- [x] Finished\n- [ ] Next" {
 		t.Fatalf("preview: %d body=%q", preview.Code, preview.Body.String())
 	}
 
-	// Markdown 预览页渲染 HTML，不直接返回原始 Markdown 文本。
+	// Markdown 预览页渲染 HTML，不直接返回原始 Markdown 文本
 	markdownPreview := doForm(t, router, http.MethodGet,
 		"/dashboard/vaults/"+vaultID+"/files/preview?path=Notes%2FA.md", nil, session, csrf)
 	if markdownPreview.Code != http.StatusOK ||
@@ -459,7 +459,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 		t.Fatalf("markdown source preview: %d body=%s", markdownSource.Code, markdownSource.Body)
 	}
 
-	// 删除文件（写入历史 + 移入回收站）。
+	// 删除文件（写入历史 + 移入回收站）
 	del := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/files/delete",
 		url.Values{"path": {"Notes/A.md"}}, session, csrf)
 	if del.Code != http.StatusSeeOther {
@@ -472,11 +472,11 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 	if !tomb.IsDeleted {
 		t.Fatal("file not marked deleted")
 	}
-	// 正文应在回收站目录。
+	// 正文应在回收站目录
 	if !strings.Contains(tomb.StorageKey, "recycle") {
 		t.Fatalf("storage key not recycled: %s", tomb.StorageKey)
 	}
-	// 历史记录含 delete 动作与设备名“网页控制台”。
+	// 历史记录含 delete 动作与设备名“网页控制台”
 	var hist models.FileHistory
 	if err := db.Where("vault_id = ? AND file_path = ? AND action = ?", vaultID, "Notes/A.md", "delete").
 		Order("id desc").First(&hist).Error; err != nil {
@@ -486,7 +486,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 		t.Fatalf("history actor: device=%q user=%q", hist.DeviceName, hist.Username)
 	}
 
-	// 文件预览和仓库记录均可进入该文件的中文修改记录与详情。
+	// 文件预览和仓库记录均可进入该文件的中文修改记录与详情
 	historyPage := doForm(t, router, http.MethodGet,
 		"/dashboard/vaults/"+vaultID+"/history?path=Notes%2FA.md", nil, session, csrf)
 	if historyPage.Code != http.StatusOK ||
@@ -504,13 +504,13 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 		t.Fatalf("file history detail: %d body=%s", historyDetail.Code, historyDetail.Body)
 	}
 
-	// 回收站列出该文件。
+	// 回收站列出该文件
 	recycle := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/recycle", nil, session, csrf)
 	if recycle.Code != http.StatusOK || !strings.Contains(recycle.Body.String(), "Notes/A.md") {
 		t.Fatalf("recycle page: %d body=%s", recycle.Code, recycle.Body)
 	}
 
-	// 恢复。
+	// 恢复
 	restore := doForm(t, router, http.MethodPost,
 		"/dashboard/vaults/"+vaultID+"/recycle/"+strconv.FormatUint(uint64(tomb.ID), 10)+"/restore",
 		nil, session, csrf)
@@ -528,14 +528,14 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 	if err != nil || string(content) != "# Hello\n\n- [x] Finished\n- [ ] Next" {
 		t.Fatalf("restored content: %q err=%v", content, err)
 	}
-	// 校验 restore 历史记录。
+	// 校验 restore 历史记录
 	var restoreHist models.FileHistory
 	if err := db.Where("vault_id = ? AND file_path = ? AND action = ?", vaultID, "Notes/A.md", "restore").
 		Order("id desc").First(&restoreHist).Error; err != nil {
 		t.Fatal(err)
 	}
 
-	// 分享创建、切换 allow_copy 与取消。
+	// 分享创建、切换 allow_copy 与取消
 	share := doForm(t, router, http.MethodPost, "/dashboard/vaults/"+vaultID+"/shares",
 		url.Values{"target_path": {"Notes/A.md"}}, session, csrf)
 	if share.Code != http.StatusSeeOther {
@@ -574,7 +574,7 @@ func TestWebConsoleDevicesAndAdminPages(t *testing.T) {
 	token := registerAndLogin(t, router, "owner-dev", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
 
-	// 通过带设备头的登录请求登记设备（pending）。
+	// 通过带设备头的登录请求登记设备（pending）
 	reqBody := fmt.Sprintf(`{"username":"owner-dev","password":"password123"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -607,7 +607,7 @@ func TestWebConsoleDevicesAndAdminPages(t *testing.T) {
 		!strings.Contains(devPage.Body.String(), `class="modal device-auth-modal"`) {
 		t.Fatalf("devices page must render compact authorization summary: %s", devPage.Body)
 	}
-	// 批准设备。
+	// 批准设备
 	approve := doForm(t, router, http.MethodPost, "/dashboard/devices/desktop-1/approve", nil, session, csrf)
 	if approve.Code != http.StatusSeeOther {
 		t.Fatalf("approve device: %d", approve.Code)
@@ -615,7 +615,7 @@ func TestWebConsoleDevicesAndAdminPages(t *testing.T) {
 	if err := db.Where("client_id = ?", "desktop-1").First(&pending).Error; err != nil || pending.Status != "approved" {
 		t.Fatalf("device not approved: %#v err=%v", pending, err)
 	}
-	// 授权仓库。
+	// 授权仓库
 	authz := doForm(t, router, http.MethodPost, "/dashboard/devices/desktop-1/authorize",
 		url.Values{"vault_ids": {vaultID}}, session, csrf)
 	if authz.Code != http.StatusSeeOther {
@@ -626,7 +626,7 @@ func TestWebConsoleDevicesAndAdminPages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 管理员：用户管理页。
+	// 管理员：用户管理页
 	rootSession, rootCSRF := webLogin(t, router, "root", "root-password-123")
 	users := doForm(t, router, http.MethodGet, "/dashboard/admin", nil, rootSession, rootCSRF)
 	if users.Code != http.StatusOK ||
@@ -635,21 +635,21 @@ func TestWebConsoleDevicesAndAdminPages(t *testing.T) {
 		!strings.Contains(users.Body.String(), "root") {
 		t.Fatalf("admin users: %d body=%s", users.Code, users.Body)
 	}
-	// 管理员同时拥有普通用户功能和管理员专属设置。
+	// 管理员同时拥有普通用户功能和管理员专属设置
 	if !strings.Contains(users.Body.String(), "用户设置") ||
 		!strings.Contains(users.Body.String(), "管理员设置") {
 		t.Fatal("user/admin navigation groups missing for admin")
 	}
-	// 管理员用户名旁显示管理员角色徽章。
+	// 管理员用户名旁显示管理员角色徽章
 	if !strings.Contains(users.Body.String(), "role--admin") {
 		t.Fatal("admin role badge missing for admin")
 	}
-	// 全部仓库页。
+	// 全部仓库页
 	allVaults := doForm(t, router, http.MethodGet, "/dashboard/admin/vaults", nil, rootSession, rootCSRF)
 	if allVaults.Code != http.StatusOK || !strings.Contains(allVaults.Body.String(), vaultID) {
 		t.Fatalf("admin vaults: %d body=%s", allVaults.Code, allVaults.Body)
 	}
-	// 全部设备页。
+	// 全部设备页
 	allDevices := doForm(t, router, http.MethodGet, "/dashboard/admin/devices", nil, rootSession, rootCSRF)
 	allDevicesBody := allDevices.Body.String()
 	if allDevices.Code != http.StatusOK || !strings.Contains(allDevicesBody, "desktop-1") {
@@ -663,13 +663,13 @@ func TestWebConsoleDevicesAndAdminPages(t *testing.T) {
 		!strings.Contains(allDevicesBody, `form="device-revoke-`) {
 		t.Fatalf("admin device authorization must use a summary, rightmost actions, and modal: %s", allDevices.Body)
 	}
-	// 系统设置页。
+	// 系统设置页
 	system := doForm(t, router, http.MethodGet, "/dashboard/admin/system", nil, rootSession, rootCSRF)
 	if system.Code != http.StatusOK || !strings.Contains(system.Body.String(), "默认回收站保留天数") {
 		t.Fatalf("admin system: %d body=%s", system.Code, system.Body)
 	}
 
-	// 管理员重置 owner-dev 密码。
+	// 管理员重置 owner-dev 密码
 	reset := doForm(t, router, http.MethodPost,
 		"/dashboard/admin/users/"+strconv.FormatUint(uint64(owner.ID), 10)+"/reset-password",
 		url.Values{"new_password": {"new-pw-123"}, "new_password_confirm": {"new-pw-123"}}, rootSession, rootCSRF)
@@ -728,7 +728,7 @@ func TestWebConsoleVaultSettingsAllowOwnerToSelectTheme(t *testing.T) {
 }
 
 func TestWebConsolePluginSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing.T) {
-	// 仓库启用 Papertrail 插件，用户填全各类插件设置。
+	// 仓库启用 Papertrail 插件，用户填全各类插件设置
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
@@ -740,7 +740,7 @@ func TestWebConsolePluginSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing
 	}
 	session, csrf := webLogin(t, router, "theme-settings-owner", "password123")
 
-	// URL 校验拒绝提交的 Logo URL。
+	// URL 校验拒绝提交的 Logo URL
 	response := doForm(t, router, http.MethodPost, "/dashboard/plugins/papertrail-settings/settings", url.Values{
 		"vault_id":               {vaultID},
 		"setting_blog_name":      {"Draft blog"},
@@ -751,7 +751,7 @@ func TestWebConsolePluginSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing
 		"group_buttons_icon_url": {"/icon.svg"},
 	}, session, csrf)
 
-	// 插件错误页保留全部提交值，不回退到空的已存数据。
+	// 插件错误页保留全部提交值，不回退到空的已存数据
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid theme settings status=%d, want 400; body=%s", response.Code, response.Body)
 	}
@@ -763,19 +763,19 @@ func TestWebConsolePluginSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing
 }
 
 func TestWebConsolePersistsAccountLanguagePreference(t *testing.T) {
-	// 已登录网页控制台用户保持中文默认偏好。
+	// 已登录网页控制台用户保持中文默认偏好
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
 	registerAndLogin(t, router, "language-owner", "password123")
 	session, csrf := webLogin(t, router, "language-owner", "password123")
 
-	// 用户在账号设置中选择英文。
+	// 用户在账号设置中选择英文
 	response := doForm(t, router, http.MethodPost, "/dashboard/account/language", url.Values{
 		"web_language": {"en"},
 	}, session, csrf)
 
-	// 账号偏好持久化，并决定下一次页面渲染。
+	// 账号偏好持久化，并决定下一次页面渲染
 	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != "/dashboard/account?settings_saved=1#language" {
 		t.Fatalf("save language: status=%d location=%q", response.Code, response.Header().Get("Location"))
 	}
@@ -853,7 +853,7 @@ func TestWebConsoleThemeAssetsAndOldAdminRedirects(t *testing.T) {
 		t.Fatalf("console.css: %d", css.Code)
 	}
 
-	// 旧 /admin 入口重定向兼容。
+	// 旧 /admin 入口重定向兼容
 	legacy := doForm(t, router, http.MethodGet, "/admin", nil, nil)
 	if legacy.Code != http.StatusMovedPermanently || legacy.Header().Get("Location") != "/dashboard/admin" {
 		t.Fatalf("legacy /admin: %d %q", legacy.Code, legacy.Header().Get("Location"))
@@ -863,7 +863,7 @@ func TestWebConsoleThemeAssetsAndOldAdminRedirects(t *testing.T) {
 		t.Fatalf("legacy /admin/login: %d %q", legacyLogin.Code, legacyLogin.Header().Get("Location"))
 	}
 
-	// 根路径是公开博客目录（暂无公开 Vault 时显示安全空状态）。
+	// 根路径是公开博客目录（暂无公开 Vault 时显示安全空状态）
 	root := doForm(t, router, http.MethodGet, "/", nil, nil)
 	if root.Code != http.StatusOK || !strings.Contains(root.Body.String(), "暂无公开博客") {
 		t.Fatalf("root home: %d body=%s", root.Code, root.Body)
@@ -878,7 +878,7 @@ func TestAuthPagesThemeControlsAndAuthLayout(t *testing.T) {
 	srv, _, _ := newTestServer(t)
 	router := srv.Router()
 
-	// 登录页：主题键、主题切换控件、theme.js 与 app.js 初始化脚本。
+	// 登录页：主题键、主题切换控件、theme.js 与 app.js 初始化脚本
 	login := doForm(t, router, http.MethodGet, "/login", nil, nil)
 	if login.Code != http.StatusOK {
 		t.Fatalf("login page: %d", login.Code)
@@ -898,7 +898,7 @@ func TestAuthPagesThemeControlsAndAuthLayout(t *testing.T) {
 		}
 	}
 
-	// 注册页同样带主题控件。
+	// 注册页同样带主题控件
 	register := doForm(t, router, http.MethodGet, "/register", nil, nil)
 	if register.Code != http.StatusOK {
 		t.Fatalf("register page: %d", register.Code)
@@ -909,7 +909,7 @@ func TestAuthPagesThemeControlsAndAuthLayout(t *testing.T) {
 		}
 	}
 
-	// 公开博客目录：控制台主题键 + 主题控件 + app.js。
+	// 公开博客目录：控制台主题键 + 主题控件 + app.js
 	home := doForm(t, router, http.MethodGet, "/", nil, nil)
 	if home.Code != http.StatusOK {
 		t.Fatalf("home page: %d", home.Code)
@@ -924,7 +924,7 @@ func TestAuthPagesThemeControlsAndAuthLayout(t *testing.T) {
 		}
 	}
 
-	// 控制台 CSS：认证页单列布局 + 暗色安全 wordmark 变量 + 禁用浏览器缓存。
+	// 控制台 CSS：认证页单列布局 + 暗色安全 wordmark 变量 + 禁用浏览器缓存
 	css := doForm(t, router, http.MethodGet, "/ui/assets/console.css", nil, nil)
 	if css.Code != http.StatusOK {
 		t.Fatalf("console.css: %d", css.Code)
@@ -939,7 +939,7 @@ func TestAuthPagesThemeControlsAndAuthLayout(t *testing.T) {
 	}
 }
 
-// doFormRaw 不自动注入 CSRF（用于测试 403 场景）。
+// doFormRaw 不自动注入 CSRF（用于测试 403 场景）
 func doFormRaw(
 	t *testing.T,
 	router *gin.Engine,
@@ -972,7 +972,7 @@ func doFormRaw(
 var _ = gin.Mode
 
 // TestWebConsoleDeviceAuthorizationWorkflow 覆盖设备页，pending 先批准，
-// approved 再整体替换授权，设备名称保持批准时的值。
+// approved 再整体替换授权，设备名称保持批准时的值
 func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -983,7 +983,7 @@ func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 	token := registerAndLogin(t, router, "owner-dev", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
 
-	// 通过带设备头的登录请求登记设备（pending）。
+	// 通过带设备头的登录请求登记设备（pending）
 	code, login := loginAsDevice(t, router, "owner-dev", "password123", "desktop-2", "桌面机")
 	if code != http.StatusOK || login["device_status"] != "pending" {
 		t.Fatalf("device login: %d %v", code, login)
@@ -995,7 +995,7 @@ func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 
 	session, csrf := webLogin(t, router, "owner-dev", "password123")
 
-	// pending 页面用名称输入替换静态名称，客户端 ID 保留为输入框下方的元数据。
+	// pending 页面用名称输入替换静态名称，客户端 ID 保留为输入框下方的元数据
 	page := doForm(t, router, http.MethodGet, "/dashboard/devices", nil, session, csrf)
 	if page.Code != http.StatusOK {
 		t.Fatalf("devices page: %d", page.Code)
@@ -1032,7 +1032,7 @@ func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 		t.Fatalf("pending identity must render input before client ID without a duplicate static name: %s", deviceCell)
 	}
 
-	// pending 名称仍执行 1-128 字符校验。
+	// pending 名称仍执行 1-128 字符校验
 	longName := strings.Repeat("长", 129)
 	bad := doForm(t, router, http.MethodPost, "/dashboard/devices/desktop-2/authorize",
 		url.Values{"name": {longName}, "status": {"approved"}, "vault_ids": {vaultID}}, session, csrf)
@@ -1040,7 +1040,7 @@ func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 		t.Fatalf("invalid pending name must be rejected: %d %q", bad.Code, bad.Header().Get("Location"))
 	}
 
-	// pending 只提交批准与设备名称，不依赖仓库授权。
+	// pending 只提交批准与设备名称，不依赖仓库授权
 	approve := doForm(t, router, http.MethodPost, "/dashboard/devices/desktop-2/approve",
 		url.Values{"name": {"新笔记本"}}, session, csrf)
 	if approve.Code != http.StatusSeeOther {
@@ -1068,7 +1068,7 @@ func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 		t.Fatalf("authorized vault missing: %v", err)
 	}
 
-	// approved 只更新授权；即使伪造 name 字段也不能改名。
+	// approved 只更新授权；即使伪造 name 字段也不能改名
 	otherVault := createVaultViaAPI(t, router, token, "Second Vault")
 	update := doForm(t, router, http.MethodPost, "/dashboard/devices/desktop-2/authorize",
 		url.Values{
@@ -1109,7 +1109,7 @@ func TestWebConsoleDeviceAuthorizationWorkflow(t *testing.T) {
 	}
 }
 
-// TestWebConsoleDevicesEmptyVaultState 覆盖无仓库时的页面空态。
+// TestWebConsoleDevicesEmptyVaultState 覆盖无仓库时的页面空态
 func TestWebConsoleDevicesEmptyVaultState(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -1183,7 +1183,7 @@ func TestAdminCanApproveDeviceWithoutVault(t *testing.T) {
 }
 
 // TestWebConsoleDeviceListsExcludeRevokedDevices 覆盖吊销后设备只保留在审计数据中，
-// 用户与管理员可操作列表及计数均不再出现。
+// 用户与管理员可操作列表及计数均不再出现
 func TestWebConsoleDeviceListsExcludeRevokedDevices(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -1235,7 +1235,7 @@ func TestWebConsoleDeviceListsExcludeRevokedDevices(t *testing.T) {
 }
 
 // TestAdminDeviceAuthorizationRejectsInaccessibleVault 覆盖管理员为跨用户设备授权的场景，
-// 目标用户无权访问的仓库必须被拒绝，不因仓库存在而放行。
+// 目标用户无权访问的仓库必须被拒绝，不因仓库存在而放行
 func TestAdminDeviceAuthorizationRejectsInaccessibleVault(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -1270,7 +1270,7 @@ func TestAdminDeviceAuthorizationRejectsInaccessibleVault(t *testing.T) {
 		t.Fatalf("member device approval must succeed before vault authorization: %d %q", approve.Code, approve.Header().Get("Location"))
 	}
 
-	// 管理员不能为 member 设备授权 owner 仓库。
+	// 管理员不能为 member 设备授权 owner 仓库
 	denied := doForm(t, router, http.MethodPost, "/dashboard/admin/devices/member-dev/authorize",
 		url.Values{
 			"user_id":   {strconv.FormatUint(uint64(member.ID), 10)},
@@ -1288,7 +1288,7 @@ func TestAdminDeviceAuthorizationRejectsInaccessibleVault(t *testing.T) {
 		t.Fatalf("inaccessible vault must not be persisted, got %d rows", deniedCount)
 	}
 
-	// 管理员为 member 自己可访问的仓库授权成功。
+	// 管理员为 member 自己可访问的仓库授权成功
 	allowed := doForm(t, router, http.MethodPost, "/dashboard/admin/devices/member-dev/authorize",
 		url.Values{
 			"user_id":   {strconv.FormatUint(uint64(member.ID), 10)},

@@ -1,4 +1,3 @@
-// 更新校验
 package update
 
 import (
@@ -13,7 +12,7 @@ import (
 	"time"
 )
 
-// checkExecutableMagic 快速校验文件头是否符合目标平台的可执行格式。
+// checkExecutableMagic 快速校验文件头是否符合目标平台的可执行格式
 func checkExecutableMagic(path, goos string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -58,7 +57,7 @@ func isMachOMagic(head []byte) bool {
 	return true
 }
 
-// defaultVerifier 校验下载的二进制：格式正确且能用 --version 启动。
+// defaultVerifier 校验下载的二进制：格式正确且能用 --version 启动
 func defaultVerifier(path, wantVersion string) error {
 	if err := checkExecutableMagic(path, runtime.GOOS); err != nil {
 		return err
@@ -80,7 +79,7 @@ func defaultVerifier(path, wantVersion string) error {
 	return nil
 }
 
-// copyFile 复制文件并保留执行权限位。
+// copyFile 复制文件并保留执行权限位
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -103,12 +102,12 @@ func copyFile(src, dst string) error {
 	return syncErr
 }
 
-// swapBinary 用新文件原子替换目标文件；目标被占用时先让位再替换，失败时回滚。
+// swapBinary 用新文件原子替换目标文件；目标被占用时先让位再替换，失败时回滚
 func swapBinary(prepared, target string) error {
 	if err := os.Rename(prepared, target); err == nil {
 		return nil
 	}
-	// Windows 上运行中的进程会锁定可执行文件：先把它移走再放入新文件。
+	// Windows 上运行中的进程会锁定可执行文件：先把它移走再放入新文件
 	aside := target + ".old"
 	if err := os.Rename(target, aside); err != nil {
 		return err

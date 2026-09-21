@@ -1,4 +1,3 @@
-// 概览页面
 package webui
 
 import (

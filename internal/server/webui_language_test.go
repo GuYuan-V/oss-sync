@@ -10,7 +10,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// TestWebConsoleLanguageDefaultChinese 验证新账户默认以中文渲染控制台。
+// TestWebConsoleLanguageDefaultChinese 验证新账户默认以中文渲染控制台
 func TestWebConsoleLanguageDefaultChinese(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, _, _ := newTestServer(t)
@@ -39,7 +39,7 @@ func TestWebConsoleLanguageDefaultChinese(t *testing.T) {
 }
 
 // TestWebConsoleLanguageSwitchPersistsAcrossPages 验证保存英文偏好后，
-// 个人中心与概览页都按英文渲染，且偏好持久化到账号。
+// 个人中心与概览页都按英文渲染，且偏好持久化到账号
 func TestWebConsoleLanguageSwitchPersistsAcrossPages(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -122,7 +122,7 @@ func TestWebConsolePluginLanguageHintDoesNotChangeAccountPreference(t *testing.T
 	}
 }
 
-// TestWebConsoleLanguageRejectsInvalidValue 验证非法语言值被拒绝且不修改偏好。
+// TestWebConsoleLanguageRejectsInvalidValue 验证非法语言值被拒绝且不修改偏好
 func TestWebConsoleLanguageRejectsInvalidValue(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, db, _ := newTestServer(t)
@@ -144,7 +144,7 @@ func TestWebConsoleLanguageRejectsInvalidValue(t *testing.T) {
 	}
 }
 
-// TestWebConsoleLoginPageStaysChineseDefault 验证未登录页（登录/注册）保持中文默认。
+// TestWebConsoleLoginPageStaysChineseDefault 验证未登录页（登录/注册）保持中文默认
 func TestWebConsoleLoginPageStaysChineseDefault(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, _, _ := newTestServer(t)
@@ -162,7 +162,7 @@ func TestWebConsoleLoginPageStaysChineseDefault(t *testing.T) {
 }
 
 // TestWebConsoleEnglishModePreservesUserContent 验证英文模式下用户内容
-// （中文仓库名、中文 Markdown 正文）原样渲染，不被翻译。
+// （中文仓库名、中文 Markdown 正文）原样渲染，不被翻译
 func TestWebConsoleEnglishModePreservesUserContent(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv, _, _ := newTestServer(t)

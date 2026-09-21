@@ -1,14 +1,14 @@
-// 不应进入同步队列的本地文件。
+// 不应进入同步队列的本地文件
 //
 // 基线、版本控制目录和系统临时文件始终忽略；.obsidian 下的本地状态
-// 默认忽略，但用户可以在设置中开启。
+// 默认忽略，但用户可以在设置中开启
 const ABSOLUTE_BLACKLIST: BlacklistEntry[] = [
   { kind: "exact", value: ".oss-sync-state.json" },
   { kind: "exact", value: ".DS_Store" },
   { kind: "exact", value: "Thumbs.db" },
   { kind: "prefix", value: ".git/" },
   { kind: "prefix", value: ".trash/" },
-  // 协作目录只通过协作 API 同步，绝不进入普通同步路径。
+  // 协作目录只通过协作 API 同步，绝不进入普通同步路径
   { kind: "prefix", value: "协作oss/" },
 ];
 
@@ -24,7 +24,7 @@ interface BlacklistEntry {
   value: string;
 }
 
-/** 判断路径是否应同步。 */
+/** 判断路径是否应同步*/
 export function shouldSync(relativePath: string, allowDeviceLocalObsidian: boolean): boolean {
   const p = normalize(relativePath);
   if (p === "") return false;
@@ -55,7 +55,7 @@ function matches(entry: BlacklistEntry, path: string): boolean {
   }
 }
 
-// 这里只需要支持路径段内的 *。
+// 这里只需要支持路径段内的 *
 function globMatch(pattern: string, path: string): boolean {
   const regexStr = pattern
     .split("/")

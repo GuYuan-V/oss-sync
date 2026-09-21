@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-/** 将指定插件更新模块 bundle 到临时目录后加载，返回其导出。 */
+/** 将指定插件更新模块 bundle 到临时目录后加载，返回其导出*/
 export async function loadUpdateModule(entry) {
   const dir = await mkdtemp(join(tmpdir(), "oss-update-module-"));
   const outfile = join(dir, "update.mjs");

@@ -1,4 +1,4 @@
-// app.js 提供控制台公共交互：侧边栏折叠、移动抽屉、确认操作、主题切换、CSRF。
+// app.js 提供控制台公共交互：侧边栏折叠、移动抽屉、确认操作、主题切换、CSRF
 (function () {
   "use strict";
 
@@ -42,7 +42,7 @@
       });
     }
 
-    // 二级菜单：一级可折叠项带 aria-expanded 和方向箭头。
+    // 二级菜单：一级可折叠项带 aria-expanded 和方向箭头
     document.querySelectorAll(".side-nav__toggle").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var expanded = btn.getAttribute("aria-expanded") === "true";

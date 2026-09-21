@@ -201,7 +201,7 @@ export class OSSSettingTab extends PluginSettingTab {
           try {
             applyVaultOptions(await this.plugin.refreshVaults());
           } catch {
-            // 保留现有选项，下一次轮询继续尝试。
+            // 保留现有选项，下一次轮询继续尝试
           }
         };
         void refreshVaultOptions();

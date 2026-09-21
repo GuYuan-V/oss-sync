@@ -1,4 +1,4 @@
-// Package config 提供服务端配置的加载、覆盖与校验。
+// Package config 提供服务端配置的加载、覆盖与校验
 package config
 
 import (
@@ -13,7 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config 是按 OSS_ENV 选定的有效运行时配置。
+// Config 是按 OSS_ENV 选定的有效运行时配置
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
@@ -46,7 +46,7 @@ type AuthConfig struct {
 	JWTTTLHours        int    `yaml:"jwt_ttl_hours"`
 	WebSessionTTLHours int    `yaml:"web_session_ttl_hours"`
 	DeviceJWTTTLHours  int    `yaml:"device_jwt_ttl_hours"`
-	// AllowAnonymousRegistration 仅用于初始化新数据库，已有数据库以 SystemSetting 落盘值为准。
+	// AllowAnonymousRegistration 仅用于初始化新数据库，已有数据库以 SystemSetting 落盘值为准
 	AllowAnonymousRegistration bool `yaml:"allow_anonymous_registration"`
 }
 
@@ -58,29 +58,29 @@ type SyncConfig struct {
 	OrphanFileGraceHours   int `yaml:"orphan_file_grace_hours"`
 }
 
-// UpdateConfig 控制管理员触发的版本检查与更新。
+// UpdateConfig 控制管理员触发的版本检查与更新
 type UpdateConfig struct {
-	// GitHubRepo 为 owner/repo 形式的发布仓库。
+	// GitHubRepo 为 owner/repo 形式的发布仓库
 	GitHubRepo string `yaml:"github_repo"`
-	// DownloadSource 选择 official、proxy 或 custom 下载源。
+	// DownloadSource 选择 official、proxy 或 custom 下载源
 	DownloadSource string `yaml:"download_source"`
-	// DownloadProxy 为 custom 源使用的 HTTPS 前缀。
+	// DownloadProxy 为 custom 源使用的 HTTPS 前缀
 	DownloadProxy string `yaml:"download_proxy"`
-	// TimeoutSeconds 为 GitHub 请求超时（秒），0 表示使用 15 秒。
+	// TimeoutSeconds 为 GitHub 请求超时（秒），0 表示使用 15 秒
 	TimeoutSeconds int `yaml:"timeout_seconds"`
-	// UpdateTimeoutSeconds 为整次更新超时（秒），0 表示使用 600 秒。
+	// UpdateTimeoutSeconds 为整次更新超时（秒），0 表示使用 600 秒
 	UpdateTimeoutSeconds int `yaml:"update_timeout_seconds"`
-	// CheckTTLSeconds 控制版本检查结果缓存（秒），0 表示使用 3600 秒。
+	// CheckTTLSeconds 控制版本检查结果缓存（秒），0 表示使用 3600 秒
 	CheckTTLSeconds int `yaml:"check_ttl_seconds"`
-	// CheckLimit 控制版本检查次数，0 表示使用 6 次。
+	// CheckLimit 控制版本检查次数，0 表示使用 6 次
 	CheckLimit int `yaml:"check_limit"`
-	// CheckWindowSeconds 控制检查限流窗口（秒），0 表示使用 60 秒。
+	// CheckWindowSeconds 控制检查限流窗口（秒），0 表示使用 60 秒
 	CheckWindowSeconds int `yaml:"check_window_seconds"`
 }
 
-// Load 按 OSS_ENV 读取配置文件并应用环境变量覆盖。
-// OSS_ENV 仅接受 dev（默认）或 prod，对应文件为 configs/config.<env>.yaml。
-// 支持覆盖数据库、服务端、存储、认证与更新字段。
+// Load 按 OSS_ENV 读取配置文件并应用环境变量覆盖
+// OSS_ENV 仅接受 dev（默认）或 prod，对应文件为 configs/config.<env>.yaml
+// 支持覆盖数据库、服务端、存储、认证与更新字段
 func Load() (*Config, error) {
 	env := os.Getenv("OSS_ENV")
 	if env == "" {
@@ -218,7 +218,7 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// MaxTotalSizeBytes 返回整个数据目录的应用层容量上限；0 表示不限。
+// MaxTotalSizeBytes 返回整个数据目录的应用层容量上限；0 表示不限
 func (c StorageConfig) MaxTotalSizeBytes() int64 {
 	return c.MaxTotalSizeMB << 20
 }
@@ -299,7 +299,7 @@ func isValidRepoPart(p string) bool {
 		}
 		return false
 	}
-	// 不允许以 . 或 - 开头/结尾。
+	// 不允许以 . 或 - 开头/结尾
 	if p[0] == '.' || p[0] == '-' || p[len(p)-1] == '.' || p[len(p)-1] == '-' {
 		return false
 	}
@@ -333,7 +333,7 @@ func (c SyncConfig) EffectiveOrphanFileGraceHours() int {
 	return c.OrphanFileGraceHours
 }
 
-// EffectiveGitHubRepo 返回发布仓库，默认指向项目上游仓库。
+// EffectiveGitHubRepo 返回发布仓库，默认指向项目上游仓库
 func (c UpdateConfig) EffectiveGitHubRepo() string {
 	if s := strings.TrimSpace(c.GitHubRepo); s != "" {
 		return s
@@ -341,7 +341,7 @@ func (c UpdateConfig) EffectiveGitHubRepo() string {
 	return "helantianshen/oss-sync"
 }
 
-// EffectiveDownloadSource 返回更新检查与下载使用的源。
+// EffectiveDownloadSource 返回更新检查与下载使用的源
 func (c UpdateConfig) EffectiveDownloadSource() string {
 	if source := strings.TrimSpace(c.DownloadSource); source != "" {
 		return source
@@ -349,12 +349,12 @@ func (c UpdateConfig) EffectiveDownloadSource() string {
 	return "official"
 }
 
-// EffectiveDownloadProxy 返回自定义更新源前缀。
+// EffectiveDownloadProxy 返回自定义更新源前缀
 func (c UpdateConfig) EffectiveDownloadProxy() string {
 	return strings.TrimSpace(c.DownloadProxy)
 }
 
-// EffectiveTimeout 返回 GitHub 请求超时，边界 5..120，默认 15。
+// EffectiveTimeout 返回 GitHub 请求超时，边界 5..120，默认 15
 func (c UpdateConfig) EffectiveTimeout() time.Duration {
 	if c.TimeoutSeconds >= 5 && c.TimeoutSeconds <= 120 {
 		return time.Duration(c.TimeoutSeconds) * time.Second
@@ -362,7 +362,7 @@ func (c UpdateConfig) EffectiveTimeout() time.Duration {
 	return 15 * time.Second
 }
 
-// EffectiveUpdateTimeout 返回整次更新流程超时，边界 30..1800，默认 600（10 分钟）。
+// EffectiveUpdateTimeout 返回整次更新流程超时，边界 30..1800，默认 600（10 分钟）
 func (c UpdateConfig) EffectiveUpdateTimeout() time.Duration {
 	if c.UpdateTimeoutSeconds >= 30 && c.UpdateTimeoutSeconds <= 1800 {
 		return time.Duration(c.UpdateTimeoutSeconds) * time.Second
@@ -370,7 +370,7 @@ func (c UpdateConfig) EffectiveUpdateTimeout() time.Duration {
 	return 600 * time.Second
 }
 
-// EffectiveCheckTTL 返回检查结果缓存 TTL，边界 60..86400，默认 3600（1 小时）。
+// EffectiveCheckTTL 返回检查结果缓存 TTL，边界 60..86400，默认 3600（1 小时）
 func (c UpdateConfig) EffectiveCheckTTL() time.Duration {
 	if c.CheckTTLSeconds >= 60 && c.CheckTTLSeconds <= 86400 {
 		return time.Duration(c.CheckTTLSeconds) * time.Second
@@ -378,7 +378,7 @@ func (c UpdateConfig) EffectiveCheckTTL() time.Duration {
 	return 3600 * time.Second
 }
 
-// EffectiveCheckLimit 返回检查更新接口的限流次数，边界 1..100，默认 6。
+// EffectiveCheckLimit 返回检查更新接口的限流次数，边界 1..100，默认 6
 func (c UpdateConfig) EffectiveCheckLimit() int {
 	if c.CheckLimit >= 1 && c.CheckLimit <= 100 {
 		return c.CheckLimit
@@ -386,7 +386,7 @@ func (c UpdateConfig) EffectiveCheckLimit() int {
 	return 6
 }
 
-// EffectiveCheckWindow 返回检查更新接口的限流窗口，边界 10..3600，默认 60。
+// EffectiveCheckWindow 返回检查更新接口的限流窗口，边界 10..3600，默认 60
 func (c UpdateConfig) EffectiveCheckWindow() time.Duration {
 	if c.CheckWindowSeconds >= 10 && c.CheckWindowSeconds <= 3600 {
 		return time.Duration(c.CheckWindowSeconds) * time.Second
@@ -394,7 +394,7 @@ func (c UpdateConfig) EffectiveCheckWindow() time.Duration {
 	return time.Minute
 }
 
-// Env 返回当前生效的环境标识（dev / prod）。
+// Env 返回当前生效的环境标识（dev / prod）
 func Env() string {
 	e := os.Getenv("OSS_ENV")
 	if e == "" {
@@ -403,8 +403,8 @@ func Env() string {
 	return e
 }
 
-// SaveDatabaseConfig 将数据库启动配置写入当前环境对应的 YAML 文件。
-// SaveDatabaseConfig 不改变当前进程已建立的数据库连接。
+// SaveDatabaseConfig 将数据库启动配置写入当前环境对应的 YAML 文件
+// SaveDatabaseConfig 不改变当前进程已建立的数据库连接
 func SaveDatabaseConfig(driver, dsn string) error {
 	driver = strings.ToLower(strings.TrimSpace(driver))
 	dsn = strings.TrimSpace(dsn)

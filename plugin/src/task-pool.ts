@@ -1,4 +1,4 @@
-// 带并发限制和指数退避的任务池。
+// 带并发限制和指数退避的任务池
 
 export interface RetryOptions {
   maxConcurrency: number;

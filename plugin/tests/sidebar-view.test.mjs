@@ -1,5 +1,5 @@
-// SidebarView.refresh() 呈现未解决冲突入口与管理按钮，不呈现最近活动列表。
-// 只断言路径、类名、标签与事件调用等数据契约，不断言翻译文案。
+// SidebarView.refresh() 呈现未解决冲突入口与管理按钮，不呈现最近活动列表
+// 只断言路径、类名、标签与事件调用等数据契约，不断言翻译文案
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FakeElement } from "./helpers/fake-dom.mjs";
@@ -7,7 +7,7 @@ import { loadEntry } from "./helpers/obsidian-loader.mjs";
 
 const CONFLICT_PATH = "Notes/Conflict.md";
 
-/** 通过真实 BaselineStore 从持久化文件加载给定冲突。 */
+/** 通过真实 BaselineStore 从持久化文件加载给定冲突*/
 async function makeStore(conflicts) {
   const { module, cleanup } = await loadEntry("src/baseline.ts");
   try {
@@ -179,7 +179,7 @@ test("renders compact share, collaboration, and recycle management buttons inste
   const { SidebarView } = module;
   const { store, cleanup: cleanupStore } = await makeStore([]);
   try {
-    // 绑定仓库带有一篇分享文章与一条待处理协作。
+    // 绑定仓库带有一篇分享文章与一条待处理协作
     const plugin = makePlugin(store);
 
     const root = renderSidebar(SidebarView, plugin);

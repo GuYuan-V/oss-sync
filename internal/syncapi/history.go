@@ -1,4 +1,3 @@
-// 历史记录接口
 package syncapi
 
 import (
@@ -33,9 +32,9 @@ func hashBytes(b []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// requireVaultActor 解析当前用户与仓库角色。
-// 插件请求携带 client_id 时必须通过设备仓库授权；网页请求只需用户 Vault 权限。
-// 管理员即使不是仓库成员也以 admin 角色获得审计访问。
+// requireVaultActor 解析当前用户与仓库角色
+// 插件请求携带 client_id 时必须通过设备仓库授权；网页请求只需用户 Vault 权限
+// 管理员即使不是仓库成员也以 admin 角色获得审计访问
 func (h *Handler) requireVaultActor(c *gin.Context) (*models.User, models.Vault, string, bool) {
 	u, ok := auth.RequireUser(c)
 	if !ok {
@@ -188,7 +187,7 @@ func (h *Handler) requireHistoryReaderSync(c *gin.Context, path string) (*models
 	return u, vault, "collaborator", did, true
 }
 
-// historyActor 构造历史操作者信息。
+// historyActor 构造历史操作者信息
 func (h *Handler) historyActor(c *gin.Context, u *models.User) history.Actor {
 	deviceName := deviceauth.DecodeDeviceName(c.GetHeader(deviceauth.DeviceNameHeader))
 	if deviceName == "" {
@@ -236,7 +235,7 @@ func toHistoryOut(row models.FileHistory) historyOut {
 	}
 }
 
-// V2HistoryList 处理 GET /api/vaults/:vault_id/sync/history?path=xxx。
+// V2HistoryList 处理 GET /api/vaults/:vault_id/sync/history?path=xxx
 func (h *Handler) V2HistoryList(c *gin.Context) {
 	path, valid := normalizeRelativePath(c.Query("path"))
 	if !valid {
@@ -267,7 +266,7 @@ type historyDetailOut struct {
 	IsText  bool     `json:"is_text"`
 }
 
-// V2HistoryDetail 处理 GET /api/vaults/:vault_id/sync/history/:history_id?mode=last|current&path=xxx。
+// V2HistoryDetail 处理 GET /api/vaults/:vault_id/sync/history/:history_id?mode=last|current&path=xxx
 func (h *Handler) V2HistoryDetail(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("history_id"), 10, 64)
 	if err != nil {
@@ -294,7 +293,7 @@ func (h *Handler) V2HistoryDetail(c *gin.Context) {
 		out.Content = string(snapshot)
 	}
 
-	// 计算 diff：mode=current 对比当前文件，否则对比上一版本。
+	// 计算 diff：mode=current 对比当前文件，否则对比上一版本
 	var base []byte
 	switch c.Query("mode") {
 	case "current":
@@ -312,7 +311,7 @@ func (h *Handler) V2HistoryDetail(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-// currentFileContent 读取当前文件的磁盘内容（不存在返回 nil）。
+// currentFileContent 读取当前文件的磁盘内容（不存在返回 nil）
 func (h *Handler) currentFileContent(vaultID, path string) []byte {
 	var file models.File
 	if err := h.DB.Where("vault_id = ? AND path = ? AND is_deleted = ?", vaultID, path, false).
@@ -326,8 +325,8 @@ func (h *Handler) currentFileContent(vaultID, path string) []byte {
 	return raw
 }
 
-// V2HistoryRestore 处理 POST /api/vaults/:vault_id/sync/history/:history_id/restore?path=xxx。
-// 仅 owner / manager / 管理员可恢复。
+// V2HistoryRestore 处理 POST /api/vaults/:vault_id/sync/history/:history_id/restore?path=xxx
+// 仅 owner / manager / 管理员可恢复
 func (h *Handler) V2HistoryRestore(c *gin.Context) {
 	u, vault, role, did, ok := h.requireVaultActorSync(c)
 	if !ok {
@@ -365,8 +364,8 @@ func (h *Handler) V2HistoryRestore(c *gin.Context) {
 	c.JSON(http.StatusOK, meta)
 }
 
-// writeFileFromBytes 将字节内容作为新版本写入仓库文件，并记录历史。
-// prevPath 用于重命名记录；prevContentPath 为写入前需要快照的旧正文路径（可空）。
+// writeFileFromBytes 将字节内容作为新版本写入仓库文件，并记录历史
+// prevPath 用于重命名记录；prevContentPath 为写入前需要快照的旧正文路径（可空）
 func (h *Handler) writeFileFromBytes(
 	vault models.Vault,
 	path string,
@@ -437,7 +436,7 @@ func (h *Handler) writeFileFromBytes(
 			} else if err := tx.Create(&current).Error; err != nil {
 				return err
 			}
-			// 快照当前正文作为恢复前版本。
+			// 快照当前正文作为恢复前版本
 			if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, actor, action, path, prevPath, prevDisk, revision); err != nil {
 				return err
 			}
@@ -455,7 +454,7 @@ func (h *Handler) writeFileFromBytes(
 	return v2Meta(result), nil
 }
 
-// writeWriteError 统一输出写入错误。
+// writeWriteError 统一输出写入错误
 func (h *Handler) writeWriteError(c *gin.Context, err error) {
 	if errors.Is(err, storagequota.ErrExceeded) {
 		c.JSON(http.StatusInsufficientStorage, gin.H{"error": "project storage quota exceeded", "code": "project_storage_quota_exceeded"})
@@ -468,7 +467,7 @@ func (h *Handler) writeWriteError(c *gin.Context, err error) {
 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 }
 
-// RecycleList 处理 GET /api/vaults/:vault_id/recycle-bin。
+// RecycleList 处理 GET /api/vaults/:vault_id/recycle-bin
 func (h *Handler) RecycleList(c *gin.Context) {
 	_, vault, _, _, ok := h.requireVaultActorSync(c)
 	if !ok {
@@ -504,7 +503,7 @@ func (h *Handler) RecycleList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"files": out})
 }
 
-// RecycleRestore 处理 POST /api/vaults/:vault_id/recycle-bin/:file_id/restore。
+// RecycleRestore 处理 POST /api/vaults/:vault_id/recycle-bin/:file_id/restore
 func (h *Handler) RecycleRestore(c *gin.Context) {
 	u, vault, role, did, ok := h.requireVaultActorSync(c)
 	if !ok {
@@ -537,7 +536,7 @@ func (h *Handler) RecycleRestore(c *gin.Context) {
 	newPath := filepath.Join(h.Cfg.Storage.DataDir, filepath.FromSlash(newKey))
 	actor := h.historyActorWithDID(c, u, did)
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
-		// 从回收站移回正文。
+		// 从回收站移回正文
 		if err := recycle.MoveOut(h.Cfg.Storage.DataDir, file, newPath); err != nil {
 			return err
 		}
@@ -569,7 +568,7 @@ func (h *Handler) RecycleRestore(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "file restored"})
 }
 
-// RecycleDelete 处理 POST /api/vaults/:vault_id/recycle-bin/:file_id/delete（永久删除）。
+// RecycleDelete 处理 POST /api/vaults/:vault_id/recycle-bin/:file_id/delete（永久删除）
 func (h *Handler) RecycleDelete(c *gin.Context) {
 	_, vault, role, _, ok := h.requireVaultActorSync(c)
 	if !ok {

@@ -41,21 +41,21 @@ func TestSelectAsset(t *testing.T) {
 		t.Error("expected error for unsupported platform with multiple assets")
 	}
 
-	// 要求精确匹配，单个资产也不得回退。
+	// 要求精确匹配，单个资产也不得回退
 	single := []Asset{{Name: "oss-server.bin"}}
 	if _, err := selectAsset(single, "v1.0.0", "linux", "amd64"); err == nil {
 		t.Error("expected error for asset name mismatch, single-asset fallback must not be accepted")
 	}
-	// 空资产列表。
+	// 空资产列表
 	if _, err := selectAsset(nil, "v1.0.0", "linux", "amd64"); err == nil {
 		t.Error("expected error for empty assets")
 	}
-	// 名称含平台子串但非精确命名。
+	// 名称含平台子串但非精确命名
 	legacy := []Asset{{Name: "oss-server-linux-amd64-v1.0.0.tar.gz"}}
 	if _, err := selectAsset(legacy, "v1.0.0", "linux", "amd64"); err == nil {
 		t.Error("legacy permissive name should not be accepted; exact AssetName required")
 	}
-	// 版本不一致。
+	// 版本不一致
 	if _, err := selectAsset(assets, "v2.0.0", "linux", "amd64"); err == nil {
 		t.Error("expected error for version mismatch")
 	}
@@ -254,7 +254,7 @@ func TestExtractBinaryFromArchive(t *testing.T) {
 		t.Errorf("extracted zip binary mismatch: %q", data)
 	}
 
-	// 没有可执行文件时应报错。
+	// 没有可执行文件时应报错
 	badTar := makeTarGz(t, map[string][]byte{"README.md": readme})
 	badPath := filepath.Join(dir, "bad.tar.gz")
 	if err := os.WriteFile(badPath, badTar, 0o755); err != nil {
@@ -265,7 +265,7 @@ func TestExtractBinaryFromArchive(t *testing.T) {
 	}
 }
 
-// mockUpstream 模拟 GitHub Release API 与二进制下载。
+// mockUpstream 模拟 GitHub Release API 与二进制下载
 type mockUpstream struct {
 	srv *httptest.Server
 }
@@ -398,7 +398,7 @@ func TestUpdate_HappyPath(t *testing.T) {
 		t.Errorf("backup content = %q, want old-binary", backup)
 	}
 
-	// 更新成功后应写入“待验证”标记，供重启后的自检闭环消费。
+	// 更新成功后应写入“待验证”标记，供重启后的自检闭环消费
 	if _, err := os.Stat(exePath + ".updated"); err != nil {
 		t.Errorf("更新后应写入待验证标记: %v", err)
 	}
@@ -534,7 +534,7 @@ func TestCheckUpdate_Results(t *testing.T) {
 		t.Errorf("CheckUpdate result: %+v", res)
 	}
 
-	// 状态应记录最近一次检查。
+	// 状态应记录最近一次检查
 	st := u.Status()
 	if st.LastCheck == nil || !st.LastCheck.UpdateAvailable {
 		t.Errorf("status last check: %+v", st.LastCheck)
@@ -644,7 +644,7 @@ func TestTriggerRestart_CallsCallbackOnce(t *testing.T) {
 	u.SetOnUpdated(func() { calls <- struct{}{} })
 	u.TriggerRestart()
 	u.TriggerRestart()
-	<-calls // 接收第一次回调。
+	<-calls // 接收第一次回调
 	select {
 	case <-calls:
 		t.Error("callback should fire only once")

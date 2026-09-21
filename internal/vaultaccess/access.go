@@ -1,4 +1,4 @@
-// Package vaultaccess 集中 Vault 鉴权，各接口统一应用 owner、manager、participant 与管理员规则。
+// Package vaultaccess 集中 Vault 鉴权，各接口统一应用 owner、manager、participant 与管理员规则
 package vaultaccess
 
 import (
@@ -13,7 +13,7 @@ const (
 	RoleOwner       = "owner"
 	RoleManager     = "manager"
 	RoleParticipant = "participant"
-	// RoleAdmin 表示管理员通过平台权限访问任意仓库。
+	// RoleAdmin 表示管理员通过平台权限访问任意仓库
 	RoleAdmin = "admin"
 )
 
@@ -21,7 +21,7 @@ func ValidMemberRole(role string) bool {
 	return role == RoleManager || role == RoleParticipant
 }
 
-// CanManage 判断角色是否可管理仓库（成员、分享、博客设置、恢复、永久删除）。
+// CanManage 判断角色是否可管理仓库（成员、分享、博客设置、恢复、永久删除）
 func CanManage(role string) bool {
 	return role == RoleOwner || role == RoleManager || role == RoleAdmin
 }
@@ -30,7 +30,7 @@ func CanDelete(role string) bool {
 	return role == RoleOwner || role == RoleAdmin
 }
 
-// Resolve 返回有效 Vault 与调用方角色，无成员关系时按未找到返回，避免泄露 Vault ID。
+// Resolve 返回有效 Vault 与调用方角色，无成员关系时按未找到返回，避免泄露 Vault ID
 func Resolve(db *gorm.DB, userID uint, vaultID string) (models.Vault, string, error) {
 	var vault models.Vault
 	if err := db.Where("id = ?", vaultID).First(&vault).Error; err != nil {

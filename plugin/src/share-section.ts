@@ -1,4 +1,4 @@
-// 分享区：渲染当前仓库的公开文章、浏览量与管理操作。
+// 分享区：渲染当前仓库的公开文章、浏览量与管理操作
 import { Notice } from "obsidian";
 import type { ShareOut } from "./api";
 import type OSSPlugin from "./main";

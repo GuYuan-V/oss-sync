@@ -1,4 +1,3 @@
-// 协作文本
 package syncapi
 
 import (
@@ -16,7 +15,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
-// CollabContent 返回协作原文件正文，不要求协作者成为仓库成员。
+// CollabContent 返回协作原文件正文，不要求协作者成为仓库成员
 func (h *Handler) CollabContent(c *gin.Context) {
 	user, _, ok := h.requireCollaborationDevice(c)
 	if !ok {

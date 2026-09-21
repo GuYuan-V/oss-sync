@@ -1,4 +1,3 @@
-// Package webui 提供网页控制台的语言选择与文案查找。
 package webui
 
 import "fmt"
@@ -32,7 +31,7 @@ func translate(lang, key string, args ...any) string {
 	return value
 }
 
-// Languages 返回网页控制台支持的语言标识。
+// Languages 返回网页控制台支持的语言标识
 func Languages() []string {
 	return []string{"zh", "en"}
 }

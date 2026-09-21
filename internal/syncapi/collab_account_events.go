@@ -1,4 +1,3 @@
-// 协作账户事件
 package syncapi
 
 import (

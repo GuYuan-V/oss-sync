@@ -34,7 +34,7 @@ func TestExistingPathSupportsLegacyAndCurrentArchives(t *testing.T) {
 			t.Fatalf("unsafe name accepted: %q", invalid)
 		}
 	}
-	// 新备份固定写入数据目录，同名旧归档不改变写入位置。
+	// 新备份固定写入数据目录，同名旧归档不改变写入位置
 	writePath, err := Path(dataDir, "legacy.zip")
 	if err != nil {
 		t.Fatal(err)

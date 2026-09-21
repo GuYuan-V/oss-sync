@@ -55,7 +55,7 @@ test("pending local upload reuses operation id and preserves baseRevision", asyn
     const baseline = new Map([["notes/a.md", makeBaseline({ serverRevision: 5, serverHash: "old", localHash: "old" })]]);
     const localByPath = new Map([["notes/a.md", makeLocal("notes/a.md", "new-hash", 200, 12)]]);
     const remote = new Map([["notes/a.md", makeRemote("notes/a.md", { hash: "old", revision: 5 })]]);
-    // 此处 remote 与 baseline 一致，使 remoteChanged 为 false。
+    // 此处 remote 与 baseline 一致，使 remoteChanged 为 false
     const pending = [{ id: "op-1", kind: "upsert", path: "notes/a.md", createdAt: 1 }];
     let factoryCalls = 0;
     const result = plan({
@@ -249,7 +249,7 @@ test("reconcile and adopt branches carry expectedLocal and full shapes", async (
 
     const localSame = new Map([["note.md", makeLocal("note.md", "same", 20)]]);
     const remoteSame = new Map([["note.md", makeRemote("note.md", { hash: "same", revision: 2 })]]);
-    // 本地与远端均偏离 baseline 但哈希相同，走 adopt 分支。
+    // 本地与远端均偏离 baseline 但哈希相同，走 adopt 分支
     const r2 = plan({
       forceFull: false,
       recoverySnapshot: false,

@@ -168,7 +168,7 @@ func TestManager_TerminalRetentionAndHistoryLimit(t *testing.T) {
 		if err != nil {
 			t.Fatalf("start %d: %v", i, err)
 		}
-		// 状态机经 StateFailed 进入终态，本测试取该路径。
+		// 状态机经 StateFailed 进入终态，本测试取该路径
 		if _, err := m.Transition(op.ID, StateFailed, "done"); err != nil {
 			t.Fatalf("transition %d: %v", i, err)
 		}
@@ -233,13 +233,13 @@ func TestManager_CurrentStatusNoGitHubPaths(t *testing.T) {
 	if st.Active == nil {
 		t.Fatal("active missing")
 	}
-	// 公开操作不得携带 URL，落盘内容亦不得外泄 https 地址。
+	// 公开操作不得携带 URL，落盘内容亦不得外泄 https 地址
 	data, _ := os.ReadFile(stateFilePath(m.path))
 	_ = data
 	if st.Active.Version != "5.0.0" {
 		t.Fatalf("version %q", st.Active.Version)
 	}
-	// ManagerStatus 序列化结果不得含 asset_url、release_url 与 backup_path。
+	// ManagerStatus 序列化结果不得含 asset_url、release_url 与 backup_path
 	if st.Active.Error != "" {
 		t.Fatal("unexpected error")
 	}
@@ -249,7 +249,7 @@ func TestManager_InvalidTransition(t *testing.T) {
 	m := newTestManager(t)
 	cc, _ := m.IssueChecked(testCandidate("6.0.0"), time.Minute)
 	op, _ := m.StartOperation(cc.ID, "")
-	// 状态机禁止跳步，in_progress 直达 done 必须拒绝。
+	// 状态机禁止跳步，in_progress 直达 done 必须拒绝
 	if _, err := m.Transition(op.ID, StateDone, ""); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("skip to done should be rejected, got %v", err)
 	}

@@ -1,4 +1,4 @@
-// 侧边栏视图：展示同步状态、分享管理、协作邀请与未解决冲突。
+// 侧边栏视图：展示同步状态、分享管理、协作邀请与未解决冲突
 import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
 import type OSSPlugin from "./main";
 
@@ -31,7 +31,7 @@ export class SidebarView extends ItemView {
     this.contentEl.empty();
   }
 
-  /** 重新渲染整个侧边栏。 */
+  /** 重新渲染整个侧边栏*/
   refresh(): void {
     const { contentEl } = this;
     contentEl.empty();

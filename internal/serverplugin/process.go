@@ -228,7 +228,7 @@ func (p *executablePlugin) fail(err error) {
 	})
 }
 
-// writeFrame 限制锁获取与系统管道写入。超时的半截帧不可复用，需关闭管道并终止无响应的子进程。
+// writeFrame 限制锁获取与系统管道写入；超时的半截帧不可复用，需关闭管道并终止无响应的子进程
 func (p *executablePlugin) writeFrame(ctx context.Context, frame []byte) error {
 	p.writeOnce.Do(func() { p.writeGate = make(chan struct{}, 1) })
 	select {

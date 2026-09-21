@@ -374,7 +374,7 @@ func TestCompactTombstones_RespectsRecycleRetention(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 保留期内的回收站正文必须保留。
+	// 保留期内的回收站正文必须保留
 	keep := models.File{
 		UserID: user.ID, VaultID: vault.ID, Path: "Keep.md", Type: "markdown",
 		Hash: "h", Size: 3, Revision: 1, IsDeleted: true, DeletedAt: sqlNullTime(now),
@@ -390,7 +390,7 @@ func TestCompactTombstones_RespectsRecycleRetention(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 已过保留期的回收站正文应被清理。
+	// 已过保留期的回收站正文应被清理
 	expired := models.File{
 		UserID: user.ID, VaultID: vault.ID, Path: "Expired.md", Type: "markdown",
 		Hash: "h", Size: 3, Revision: 2, IsDeleted: true,

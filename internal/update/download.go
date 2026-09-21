@@ -1,4 +1,3 @@
-// 更新下载
 package update
 
 import (
@@ -22,16 +21,16 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// maxDownloadSize 限制单个资产下载上限，防止异常数据撑爆磁盘。
+// maxDownloadSize 限制单个资产下载上限，防止异常数据撑爆磁盘
 const maxDownloadSize = 512 << 20 // 512 MiB
 
-// downloadAsset 下载资产；压缩包会解包并返回其中匹配当前平台的可执行文件。
-// 在解包/魔数校验之前必须先通过 SHA-256 完整性校验。
+// downloadAsset 下载资产；压缩包会解包并返回其中匹配当前平台的可执行文件
+// 在解包/魔数校验之前必须先通过 SHA-256 完整性校验
 func (u *Updater) downloadAsset(ctx context.Context, asset Asset, dir string) (string, error) {
 	if asset.BrowserDownloadURL == "" && asset.URL == "" {
 		return "", fmt.Errorf("资产 %q 没有下载地址", asset.Name)
 	}
-	// 优先使用 BrowserDownloadURL，其次为 API URL（通过 Accept 头请求二进制）。
+	// 优先使用 BrowserDownloadURL，其次为 API URL（通过 Accept 头请求二进制）
 	downloadURL := asset.BrowserDownloadURL
 	if downloadURL == "" {
 		downloadURL = asset.URL
@@ -53,14 +52,14 @@ func (u *Updater) downloadAsset(ctx context.Context, asset Asset, dir string) (s
 		name = "oss-server.bin"
 	}
 	dest := filepath.Join(dir, name)
-	// 使用带安全重定向策略的客户端：拒绝 downgrade、跨 host 时剥离 Authorization。
+	// 使用带安全重定向策略的客户端：拒绝 downgrade、跨 host 时剥离 Authorization
 	safeClient := clientWithSafeRedirect(u.gh.http, u.gh.apiBase)
-	// Authorization 仅附加到已配置的 GitHub API 资产原点；browser_download_url 绝不附加。
+	// Authorization 仅附加到已配置的 GitHub API 资产原点；browser_download_url 绝不附加
 	effectiveToken := ""
 	if downloadURL != "" && downloadURL == asset.URL && shouldAttachToken(downloadURL, u.gh.apiBase) {
 		effectiveToken = u.gh.token
 	}
-	// 若使用 BrowserDownloadURL，保持 effectiveToken 为空，即使其 host 恰好与 apiBase 相同也绝不附带。
+	// 若使用 BrowserDownloadURL，保持 effectiveToken 为空，即使其 host 恰好与 apiBase 相同也绝不附带
 	if downloadURL == asset.BrowserDownloadURL {
 		effectiveToken = ""
 	}
@@ -77,7 +76,7 @@ func (u *Updater) downloadAsset(ctx context.Context, asset Asset, dir string) (s
 	return dest, nil
 }
 
-// allowedDownloadURL 只允许 HTTPS 下载；测试中允许指向与 API base 相同来源或 loopback 的 http 地址。
+// allowedDownloadURL 只允许 HTTPS 下载；测试中允许指向与 API base 相同来源或 loopback 的 http 地址
 func allowedDownloadURL(apiBase, raw string) bool {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Host == "" {
@@ -138,8 +137,8 @@ func clientWithSafeRedirect(base *http.Client, apiBase string) *http.Client {
 	return &clone
 }
 
-// shouldAttachToken 判断是否应对 rawURL 附加 Authorization。仅当 rawURL 的 host 与 apiBase 的 host 完全一致时才附加，
-// 且此判断由调用方的 apiBase 决定；browser_download_url 场景调用方应传入空 token（见 downloadAsset）。
+// shouldAttachToken 判断是否应对 rawURL 附加 Authorization；仅当 rawURL 的 host 与 apiBase 的 host 完全一致时才附加，
+// 且此判断由调用方的 apiBase 决定；browser_download_url 场景调用方应传入空 token（见 downloadAsset）
 func shouldAttachToken(rawURL, apiBase string) bool {
 	if strings.TrimSpace(rawURL) == "" || strings.TrimSpace(apiBase) == "" {
 		return false
@@ -155,7 +154,7 @@ func shouldAttachToken(rawURL, apiBase string) bool {
 	return strings.EqualFold(u.Host, base.Host)
 }
 
-// downloadFile 把 URL 下载到 dest，校验 Content-Length、声明大小、上限与 SHA-256。
+// downloadFile 把 URL 下载到 dest，校验 Content-Length、声明大小、上限与 SHA-256
 func downloadFile(ctx context.Context, client *http.Client, rawURL, dest string, expected int64, expectedDigest string, token string, apiBase string) error {
 	if expected <= 0 {
 		return newUpdateError(CodeInvalidSize, fmt.Sprintf("expected size must be positive, got %d", expected), ErrInvalidSize)
@@ -251,7 +250,7 @@ func isArchive(name string) bool {
 		strings.HasSuffix(l, ".zip")
 }
 
-// extractBinary 从压缩包中找出匹配当前平台的可执行文件。
+// extractBinary 从压缩包中找出匹配当前平台的可执行文件
 func extractBinary(archivePath, destDir string) (string, error) {
 	var candidates []string
 	var err error
@@ -341,7 +340,7 @@ func zipCandidates(archivePath, destDir string) ([]string, error) {
 	return candidates, nil
 }
 
-// pickBinary 从候选文件中选出最可能是服务端二进制的文件。
+// pickBinary 从候选文件中选出最可能是服务端二进制的文件
 func pickBinary(candidates []string) (string, error) {
 	if len(candidates) == 0 {
 		return "", errors.New("压缩包内没有匹配当前平台的可执行文件")

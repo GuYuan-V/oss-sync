@@ -1,4 +1,4 @@
-// Package storagequota 执行部署级应用存储容量上限。
+// Package storagequota 执行部署级应用存储容量上限
 package storagequota
 
 import (
@@ -16,7 +16,7 @@ var (
 	writeMu     sync.Mutex
 )
 
-// Usage 返回 root 下常规文件占用的字节数。
+// Usage 返回 root 下常规文件占用的字节数
 func Usage(root string) (int64, error) {
 	var used int64
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -41,8 +41,8 @@ func Usage(root string) (int64, error) {
 	return used, err
 }
 
-// WithinLimit 串行化容量检查与扩容提交，避免并发超限。
-// 其中 reserved 为提交后新增文件预留的字节数。
+// WithinLimit 串行化容量检查与扩容提交，避免并发超限
+// 其中 reserved 为提交后新增文件预留的字节数
 func WithinLimit(root string, limit, reserved int64, commit func() error) error {
 	if limit <= 0 {
 		return commit()

@@ -42,7 +42,7 @@ func TestWebRegistrationCreatesPluginLoginAccount(t *testing.T) {
 	if err := db.Where("username = ?", "web-user").First(&user).Error; err != nil {
 		t.Fatalf("query registered user: %v", err)
 	}
-	// 首个注册用户自动成为管理员。
+	// 首个注册用户自动成为管理员
 	if user.Role != "admin" {
 		t.Fatalf("registered role = %q, want admin", user.Role)
 	}
@@ -283,7 +283,7 @@ func TestAdminPanelRejectsRegularUser(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 普通用户可登录统一入口，但无法进入管理后台。
+	// 普通用户可登录统一入口，但无法进入管理后台
 	login := doForm(t, router, http.MethodPost, "/login", url.Values{
 		"username": {"member"},
 		"password": {"password123"},
@@ -320,7 +320,7 @@ func TestAdminPlatformManagesVaultMembers(t *testing.T) {
 		t.Fatal("admin session missing")
 	}
 
-	// 管理员进入任意仓库的协作成员页；Vault 角色仍由下方独立路由管理。
+	// 管理员进入任意仓库的协作成员页；Vault 角色仍由下方独立路由管理
 	page := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/members", nil, session, csrf)
 	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "已授权协作成员") {
 		t.Fatalf("member page: %d %s", page.Code, page.Body.String())
@@ -353,7 +353,7 @@ func TestAdminPlatformManagesVaultMembers(t *testing.T) {
 	}
 }
 
-// webCookies 从登录响应中提取会话与 CSRF cookie。
+// webCookies 从登录响应中提取会话与 CSRF cookie
 func webCookies(t *testing.T, res *httptest.ResponseRecorder) (*http.Cookie, *http.Cookie) {
 	t.Helper()
 	var session, csrf *http.Cookie
@@ -401,7 +401,7 @@ func doForm(
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		// 状态修改请求必须携带 CSRF token。
+		// 状态修改请求必须携带 CSRF token
 		if csrf != nil && method != http.MethodGet && method != http.MethodHead {
 			form.Set("_csrf", csrf.Value)
 			req = httptest.NewRequest(method, path, strings.NewReader(form.Encode()))

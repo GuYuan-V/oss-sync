@@ -20,7 +20,7 @@ const CR = 0x000d;
 const SURROGATE_MIN = 0xd800;
 const SURROGATE_MAX = 0xdfff;
 
-// 将 CRLF 与 CR 统一为 LF，单个末尾换行不产生空行，中间空行保留为有效行。
+// 将 CRLF 与 CR 统一为 LF，单个末尾换行不产生空行，中间空行保留为有效行
 function normalizeLines(text: string): string[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   if (lines[lines.length - 1] === "") {
@@ -29,7 +29,7 @@ function normalizeLines(text: string): string[] {
   return lines;
 }
 
-// 每行映射为一个 UTF-16 码元（排除 NUL、LF、CR 与代理区），并以 LF 分隔，使行级差异可按字符级差异计算。
+// 每行映射为一个 UTF-16 码元（排除 NUL、LF、CR 与代理区），并以 LF 分隔，使行级差异可按字符级差异计算
 class LineCodec {
   private readonly lineToCode = new Map<string, string>();
   private readonly codeToLine: Record<string, string> = {};
@@ -77,7 +77,7 @@ class LineCodec {
   }
 }
 
-// 压缩连续 context 行：首段超过 2 行仅保留末尾 2 行，尾段超过 2 行仅保留开头 2 行，中段超过 4 行仅保留首尾各 2 行，其余完整保留。
+// 压缩连续 context 行：首段超过 2 行仅保留末尾 2 行，尾段超过 2 行仅保留开头 2 行，中段超过 4 行仅保留首尾各 2 行，其余完整保留
 export function collapseContextRows(rows: ConflictDiffRow[]): ConflictDiffRow[] {
   const out: ConflictDiffRow[] = [];
   let i = 0;
@@ -120,7 +120,7 @@ export function buildConflictDiff(local: string, remote: string): ConflictDiffRo
   const diffs = dmp.diff_main(encodedLocal, encodedRemote, false);
   dmp.diff_cleanupMerge(diffs);
 
-  // 按替换块缓存变更行，使同一块内 removed 始终排在 added 之前，避免 diff_main 交错输出打乱顺序。
+  // 按替换块缓存变更行，使同一块内 removed 始终排在 added 之前，避免 diff_main 交错输出打乱顺序
   const rows: ConflictDiffRow[] = [];
   const removed: string[] = [];
   const added: string[] = [];

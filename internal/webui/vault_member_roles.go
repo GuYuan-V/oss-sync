@@ -1,4 +1,3 @@
-// 成员角色
 package webui
 
 import (

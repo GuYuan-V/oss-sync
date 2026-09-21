@@ -57,7 +57,7 @@ func TestRegistrationClosedBlocksAnonymous(t *testing.T) {
 func TestAnonymousRegistrationCannotCreateAdmin(t *testing.T) {
 	srv, db, _ := newTestServer(t)
 	router := srv.Router()
-	// 已有管理员后，匿名注册携带 role=admin 也不能提权。
+	// 已有管理员后，匿名注册携带 role=admin 也不能提权
 	createAdminToken(t, srv, db, "platform-admin", "password123")
 
 	code, body := doJSON(t, router, "POST", "/api/auth/register", "", map[string]string{
@@ -119,7 +119,7 @@ func TestVaultCreationRequiresExplicitRequest(t *testing.T) {
 	if code != http.StatusCreated || first["is_default"] != true {
 		t.Fatalf("first explicit vault: status=%d body=%v", code, first)
 	}
-	// 重新授权设备，使其可见新建仓库。
+	// 重新授权设备，使其可见新建仓库
 	if code, _ = approveAs(t, router, userToken, "manual-dev", []string{first["id"].(string)}, nil); code != http.StatusOK {
 		t.Fatalf("re-approve after first vault: %d", code)
 	}

@@ -1,4 +1,3 @@
-// 同步接口 v2
 package syncapi
 
 import (
@@ -233,7 +232,7 @@ func (h *Handler) V2Ack(c *gin.Context) {
 		h.writeDeviceAuthError(c, err)
 		return
 	}
-	// 以鉴权结论为准设置操作归属，避免客户端伪造。
+	// 以鉴权结论为准设置操作归属，避免客户端伪造
 	req.ClientID = string(did)
 
 	vaultLock := h.vaultLock(vault.ID)
@@ -454,7 +453,7 @@ func (h *Handler) V2Upload(c *gin.Context) {
 			}
 			result = current
 
-			// 记录修改历史：覆盖已有正文时快照旧内容。
+			// 记录修改历史：覆盖已有正文时快照旧内容
 			action := history.ActionCreate
 			if exists && !current.IsDeleted {
 				action = history.ActionModify
@@ -685,7 +684,7 @@ func (h *Handler) V2Delete(c *gin.Context) {
 		return nil
 	})
 	if err != nil {
-		// 事务失败时把正文从回收站移回原位。
+		// 事务失败时把正文从回收站移回原位
 		if recycleKey != "" && targetPath != "" {
 			_ = os.Rename(recycleAbs, targetPath)
 		}
@@ -829,7 +828,7 @@ func (h *Handler) V2Rename(c *gin.Context) {
 		}
 
 		// os.Rename 在事务内执行；若进程在 rename 后、提交前崩溃，
-		// 定时对账按磁盘与数据库的实际状态修复。
+		// 定时对账按磁盘与数据库的实际状态修复
 		oldDisk = h.fileDiskPath(oldFile)
 		newKey := filestore.VaultStorageKey(vault.ID, req.NewPath)
 		newDisk = filepath.Join(h.Cfg.Storage.DataDir, filepath.FromSlash(newKey))
@@ -882,7 +881,7 @@ func (h *Handler) V2Rename(c *gin.Context) {
 		}
 		oldResult = oldFile
 		newResult = target
-		// 记录重命名历史，快照旧路径正文。
+		// 记录重命名历史，快照旧路径正文
 		if err := history.Record(tx, h.Cfg.Storage.DataDir, vault.ID, h.historyActorWithDID(c, u, did), history.ActionRename, req.NewPath, req.OldPath, newDisk, newRevision); err != nil {
 			return err
 		}
@@ -1021,7 +1020,7 @@ func historySnapshotReserve(path string) int64 {
 	if err != nil || !info.Mode().IsRegular() {
 		return 0
 	}
-	// gzip 膨胀上限较小，按源文件大小另加 1 MiB 预留。
+	// gzip 膨胀上限较小，按源文件大小另加 1 MiB 预留
 	return info.Size() + 1<<20
 }
 

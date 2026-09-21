@@ -1,4 +1,4 @@
-// 最小可观察假 DOM：暴露 children / classes / attrs / listeners，供视图测试使用。
+// 最小可观察假 DOM：暴露 children / classes / attrs / listeners，供视图测试使用
 export class FakeElement {
   constructor(tag = "div") {
     this.tag = tag;
@@ -62,12 +62,12 @@ export class FakeElement {
     return this.classes.has(name);
   }
 
-  /** 自身与全部后代的文本拼接（仅用于路径等数据断言）。 */
+  /** 自身与全部后代的文本拼接（仅用于路径等数据断言）*/
   getText() {
     return this.text + this.children.map((child) => child.getText()).join("");
   }
 
-  /** 收集与空格分隔选择器（如 ".oss-sidebar-conflict button"）匹配的后代。 */
+  /** 收集与空格分隔选择器（如 ".oss-sidebar-conflict button"）匹配的后代*/
   querySelectorAll(selector) {
     const tokens = selector.trim().split(/\s+/).filter(Boolean);
     const matches = [];

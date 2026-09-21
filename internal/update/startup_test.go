@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// readyzServer 模拟 /readyz：ready=true 时返回 200，否则返回 503。
+// readyzServer 模拟 /readyz：ready=true 时返回 200，否则返回 503
 func readyzServer(ready bool) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -27,7 +27,7 @@ func readyzServer(ready bool) *httptest.Server {
 	return srv
 }
 
-// healthUpdater 构造仅用于自检/回滚测试的 Updater（不访问 GitHub）。
+// healthUpdater 构造仅用于自检/回滚测试的 Updater（不访问 GitHub）
 func healthUpdater(t *testing.T, exePath string) *Updater {
 	t.Helper()
 	u, err := NewUpdater(testCfg(), Options{

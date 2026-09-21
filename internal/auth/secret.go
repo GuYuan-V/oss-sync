@@ -1,4 +1,3 @@
-// 基于数据库的签名密钥管理。
 package auth
 
 import (
@@ -13,8 +12,8 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// EnsureDatabaseJWTSecret 从数据库加载稳定的服务端签名密钥。空库时生成 48 字节随机值并原子持久化，
-// 此处不采用配置文件与环境变量中的 JWT 取值。
+// EnsureDatabaseJWTSecret 从数据库加载稳定的服务端签名密钥；空库时生成 48 字节随机值并原子持久化，
+// 此处不采用配置文件与环境变量中的 JWT 取值
 func EnsureDatabaseJWTSecret(db *gorm.DB, cfg *config.Config) error {
 	if err := EnsureRegistrationSetting(db, cfg.Auth.AllowAnonymousRegistration); err != nil {
 		return err

@@ -1,4 +1,3 @@
-// 插件主题设置共用的校验逻辑。
 package blog
 
 import (
@@ -18,7 +17,7 @@ const (
 
 var themeSettingKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
-// ThemeSettingField 声明一个管理员可编辑的插件设置字段。
+// ThemeSettingField 声明一个管理员可编辑的插件设置字段
 type ThemeSettingField struct {
 	Key         string              `json:"key"`
 	Label       string              `json:"label"`
@@ -86,7 +85,7 @@ func validateThemeSettingFields(fields []ThemeSettingField, nested bool) error {
 	return nil
 }
 
-// ValidateThemeConfig 按字段声明校验插件设置并返回清洗后的值。
+// ValidateThemeConfig 按字段声明校验插件设置并返回清洗后的值
 func ValidateThemeConfig(fields []ThemeSettingField, raw map[string]any) (map[string]any, error) {
 	clean := make(map[string]any, len(fields))
 	for _, field := range fields {
@@ -107,7 +106,7 @@ func ValidateThemeConfig(fields []ThemeSettingField, raw map[string]any) (map[st
 	return clean, nil
 }
 
-// ValidateSettingFields 校验插件宿主渲染的设置字段声明。
+// ValidateSettingFields 校验插件宿主渲染的设置字段声明
 func ValidateSettingFields(fields []ThemeSettingField) error {
 	if len(fields) > maxThemeSettingFields {
 		return fmt.Errorf("设置字段不能超过 %d 个", maxThemeSettingFields)
@@ -115,7 +114,7 @@ func ValidateSettingFields(fields []ThemeSettingField) error {
 	return validateThemeSettingFields(fields, false)
 }
 
-// ValidateSettingConfig 按宿主渲染的声明清洗插件设置值。
+// ValidateSettingConfig 按宿主渲染的声明清洗插件设置值
 func ValidateSettingConfig(fields []ThemeSettingField, raw map[string]any) (map[string]any, error) {
 	return ValidateThemeConfig(fields, raw)
 }
@@ -195,7 +194,7 @@ func validateThemeGroup(field ThemeSettingField, raw any) ([]any, error) {
 	return clean, nil
 }
 
-// ValidPublicURL 接受绝对 HTTP 与 HTTPS 地址，以及站内以斜线开头的相对地址。
+// ValidPublicURL 接受绝对 HTTP 与 HTTPS 地址，以及站内以斜线开头的相对地址
 func ValidPublicURL(raw string) bool {
 	if strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") {
 		return true

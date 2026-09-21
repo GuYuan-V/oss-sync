@@ -1,4 +1,3 @@
-// 启动更新
 package update
 
 import (
@@ -14,12 +13,12 @@ import (
 )
 
 // ErrRollbackRestart 表示健康检查未通过、已回滚到备份二进制，
-// 需要重启进程（用回滚后的旧版本二进制）完成闭环。
+// 需要重启进程（用回滚后的旧版本二进制）完成闭环
 var ErrRollbackRestart = errors.New("健康检查未通过，已回滚到备份二进制，需要重启服务")
 
-// CheckReady 轮询 /readyz 直到返回 ready:true 或超过 timeout。
+// CheckReady 轮询 /readyz 直到返回 ready:true 或超过 timeout
 // 每次请求返回 200 且 JSON 的 ready 为 true 视为就绪；连接失败、
-// 非 200 或 ready:false 均视为未就绪并继续重试。上下文取消时立即返回。
+// 非 200 或 ready:false 均视为未就绪并继续重试；上下文取消时立即返回
 func CheckReady(ctx context.Context, url string, pollInterval, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -73,8 +72,8 @@ func readyOnce(ctx context.Context, client *http.Client, url string) (bool, erro
 	return true, nil
 }
 
-// Rollback 用备份二进制（更新前留存，<exe>.bak）原子替换当前二进制。
-// 备份不存在时返回错误，不修改任何文件。
+// Rollback 用备份二进制（更新前留存，<exe>.bak）原子替换当前二进制
+// 备份不存在时返回错误，不修改任何文件
 func (u *Updater) Rollback() error {
 	if _, err := os.Stat(u.backup); err != nil {
 		return fmt.Errorf("备份二进制 %s 不可用: %w", u.backup, err)
@@ -87,11 +86,11 @@ func (u *Updater) Rollback() error {
 
 // StartupHealthCheck 是重启后的自检闭环：
 // 仅当存在“更新待验证”标记（<exe>.updated，由 Update 在替换成功后写入）
-// 时运行，避免对未发生更新的普通启动造成影响。
+// 时运行，避免对未发生更新的普通启动造成影响
 //
 // 流程：轮询 /readyz 直到 ready:true；超时或失败则原子回滚到备份二进制
-// 并返回 ErrRollbackRestart，由调用方重启进程完成闭环；就绪则返回 nil。
-// 上下文被取消（例如更新流程已触发重启信号）时返回错误但不回滚。
+// 并返回 ErrRollbackRestart，由调用方重启进程完成闭环；就绪则返回 nil
+// 上下文被取消（例如更新流程已触发重启信号）时返回错误但不回滚
 func (u *Updater) StartupHealthCheck(ctx context.Context, healthURL string, pollInterval, timeout time.Duration) error {
 	marker := u.exe + ".updated"
 	if _, err := os.Stat(marker); err != nil {

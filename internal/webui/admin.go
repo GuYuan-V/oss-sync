@@ -1,4 +1,3 @@
-// 管理控制台页面与操作。
 package webui
 
 import (
@@ -163,7 +162,7 @@ func (h *Handler) lastAdminID(users []models.User) uint {
 	if count <= 1 {
 		return last
 	}
-	return 0 // 多个管理员时返回零值，允许操作任意管理员。
+	return 0 // 多个管理员时返回零值，允许操作任意管理员
 }
 
 func (h *Handler) adminSetUserRole(c *gin.Context) {
@@ -174,7 +173,7 @@ func (h *Handler) adminSetUserRole(c *gin.Context) {
 		return
 	}
 	if newRole == "user" {
-		// 不能降级最后一个管理员。
+		// 不能降级最后一个管理员
 		var adminCount int64
 		h.DB.Model(&models.User{}).Where("role = ?", "admin").Count(&adminCount)
 		if adminCount <= 1 {
@@ -351,7 +350,7 @@ type adminDeviceRow struct {
 	UserID     uint
 	LastSeenAt time.Time
 	LastCursor int64
-	// Vaults 是该设备所属用户可访问（owner 或有效成员）的仓库授权选项。
+	// Vaults 是该设备所属用户可访问（owner 或有效成员）的仓库授权选项
 	Vaults          []vaultOption
 	AuthorizedCount int
 	AuthorizedNames []string
@@ -381,7 +380,6 @@ func (h *Handler) adminVaultDetailPage(c *gin.Context) {
 	}
 	h.DB.Model(&models.File{}).Where("vault_id = ? AND is_deleted = ?", vault.ID, false).Count(&d.FileCount)
 
-	// 成员。
 	var members []models.VaultMember
 	if err := h.DB.Where("vault_id = ?", vault.ID).Order("created_at asc").Find(&members).Error; err == nil {
 		ids := make([]uint, 0, len(members))
@@ -402,7 +400,6 @@ func (h *Handler) adminVaultDetailPage(c *gin.Context) {
 		}
 	}
 
-	// 设备授权。
 	var accesses []models.DeviceVaultAccess
 	if err := h.DB.Where("vault_id = ?", vault.ID).Find(&accesses).Error; err == nil {
 		clientIDs := make([]string, 0, len(accesses))
@@ -480,7 +477,7 @@ func (h *Handler) adminDevicesPage(c *gin.Context) {
 			}
 		}
 	}
-	// 全部仓库供授权选择；每个设备只列出其所属用户可访问（owner 或有效成员）的仓库。
+	// 全部仓库供授权选择；每个设备只列出其所属用户可访问（owner 或有效成员）的仓库
 	var vaults []models.Vault
 	if err := h.DB.Order("name asc").Find(&vaults).Error; err != nil {
 		h.render(c, http.StatusInternalServerError, "admin-devices", h.t(c, "page.admin_devices"), "admin", "admin-devices", d)
@@ -500,7 +497,7 @@ func (h *Handler) adminDevicesPage(c *gin.Context) {
 			}
 		}
 	}
-	// 按目标用户过滤可授权仓库：管理员不能通过设备授权绕过用户的 Vault 权限。
+	// 按目标用户过滤可授权仓库：管理员不能通过设备授权绕过用户的 Vault 权限
 	accessible := h.accessibleVaultIDsForUsers(devices)
 	for _, dev := range devices {
 		var dv models.DeviceVault
@@ -530,7 +527,7 @@ func (h *Handler) adminDevicesPage(c *gin.Context) {
 	h.render(c, http.StatusOK, "admin-devices", h.t(c, "page.admin_devices"), "admin", "admin-devices", d)
 }
 
-// accessibleVaultIDsForUsers 返回每个用户可访问（owner 或有效成员）的仓库 ID 集合。
+// accessibleVaultIDsForUsers 返回每个用户可访问（owner 或有效成员）的仓库 ID 集合
 func (h *Handler) accessibleVaultIDsForUsers(devices []models.ClientDevice) map[uint]map[string]bool {
 	out := map[uint]map[string]bool{}
 	userIDs := make([]uint, 0, len(devices))
@@ -561,7 +558,7 @@ func (h *Handler) accessibleVaultIDsForUsers(devices []models.ClientDevice) map[
 	return out
 }
 
-// deviceAuthSummary 返回客户端已授权的仓库数量及其名称（保持输入切片顺序）。
+// deviceAuthSummary 返回客户端已授权的仓库数量及其名称（保持输入切片顺序）
 func deviceAuthSummary(vaults []vaultOption, clientID string) (int, []string) {
 	var names []string
 	for _, v := range vaults {
@@ -572,7 +569,7 @@ func deviceAuthSummary(vaults []vaultOption, clientID string) (int, []string) {
 	return len(names), names
 }
 
-// adminApproveDevice 只批准设备，不修改仓库授权；仓库授权由单独的表单处理。
+// adminApproveDevice 只批准设备，不修改仓库授权；仓库授权由单独的表单处理
 func (h *Handler) adminApproveDevice(c *gin.Context) {
 	admin := h.webUser(c)
 	clientID := deviceauth.NormalizeClientID(c.Param("client_id"))
@@ -630,7 +627,7 @@ func (h *Handler) adminAuthorizeDevice(c *gin.Context) {
 		return
 	}
 	name := dev.Name
-	// 仓库授权只允许在设备已批准后保存。
+	// 仓库授权只允许在设备已批准后保存
 	status := strings.TrimSpace(c.PostForm("status"))
 	if status == "" {
 		status = dev.Status
@@ -639,7 +636,7 @@ func (h *Handler) adminAuthorizeDevice(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/dashboard/admin/devices?error="+url.QueryEscape(h.t(c, "err.invalid_device_status")))
 		return
 	}
-	// 授权仓库必须属于目标用户可访问范围，管理员不能绕过用户的 Vault 权限。
+	// 授权仓库必须属于目标用户可访问范围，管理员不能绕过用户的 Vault 权限
 	var wanted []string
 	for _, id := range c.PostFormArray("vault_ids") {
 		id = strings.TrimSpace(id)

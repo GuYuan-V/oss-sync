@@ -1,7 +1,7 @@
-// OSS 后端 HTTP 客户端。
+// OSS 后端 HTTP 客户端
 //
-// JWT 由插件通过 loadData()/saveData() 持久化。
-// 失效或登录失败时抛错，由调用方决定 UI 提示。
+// JWT 由插件通过 loadData()/saveData() 持久化
+// 失效或登录失败时抛错，由调用方决定 UI 提示
 
 import { requestUrl } from "obsidian";
 import type { Diagnostics } from "./diagnostics";
@@ -295,7 +295,7 @@ export interface ServerUpdateTriggerResponse {
 }
 
 export class OSSApiClient {
-  /** 服务端时间与本地时间的偏移，单位为毫秒。 */
+  /** 服务端时间与本地时间的偏移，单位为毫秒*/
   private timeOffset = 0;
   private token: string | null = null;
 
@@ -329,7 +329,7 @@ export class OSSApiClient {
     return this.doRequest<AuthStatus>("GET", "/api/auth/status");
   }
 
-  /** 校验当前令牌是否有管理员权限（服务端 /api/admin 拒绝非管理员）。 */
+  /** 校验当前令牌是否有管理员权限（服务端 /api/admin 拒绝非管理员）*/
   async checkAdminAccess(): Promise<boolean> {
     try {
       await this.doRequest("GET", "/api/admin/users");
@@ -574,7 +574,7 @@ export class OSSApiClient {
     );
   }
 
-  /** 获取仓库同步策略，effective_mode 由服务端根据仓库策略与客户端偏好计算。 */
+  /** 获取仓库同步策略，effective_mode 由服务端根据仓库策略与客户端偏好计算*/
   async syncStrategy(vaultID: string, mode: SyncMode): Promise<SyncStrategyResponse> {
     return this.doRequest<SyncStrategyResponse>(
       "GET",
@@ -584,7 +584,7 @@ export class OSSApiClient {
     );
   }
 
-  /** 查询指定路径的修改历史。 */
+  /** 查询指定路径的修改历史*/
   async history(vaultID: string, path: string): Promise<{ history: HistoryEntry[] }> {
     return this.doRequest<{ history: HistoryEntry[] }>(
       "GET",
@@ -638,7 +638,7 @@ export class OSSApiClient {
     );
   }
 
-  /** 列出当前用户在仓库中的协作关系。 */
+  /** 列出当前用户在仓库中的协作关系*/
   async collabList(vaultID: string): Promise<{ collaborations: CollabEntry[] }> {
     return this.doRequest<{ collaborations: CollabEntry[] }>(
       "GET",
@@ -646,12 +646,12 @@ export class OSSApiClient {
     );
   }
 
-  /** 列出当前用户跨仓库收到的协作关系。 */
+  /** 列出当前用户跨仓库收到的协作关系*/
   async collabInbox(): Promise<{ collaborations: CollabEntry[] }> {
     return this.doRequest<{ collaborations: CollabEntry[] }>("GET", "/api/collaborations");
   }
 
-  /** 邀请用户协作指定 Markdown 文件。 */
+  /** 邀请用户协作指定 Markdown 文件*/
   async collabInvite(
     vaultID: string,
     filePath: string,
@@ -663,7 +663,7 @@ export class OSSApiClient {
     });
   }
 
-  /** 接受或拒绝协作邀请。 */
+  /** 接受或拒绝协作邀请*/
   async collabRespond(vaultID: string, collabID: number, accept: boolean): Promise<{ status: string }> {
     return this.doRequest<{ status: string }>(
       "POST",
@@ -672,7 +672,7 @@ export class OSSApiClient {
     );
   }
 
-  /** 撤回邀请或解除协作（owner/manager）。 */
+  /** 撤回邀请或解除协作（owner/manager）*/
   async collabRevoke(vaultID: string, collabID: number): Promise<{ status: string }> {
     return this.doRequest<{ status: string }>(
       "POST",
@@ -687,7 +687,7 @@ export class OSSApiClient {
     );
   }
 
-  /** 以协作者身份上传协作文件正文。 */
+  /** 以协作者身份上传协作文件正文*/
   async collabUpload(
     vaultID: string,
     fileID: number,
@@ -767,7 +767,7 @@ export class OSSApiClient {
     }
   }
 
-  /** 长轮询协作事件：changed 为 true 表示有新事件，version 用于下次 after 参数。 */
+  /** 长轮询协作事件：changed 为 true 表示有新事件，version 用于下次 after 参数*/
   async collabPoll(
     vaultID: string,
     after: number,
@@ -781,7 +781,7 @@ export class OSSApiClient {
     );
   }
 
-  /** 长轮询当前账户在所有仓库中的协作事件。 */
+  /** 长轮询当前账户在所有仓库中的协作事件*/
   async collabAccountPoll(
     after: number,
     waitSeconds: number
@@ -793,14 +793,14 @@ export class OSSApiClient {
     );
   }
 
-  /** EventSource 查询凭据只允许 HTTPS 或本机回环 HTTP。 */
+  /** EventSource 查询凭据只允许 HTTPS 或本机回环 HTTP*/
   collabEventStreamURL(vaultID: string): string | null {
     return this.buildCollabEventStreamURL(
       `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/stream`
     );
   }
 
-  /** 构造当前账户的跨仓库协作事件流地址。 */
+  /** 构造当前账户的跨仓库协作事件流地址*/
   collabAccountEventStreamURL(): string | null {
     return this.buildCollabEventStreamURL("/api/collaborations/stream");
   }
@@ -824,7 +824,7 @@ export class OSSApiClient {
     );
   }
 
-  /** 下载协作文件正文；协作者不需要仓库成员或设备仓库授权。 */
+  /** 下载协作文件正文；协作者不需要仓库成员或设备仓库授权*/
   async downloadCollabContent(
     vaultID: string,
     fileID: number
@@ -878,7 +878,7 @@ export class OSSApiClient {
     }
   }
 
-  /** 调用旧版同步检查接口，并更新本地时钟偏移。 */
+  /** 调用旧版同步检查接口，并更新本地时钟偏移*/
   async check(files: CheckFileIn[], mode: "full" | "incremental"): Promise<CheckResponse> {
     const localBefore = Date.now();
     const res = await this.doRequest<CheckResponse>("POST", "/api/sync/check", {
@@ -886,13 +886,13 @@ export class OSSApiClient {
       files,
     });
     const localAfter = Date.now();
-    // 用请求往返中点估算服务端时间对应的本地时刻。
+    // 用请求往返中点估算服务端时间对应的本地时刻
     const localMid = Math.floor((localBefore + localAfter) / 2);
     this.timeOffset = res.server_time - localMid;
     return res;
   }
 
-  /** requestUrl 使用 ArrayBuffer 发送原始文件内容。 */
+  /** requestUrl 使用 ArrayBuffer 发送原始文件内容*/
   async upload(path: string, adjustedMtime: number, content: ArrayBuffer): Promise<UploadResult> {
     const res = await requestUrl({
       url: this.url(

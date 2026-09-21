@@ -15,7 +15,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// loginAsDevice 使用设备请求头登录，返回响应码和 JSON body。
+// loginAsDevice 使用设备请求头登录，返回响应码和 JSON body
 func loginAsDevice(t *testing.T, router *gin.Engine, username, password, clientID, deviceName string) (int, map[string]any) {
 	t.Helper()
 	raw, _ := jsonMarshal(map[string]string{"username": username, "password": password})
@@ -28,7 +28,7 @@ func loginAsDevice(t *testing.T, router *gin.Engine, username, password, clientI
 	return w.Code, decodeMap(w.Body.Bytes())
 }
 
-// approveAs 以指定 token 批准设备并设置仓库授权。
+// approveAs 以指定 token 批准设备并设置仓库授权
 func approveAs(t *testing.T, router *gin.Engine, token, clientID string, vaultIDs []string, userID *uint) (int, map[string]any) {
 	t.Helper()
 	body := map[string]any{"status": "approved", "name": clientID, "vault_ids": vaultIDs}
@@ -44,7 +44,7 @@ func approveAs(t *testing.T, router *gin.Engine, token, clientID string, vaultID
 	return w.Code, decodeMap(w.Body.Bytes())
 }
 
-// requestAsDevice 以指定设备身份调用 API。
+// requestAsDevice 以指定设备身份调用 API
 func requestAsDevice(t *testing.T, router *gin.Engine, method, path, token, clientID string, body any) (int, map[string]any) {
 	t.Helper()
 	var rdr io.Reader
@@ -109,7 +109,7 @@ func TestDevicePendingBlocksSyncUntilApproved(t *testing.T) {
 		t.Fatalf("pending manifest: %d %v", code, body)
 	}
 
-	// 批准后可以同步。
+	// 批准后可以同步
 	code, _ = approveAs(t, router, token, "dev-1", []string{vaultID}, nil)
 	if code != http.StatusOK {
 		t.Fatalf("approve: %d", code)
@@ -160,7 +160,7 @@ func TestDeviceVaultAuthorizationScopesAccess(t *testing.T) {
 	if code, _ = approveAs(t, router, userToken, "scope-dev", []string{vaultA}, nil); code != http.StatusOK {
 		t.Fatalf("approve scope-dev: %d", code)
 	}
-	// 重新登录，使 token 携带已批准状态。
+	// 重新登录，使 token 携带已批准状态
 	code, login2 := loginAsDevice(t, router, "scope-user", "password123", "scope-dev", "Scope Device")
 	if code == http.StatusOK {
 		devToken = login2["token"].(string)
@@ -180,7 +180,7 @@ func TestDeviceVaultAuthorizationScopesAccess(t *testing.T) {
 		t.Fatalf("unauthorized vault must be rejected: %d %v", code, c)
 	}
 
-	// 移除仓库授权后立即拒绝。
+	// 移除仓库授权后立即拒绝
 	if code, _ = approveAs(t, router, token, "scope-dev", []string{}, nil); code != http.StatusOK {
 		t.Fatalf("clear authorization: %d", code)
 	}
@@ -284,7 +284,7 @@ func TestAdminCanApproveAnotherUsersDevice(t *testing.T) {
 	}
 	vaultID := body["id"].(string)
 
-	// member 登录登记设备。
+	// member 登录登记设备
 	code, login := loginAsDevice(t, router, "member-x", "password123", "member-dev", "Member PC")
 	if code != http.StatusOK || login["device_status"] != "pending" {
 		t.Fatalf("member login: %d %v", code, login)
@@ -293,12 +293,12 @@ func TestAdminCanApproveAnotherUsersDevice(t *testing.T) {
 	if err := db.Where("username = ?", "member-x").First(&member).Error; err != nil {
 		t.Fatal(err)
 	}
-	// 管理员跨用户批准。
+	// 管理员跨用户批准
 	code, _ = approveAs(t, router, adminToken, "member-dev", []string{vaultID}, &member.ID)
 	if code != http.StatusOK {
 		t.Fatalf("admin approve: %d", code)
 	}
-	// 重新登录，拿到批准态设备 token。
+	// 重新登录，拿到批准态设备 token
 	code2, login2 := loginAsDevice(t, router, "member-x", "password123", "member-dev", "Member PC")
 	if code2 == http.StatusOK {
 		login = login2
@@ -333,7 +333,7 @@ func TestAdminResetPasswordInvalidatesOldToken(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("admin reset password: %d", code)
 	}
-	// 旧 token 立即失效。
+	// 旧 token 立即失效
 	code, _ = doJSON(t, router, http.MethodGet, "/api/vaults", memberToken, nil)
 	if code != http.StatusUnauthorized {
 		t.Fatalf("old token should be invalid: %d", code)
@@ -348,7 +348,7 @@ func TestSelfPasswordChangeReturnsFreshToken(t *testing.T) {
 		t.Fatalf("register: %d", code)
 	}
 	token := reg["token"].(string)
-	// 建一个设备，用于访问仓库。
+	// 建一个设备，用于访问仓库
 	code, devLogin := loginAsDevice(t, router, "self-change", "password123", "self-dev", "Self Device")
 	if code != http.StatusOK {
 		t.Fatalf("device login: %d %v", code, devLogin)
@@ -381,11 +381,11 @@ func TestSelfPasswordChangeReturnsFreshToken(t *testing.T) {
 	if code != http.StatusOK || body["token"] == "" {
 		t.Fatalf("change password: %d %v", code, body)
 	}
-	// 旧 token 失效。
+	// 旧 token 失效
 	if code, _ = doJSON(t, router, http.MethodGet, "/api/vaults", token, nil); code != http.StatusUnauthorized {
 		t.Fatalf("old token after password change: %d", code)
 	}
-	// 新密码可登录设备并访问仓库。
+	// 新密码可登录设备并访问仓库
 	code, newDevLogin := loginAsDevice(t, router, "self-change", "new-pass-123", "self-dev", "Self Device")
 	if code != http.StatusOK {
 		t.Fatalf("new device login: %d %v", code, newDevLogin)
@@ -436,7 +436,7 @@ func TestPluginCreatedVaultGrantsCurrentApprovedDevice(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("create First: %d %v", code, body)
 	}
-	// 插件创建仓库，自动授权当前已批准设备。
+	// 插件创建仓库，自动授权当前已批准设备
 	req := httptest.NewRequest(http.MethodPost, "/api/vaults", bytes.NewBufferString(`{"name":"Plugin Vault"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+devToken)

@@ -1,4 +1,3 @@
-// 历史筛选
 package webui
 
 import (

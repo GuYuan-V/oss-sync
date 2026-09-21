@@ -1,4 +1,4 @@
-// Package blog 提供公开 Vault 目录、分享笔记与主题资源的渲染。
+// Package blog 提供公开 Vault 目录、分享笔记与主题资源的渲染
 package blog
 
 import (
@@ -36,7 +36,7 @@ type Handler struct {
 	pluginHooks PluginHookRunner
 }
 
-// PluginHookRunner 描述博客渲染所需的宿主插件钩子契约。
+// PluginHookRunner 描述博客渲染所需的宿主插件钩子契约
 type PluginHookRunner interface {
 	ApplyHook(context.Context, string, PluginHookPayload) (string, error)
 }
@@ -49,7 +49,7 @@ type PluginHookPayload struct {
 	Settings map[string]any `json:"settings,omitempty"`
 }
 
-// SetPluginHooks 接入受信服务端插件钩子，供博客渲染调用。
+// SetPluginHooks 接入受信服务端插件钩子，供博客渲染调用
 func (h *Handler) SetPluginHooks(runner PluginHookRunner) {
 	h.pluginHooks = runner
 }
@@ -62,7 +62,7 @@ func New(db *gorm.DB, cfg *config.Config) (*Handler, error) {
 	return &Handler{DB: db, Cfg: cfg, tpl: tpl}, nil
 }
 
-// Register 挂载无需登录的公开分享路由。
+// Register 挂载无需登录的公开分享路由
 func (h *Handler) Register(r *gin.Engine) {
 	r.GET("/", h.handleHome)
 	r.GET("/b/:vault_id", h.handleVaultBlog)
@@ -72,10 +72,10 @@ func (h *Handler) Register(r *gin.Engine) {
 	r.GET("/themes/:theme/*filepath", h.handleThemeAsset)
 }
 
-// shareResolver 实现 markdown.LinkResolver。
-// 索引按文件名匹配分享；同名时使用最近创建的分享。
+// shareResolver 实现 markdown.LinkResolver
+// 索引按文件名匹配分享；同名时使用最近创建的分享
 type shareResolver struct {
-	index map[string]string // 键为去掉 .md 后缀的文件名，值为 share_id。
+	index map[string]string // 键为去掉 .md 后缀的文件名，值为 share_id
 }
 
 var _ markdown.LinkResolver = (*shareResolver)(nil)
@@ -87,7 +87,7 @@ func (r *shareResolver) Resolve(linkText string) string {
 	return r.index[linkText]
 }
 
-// buildResolver 构建当前 Vault 中可公开访问的双链索引。
+// buildResolver 构建当前 Vault 中可公开访问的双链索引
 func (h *Handler) buildResolver(userID uint, vaultID string) *shareResolver {
 	type shareRow struct {
 		ShareID    string
@@ -112,7 +112,7 @@ func (h *Handler) buildResolver(userID uint, vaultID string) *shareResolver {
 		}
 	}
 
-	// 文件夹内的文章没有独立 share_id，双链统一指向文件夹分享。
+	// 文件夹内的文章没有独立 share_id，双链统一指向文件夹分享
 	for _, r := range rows {
 		if !r.IsFolder {
 			continue
@@ -159,7 +159,7 @@ type renderParams struct {
 	IsFolder      bool
 	FolderTitle   string
 	FooterNotice  template.HTML
-	// papertrail 博客字段。
+	// papertrail 博客字段
 	IsHome      bool
 	ShareID     string
 	AllowCopy   bool
@@ -212,7 +212,7 @@ func trimByRunes(value string, maxLen int) string {
 	return string(runes)
 }
 
-// loadVaultSettings 优先读取 Vault 配置，并兼容旧版用户级配置。
+// loadVaultSettings 优先读取 Vault 配置，并兼容旧版用户级配置
 func (h *Handler) loadVaultSettings(userID uint, vaultID string) (*models.VaultSetting, error) {
 	var vs models.VaultSetting
 	if err := h.DB.Where("vault_id = ?", vaultID).First(&vs).Error; err == nil {
@@ -274,7 +274,7 @@ func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
 				return
 			}
 		}
-		// 自定义主题无效或不完整时不得影响已发布笔记，回退到内置页面与资源。
+		// 自定义主题无效或不完整时不得影响已发布笔记，回退到内置页面与资源
 		p.ThemeName = "default"
 		p.ThemeBaseURL = "/themes/default"
 	}
@@ -284,7 +284,7 @@ func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
 	}
 }
 
-// renderBuiltinTheme 使用内置模板渲染（papertrail 等）。
+// renderBuiltinTheme 使用内置模板渲染（papertrail 等）
 func (h *Handler) renderBuiltinTheme(c *gin.Context, p renderParams, themeName string) {
 	raw, err := themeAssetsFS.ReadFile("assets/" + themeName + "/template.html")
 	if err != nil {
@@ -461,7 +461,7 @@ func (h *Handler) handleThemeAsset(c *gin.Context) {
 		return
 	}
 	if theme == "default" {
-		// default 是内置只读主题，不允许从磁盘加载同名自定义目录。
+		// default 是内置只读主题，不允许从磁盘加载同名自定义目录
 		c.Status(http.StatusNotFound)
 		return
 	}
@@ -505,7 +505,7 @@ func htmlEscape(s string) string {
 	return template.HTMLEscapeString(s)
 }
 
-// likePrefix 转义 SQL LIKE 元字符后只追加一个通配符，用于匹配所选目录的后代。调用方的反斜杠 ESCAPE 子句同时适用于 SQLite 与 PostgreSQL。
+// likePrefix 转义 SQL LIKE 元字符后只追加一个通配符，用于匹配所选目录的后代；调用方的反斜杠 ESCAPE 子句同时适用于 SQLite 与 PostgreSQL
 func likePrefix(prefix string) string {
 	replacer := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_")
 	return replacer.Replace(prefix) + "%"

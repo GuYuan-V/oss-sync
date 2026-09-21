@@ -1,4 +1,3 @@
-// 控制台主题管理
 package webui
 
 import (

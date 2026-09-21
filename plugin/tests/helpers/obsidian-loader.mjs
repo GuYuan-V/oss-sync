@@ -1,4 +1,4 @@
-// esbuild 打包辅助：用最小 Obsidian 桩替换 "obsidian" 模块，把插件源码打包为可注入的 ESM。
+// esbuild 打包辅助：用最小 Obsidian 桩替换 "obsidian" 模块，把插件源码打包为可注入的 ESM
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,7 +51,7 @@ function obsidianStubPlugin() {
   };
 }
 
-/** 把 entryPoint 打包到临时目录并动态导入，返回 { module, cleanup }。 */
+/** 把 entryPoint 打包到临时目录并动态导入，返回 { module, cleanup }*/
 export async function loadEntry(entryPoint) {
   const dir = await mkdtemp(join(tmpdir(), "oss-sidebar-"));
   const outfile = join(dir, "bundle.mjs");

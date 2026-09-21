@@ -1,4 +1,3 @@
-// 同步策略
 package syncapi
 
 import (
@@ -14,7 +13,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
-// strategyResponse 是 GET /api/vaults/:vault_id/sync/strategy 的响应。
+// strategyResponse 是 GET /api/vaults/:vault_id/sync/strategy 的响应
 type strategyResponse struct {
 	Policy          string `json:"policy"`
 	EffectiveMode   string `json:"effective_mode"`
@@ -22,8 +21,8 @@ type strategyResponse struct {
 	LongPollWaitSec int    `json:"long_poll_wait_sec"`
 }
 
-// V2Strategy 处理 GET /api/vaults/:vault_id/sync/strategy。
-// effective_mode 由服务端根据仓库策略和客户端选择计算。
+// V2Strategy 处理 GET /api/vaults/:vault_id/sync/strategy
+// effective_mode 由服务端根据仓库策略和客户端选择计算
 func (h *Handler) V2Strategy(c *gin.Context) {
 	u, vault, ok := h.requireV2Vault(c)
 	if !ok {

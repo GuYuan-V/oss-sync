@@ -1,4 +1,3 @@
-// 更新能力检测
 package update
 
 import (
@@ -10,9 +9,9 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// CheckCapability 校验当前进程是否具备执行自更新的前置条件。
+// CheckCapability 校验当前进程是否具备执行自更新的前置条件
 // 依次检查：开发版本、受支持平台、可执行文件形态（常规文件、非软链）、
-// 可执行文件所在目录可写。任一不满足即返回带稳定 Code 的 UpdateError。
+// 可执行文件所在目录可写；任一不满足即返回带稳定 Code 的 UpdateError
 func CheckCapability(execPath string, goos, goarch string) error {
 	if version.IsDevelopmentVersion(version.Version) {
 		return newUpdateError(
@@ -49,7 +48,7 @@ func CheckCapability(execPath string, goos, goarch string) error {
 	if !dirInfo.IsDir() {
 		return newUpdateError(CodeUnwritableDirectory, fmt.Sprintf("executable directory %q is not a directory", dir), nil)
 	}
-	// 目录可写性：尝试创建并立即删除临时文件，避免仅依赖权限位的误判。
+	// 目录可写性：尝试创建并立即删除临时文件，避免仅依赖权限位的误判
 	tmpFile, err := os.CreateTemp(dir, ".oss-write-check-*")
 	if err != nil {
 		return newUpdateError(CodeUnwritableDirectory, fmt.Sprintf("executable directory %q is not writable: %v", dir, err), err)
@@ -60,7 +59,7 @@ func CheckCapability(execPath string, goos, goarch string) error {
 	return nil
 }
 
-// CheckCurrentCapability 使用当前版本与平台校验能力。
+// CheckCurrentCapability 使用当前版本与平台校验能力
 func CheckCurrentCapability(execPath string) error {
 	return CheckCapability(execPath, runtime.GOOS, runtime.GOARCH)
 }

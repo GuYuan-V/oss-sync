@@ -147,7 +147,7 @@ func TestAdminUpdate_RequiresLogin(t *testing.T) {
 	h, _, _ := newWebUIHandlerWithUpdate(t, db, cfg)
 	w := doWebRequest(t, h, "POST", "/dashboard/admin/system/update/check", url.Values{"_csrf": {"test-csrf-token-123"}}, nil, "test-csrf-token-123", true)
 	if w.Code != http.StatusSeeOther && w.Code != http.StatusFound {
-		// 未登录请求由 requireSession 重定向到 /login。
+		// 未登录请求由 requireSession 重定向到 /login
 		t.Fatalf("want redirect to login, got %d", w.Code)
 	}
 	if loc := w.Header().Get("Location"); !strings.Contains(loc, "/login") {
@@ -161,7 +161,7 @@ func TestAdminUpdate_NonAdminForbidden(t *testing.T) {
 	user := createTestUserWithHash(t, db, "bob", "user")
 	sess, csrf := issueWebSession(t, cfg, user)
 	w := doWebRequest(t, h, "POST", "/dashboard/admin/system/update/check", url.Values{"_csrf": {csrf}}, sess, csrf, false)
-	// requireAdmin 将非管理员重定向到 /dashboard。
+	// requireAdmin 将非管理员重定向到 /dashboard
 	if w.Code != http.StatusSeeOther && w.Code != http.StatusFound {
 		t.Fatalf("non-admin should be redirected, got %d body %s", w.Code, w.Body.String())
 	}
@@ -175,10 +175,10 @@ func TestAdminUpdate_MissingCSRF(t *testing.T) {
 	h, _, _ := newWebUIHandlerWithUpdate(t, db, cfg)
 	user := createTestUserWithHash(t, db, "admin1", "admin")
 	sess, csrf := issueWebSession(t, cfg, user)
-	// 仅携带 cookie 而缺少请求头与表单令牌的请求。
+	// 仅携带 cookie 而缺少请求头与表单令牌的请求
 	form := url.Values{}
 	w := doWebRequest(t, h, "POST", "/dashboard/admin/system/update/check", form, sess, csrf, false)
-	// validCSRF 要求 X-CSRF-Token 或 _csrf 表单字段，缺失时返回 403。
+	// validCSRF 要求 X-CSRF-Token 或 _csrf 表单字段，缺失时返回 403
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("missing CSRF should be 403, got %d body %s", w.Code, w.Body.String())
 	}
@@ -191,7 +191,7 @@ func TestAdminUpdate_ForgedCheckID(t *testing.T) {
 	sess, csrf := issueWebSession(t, cfg, user)
 	form := url.Values{"_csrf": {csrf}, "check_id": {"nonexistent-id"}, "expected_version": {"9.9.9"}, "confirm": {"on"}}
 	w := doWebRequest(t, h, "POST", "/dashboard/admin/system/update", form, sess, csrf, true)
-	// doWebRequest 以表单编码发送 _csrf，此处只需断言伪造 check_id 不会触发更新。
+	// doWebRequest 以表单编码发送 _csrf，此处只需断言伪造 check_id 不会触发更新
 	if w.Code == http.StatusAccepted {
 		t.Fatalf("forged check should not succeed, got 202")
 	}
@@ -207,7 +207,7 @@ func TestAdminUpdate_VersionMismatch(t *testing.T) {
 	t.Cleanup(func() { version.Version = origVer })
 	db, cfg, _ := newWebUITestDB(t)
 	h, mgr, _ := newWebUIHandlerWithUpdate(t, db, cfg)
-	// 签发版本号为 9.9.9 的已确认候选。
+	// 签发版本号为 9.9.9 的已确认候选
 	checkID := newCheckedForWebUITest(t, mgr, "9.9.9")
 	user := createTestUserWithHash(t, db, "admin3", "admin")
 	sess, csrf := issueWebSession(t, cfg, user)
@@ -226,7 +226,7 @@ func TestAdminUpdate_SuccessfulCheckAndTrigger(t *testing.T) {
 	version.Version = "1.0.0"
 	t.Cleanup(func() { version.Version = origVer })
 	db, cfg, dataDir := newWebUITestDB(t)
-	// 模拟 GitHub 发版服务。
+	// 模拟 GitHub 发版服务
 	assetName, _ := update.AssetName("9.9.9", runtime.GOOS, runtime.GOARCH)
 	content := []byte("fake-binary-content")
 	var serveContent []byte
@@ -258,21 +258,21 @@ func TestAdminUpdate_SuccessfulCheckAndTrigger(t *testing.T) {
 	mgr, _ := update.NewManager(dataDir)
 	cfg.Storage.DataDir = dataDir
 	up, _ := update.NewUpdater(cfg, update.Options{ExecPath: exePath, APIBase: ghSrv.URL, HTTPClient: ghSrv.Client(), Verifier: func(string, string) error { return nil }})
-	// 触发更新所需的启动与校验函数均替换为空实现。
+	// 触发更新所需的启动与校验函数均替换为空实现
 	origLaunch := getLaunchFn()
 	update.SetLaunchHelperFn(func(string, string) error { return nil })
 	t.Cleanup(func() { update.SetLaunchHelperFn(origLaunch) })
 	origVerify := getVerifyFn()
 	update.SetVerifyStagedFileFn(func(string, string, string) error { return nil })
 	t.Cleanup(func() { update.SetVerifyStagedFileFn(origVerify) })
-	// 直接签发指向本地测试服务的已确认候选，避免下载 https://example.com 固件。
+	// 直接签发指向本地测试服务的已确认候选，避免下载 https://example.com 固件
 	h, err := New(db, cfg)
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
 	}
 	svc := update.NewService(mgr, up, cfg)
 	h.SetUpdateService(svc, up)
-	// 为触发流程创建指向本地测试服务的已确认候选。
+	// 为触发流程创建指向本地测试服务的已确认候选
 	assetURL := ghSrv.URL + "/" + assetName
 	cand, _ := update.NewCandidate("v9.9.9", runtime.GOOS, runtime.GOARCH, assetURL, "https://example.com/releases/tag/v9.9.9", int64(len(serveContent)), 1001, 2001, digest)
 	cc, _ := mgr.IssueChecked(*cand, time.Hour)
@@ -280,7 +280,7 @@ func TestAdminUpdate_SuccessfulCheckAndTrigger(t *testing.T) {
 	user := createTestUserWithHash(t, db, "admin4", "admin")
 	sess, csrf := issueWebSession(t, cfg, user)
 	_ = svc
-	// 携带正确的 check_id、版本号与确认标记触发更新，期望返回 202。
+	// 携带正确的 check_id、版本号与确认标记触发更新，期望返回 202
 	form := url.Values{"_csrf": {csrf}, "check_id": {checkID}, "expected_version": {"9.9.9"}, "confirm": {"on"}}
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -308,7 +308,7 @@ func TestAdminUpdate_SuccessfulCheckAndTrigger(t *testing.T) {
 		t.Errorf("operation missing %v", resp["operation"])
 	}
 
-	// 状态接口应反映正在进行的更新操作。
+	// 状态接口应反映正在进行的更新操作
 	req2 := httptest.NewRequest("GET", "/dashboard/admin/system/update/status", nil)
 	req2.AddCookie(sess)
 	req2.AddCookie(&http.Cookie{Name: csrfCookieName(), Value: csrf})
@@ -475,7 +475,7 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 			t.Errorf("update panel missing %q", needle)
 		}
 	}
-	// 空闲时检查按钮不应禁用。
+	// 空闲时检查按钮不应禁用
 	if strings.Contains(page, `data-update-check-btn" disabled`) {
 		t.Errorf("check button should not be disabled when idle")
 	}
@@ -488,7 +488,7 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 	if strings.Contains(page, `<script`) || strings.Contains(page, `style=`) {
 		t.Error("update panel must not rely on inline script or style blocked by CSP")
 	}
-	// 容器部署沿用进程内更新路径，可写运行时目录支持 Docker 重启更新后的进程。
+	// 容器部署沿用进程内更新路径，可写运行时目录支持 Docker 重启更新后的进程
 	data.Data["Update"] = adminUpdateStatus{
 		CurrentVersion: "1.0.0",
 		Env:            "prod",
@@ -521,7 +521,7 @@ func TestAdminUpdateStatus_ContainerUsesInProcessUpdater(t *testing.T) {
 	}
 }
 
-// 辅助函数。
+// 辅助函数
 
 func newCheckedForWebUITest(t *testing.T, mgr *update.Manager, ver string) string {
 	t.Helper()
@@ -632,7 +632,7 @@ func hasValidMagic(b []byte) bool {
 	return b[0] == 'M' && b[1] == 'Z'
 }
 func digestOfBytesWebUI(b []byte) string {
-	// 计算 sha256 摘要，格式为 sha256 引导的十六进制字符串。
+	// 计算 sha256 摘要，格式为 sha256 引导的十六进制字符串
 	//nolint:revive
 	h := sha256Sum(b)
 	return "sha256:" + h

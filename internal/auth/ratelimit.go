@@ -1,4 +1,3 @@
-// 凭据端点的进程内限流。
 package auth
 
 import (
@@ -6,7 +5,7 @@ import (
 	"time"
 )
 
-// AttemptLimiter 为凭据端点的进程内小守卫。服务为单实例部署，该守卫足以拦截针对高成本 bcrypt 计算的重复调用。
+// AttemptLimiter 为凭据端点的进程内小守卫；服务为单实例部署，该守卫足以拦截针对高成本 bcrypt 计算的重复调用
 type AttemptLimiter struct {
 	mu      sync.Mutex
 	limit   int

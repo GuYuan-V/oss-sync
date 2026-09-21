@@ -35,7 +35,7 @@ func newAcceptedCollaborationFixture(t *testing.T) acceptedCollaborationFixture 
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 协作者以设备身份登录，用于创建所属仓库。
+	// 协作者以设备身份登录，用于创建所属仓库
 	code, loginBody := doJSON(t, router, http.MethodPost, "/api/auth/login", "",
 		map[string]string{"username": collaborator.Username, "password": "password123"})
 	if code != http.StatusOK {
@@ -102,21 +102,21 @@ func newAcceptedCollaborationFixture(t *testing.T) acceptedCollaborationFixture 
 }
 
 func TestCollaborationAccountPollReportsCrossVaultEvents(t *testing.T) {
-	// 另一用户 Vault 内已完成协作邀请与接受。
+	// 另一用户 Vault 内已完成协作邀请与接受
 	fixture := newAcceptedCollaborationFixture(t)
 
-	// 协作者轮询账号级事件版本。
+	// 协作者轮询账号级事件版本
 	code, body := doJSON(t, fixture.router, http.MethodGet,
 		"/api/collaborations/poll?after=0&wait=0", fixture.collaboratorToken, nil)
 
-	// 跨 Vault 事件立即可见。
+	// 跨 Vault 事件立即可见
 	if code != http.StatusOK || body["changed"] != true {
 		t.Fatalf("account collaboration poll: %d %#v", code, body)
 	}
 }
 
 func TestCollaborationAccountPollWakesWhenOwnerUpdatesSharedFile(t *testing.T) {
-	// 协作者已消费当前账号事件版本。
+	// 协作者已消费当前账号事件版本
 	fixture := newAcceptedCollaborationFixture(t)
 	code, initial := doJSON(t, fixture.router, http.MethodGet,
 		"/api/collaborations/poll?after=0&wait=0", fixture.collaboratorToken, nil)
@@ -129,41 +129,41 @@ func TestCollaborationAccountPollWakesWhenOwnerUpdatesSharedFile(t *testing.T) {
 	}
 	uploadViaV1(t, fixture.router, fixture.ownerToken, "Shared.md", "# owner edit")
 
-	// 协作者紧随已消费版本立即轮询。
+	// 协作者紧随已消费版本立即轮询
 	code, body := doJSON(t, fixture.router, http.MethodGet,
 		"/api/collaborations/poll?after="+strconv.FormatInt(int64(version), 10)+"&wait=0",
 		fixture.collaboratorToken, nil)
 
-	// 归属者编辑直接唤醒协作通道，不等待收件箱定时器。
+	// 归属者编辑直接唤醒协作通道，不等待收件箱定时器
 	if code != http.StatusOK || body["changed"] != true {
 		t.Fatalf("owner update account poll: %d %#v", code, body)
 	}
 }
 
 func TestCollaborationLegacyBoundVaultPollWakesForCrossVaultEvents(t *testing.T) {
-	// 旧客户端仅轮询协作者自绑 Vault。
+	// 旧客户端仅轮询协作者自绑 Vault
 	fixture := newAcceptedCollaborationFixture(t)
 
-	// 跨 Vault 邀请与接受发生后发起轮询。
+	// 跨 Vault 邀请与接受发生后发起轮询
 	code, body := doJSON(t, fixture.router, http.MethodGet,
 		"/api/vaults/"+fixture.collaboratorVaultID+"/collaborations/poll?after=0&wait=0",
 		fixture.collaboratorToken, nil)
 
-	// 兼容主题立即唤醒旧客户端。
+	// 兼容主题立即唤醒旧客户端
 	if code != http.StatusOK || body["changed"] != true {
 		t.Fatalf("legacy collaboration poll: %d %#v", code, body)
 	}
 }
 
 func TestCollaborationLegacyVaultListIncludesIncomingAcrossVaults(t *testing.T) {
-	// 旧客户端绑定协作者自有 Vault。
+	// 旧客户端绑定协作者自有 Vault
 	fixture := newAcceptedCollaborationFixture(t)
 
-	// 经历史 Vault 作用域路由加载协作列表。
+	// 经历史 Vault 作用域路由加载协作列表
 	code, body := doJSON(t, fixture.router, http.MethodGet,
 		"/api/vaults/"+fixture.collaboratorVaultID+"/collaborations", fixture.collaboratorToken, nil)
 
-	// 归属者另一 Vault 的协作仍被返回。
+	// 归属者另一 Vault 的协作仍被返回
 	if code != http.StatusOK {
 		t.Fatalf("legacy collaboration list: %d %v", code, body)
 	}
@@ -178,14 +178,14 @@ func TestCollaborationLegacyVaultListIncludesIncomingAcrossVaults(t *testing.T) 
 }
 
 func TestCollaborationListIncludesFileID(t *testing.T) {
-	// 已存在一条接受态文件协作。
+	// 已存在一条接受态文件协作
 	fixture := newAcceptedCollaborationFixture(t)
 
-	// 协作者加载协作列表。
+	// 协作者加载协作列表
 	code, body := doJSON(t, fixture.router, http.MethodGet,
 		"/api/vaults/"+fixture.vaultID+"/collaborations", fixture.collaboratorToken, nil)
 
-	// 响应给出下载与上传接口所用的文件标识。
+	// 响应给出下载与上传接口所用的文件标识
 	if code != http.StatusOK {
 		t.Fatalf("collaboration list: %d %v", code, body)
 	}
@@ -200,7 +200,7 @@ func TestCollaborationListIncludesFileID(t *testing.T) {
 }
 
 func TestCollaborationContentAccessForAcceptedCollaborator(t *testing.T) {
-	// 已有接受态协作者，另备一个无关账号。
+	// 已有接受态协作者，另备一个无关账号
 	fixture := newAcceptedCollaborationFixture(t)
 	if _, err := registerUser(fixture.db, "collab-contract-intruder", "password123"); err != nil {
 		t.Fatal(err)
@@ -213,12 +213,12 @@ func TestCollaborationContentAccessForAcceptedCollaborator(t *testing.T) {
 	path := "/api/vaults/" + fixture.vaultID + "/collaborations/files/" +
 		strconv.FormatUint(uint64(fixture.file.ID), 10) + "/content"
 
-	// 协作者下载共享文件正文。
+	// 协作者下载共享文件正文
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Header.Set("Authorization", "Bearer "+fixture.collaboratorToken)
 	response := performRequest(fixture.router, req)
 
-	// 接受态协作者可读，无关与已撤回用户不可读。
+	// 接受态协作者可读，无关与已撤回用户不可读
 	if response.Code != http.StatusOK || response.Body.String() != "# original content" {
 		t.Fatalf("collaborator content: %d %q", response.Code, response.Body.String())
 	}
@@ -246,29 +246,29 @@ func TestCollaborationContentAccessForAcceptedCollaborator(t *testing.T) {
 }
 
 func TestCollaborationLegacyBoundVaultCanDownloadAcceptedContent(t *testing.T) {
-	// 旧客户端已知文件 ID，但仍绑定自有 Vault。
+	// 旧客户端已知文件 ID，但仍绑定自有 Vault
 	fixture := newAcceptedCollaborationFixture(t)
 	path := "/api/vaults/" + fixture.collaboratorVaultID + "/collaborations/files/" +
 		strconv.FormatUint(uint64(fixture.file.ID), 10) + "/content"
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Header.Set("Authorization", "Bearer "+fixture.collaboratorToken)
 
-	// 经历史绑定 Vault 地址下载。
+	// 经历史绑定 Vault 地址下载
 	response := performRequest(fixture.router, req)
 
-	// 已接受协作解析到文件实际归属 Vault。
+	// 已接受协作解析到文件实际归属 Vault
 	if response.Code != http.StatusOK || response.Body.String() != "# original content" {
 		t.Fatalf("legacy collaboration content: %d %q", response.Code, response.Body.String())
 	}
 }
 
 func TestCollaborationLegacyBoundVaultCanUploadAcceptedContent(t *testing.T) {
-	// 旧客户端在绑定自有 Vault 下编辑已接受协作。
+	// 旧客户端在绑定自有 Vault 下编辑已接受协作
 	fixture := newAcceptedCollaborationFixture(t)
 	path := "/api/vaults/" + fixture.collaboratorVaultID + "/collaborations/files/" +
 		strconv.FormatUint(uint64(fixture.file.ID), 10) + "/upload"
 
-	// 经历史绑定 Vault 地址上传。
+	// 经历史绑定 Vault 地址上传
 	code, body := doJSON(t, fixture.router, http.MethodPost, path, fixture.collaboratorToken,
 		map[string]any{
 			"content":       "# collaborator edit",
@@ -276,7 +276,7 @@ func TestCollaborationLegacyBoundVaultCanUploadAcceptedContent(t *testing.T) {
 			"operation_id":  "legacy-collab-upload",
 		})
 
-	// 更新落到原始协作文件。
+	// 更新落到原始协作文件
 	if code != http.StatusOK {
 		t.Fatalf("legacy collaboration upload: %d %v", code, body)
 	}
@@ -291,14 +291,14 @@ func TestCollaborationLegacyBoundVaultCanUploadAcceptedContent(t *testing.T) {
 }
 
 func TestCollaborationInboxListsIncomingAcrossVaults(t *testing.T) {
-	// 用户在另一归属者 Vault 内接受协作。
+	// 用户在另一归属者 Vault 内接受协作
 	fixture := newAcceptedCollaborationFixture(t)
 
-	// 协作者加载账号级协作收件箱。
+	// 协作者加载账号级协作收件箱
 	code, body := doJSON(t, fixture.router, http.MethodGet,
 		"/api/collaborations", fixture.collaboratorToken, nil)
 
-	// 无需知道归属者 Vault ID 即可发现待处理协作。
+	// 无需知道归属者 Vault ID 即可发现待处理协作
 	if code != http.StatusOK {
 		t.Fatalf("collaboration inbox: %d %v", code, body)
 	}
@@ -313,15 +313,15 @@ func TestCollaborationInboxListsIncomingAcrossVaults(t *testing.T) {
 }
 
 func TestAcceptedCollaboratorCanLeaveCollaboration(t *testing.T) {
-	// 协作者已接受文件协作。
+	// 协作者已接受文件协作
 	fixture := newAcceptedCollaborationFixture(t)
 	path := "/api/vaults/" + fixture.vaultID + "/collaborations/" +
 		strconv.FormatUint(uint64(fixture.row.ID), 10) + "/leave"
 
-	// 协作者主动离开协作。
+	// 协作者主动离开协作
 	code, body := doJSON(t, fixture.router, http.MethodPost, path, fixture.collaboratorToken, nil)
 
-	// 协作关系撤销，不再授予正文访问。
+	// 协作关系撤销，不再授予正文访问
 	if code != http.StatusOK || body["status"] != "ok" {
 		t.Fatalf("leave collaboration: %d %#v", code, body)
 	}
@@ -335,7 +335,7 @@ func TestAcceptedCollaboratorCanLeaveCollaboration(t *testing.T) {
 }
 
 func TestCollaborationSSEAllowsLoopbackQueryToken(t *testing.T) {
-	// 已认证 Vault 归属者使用本地 HTTP 服务。
+	// 已认证 Vault 归属者使用本地 HTTP 服务
 	fixture := newAcceptedCollaborationFixture(t)
 	server := httptest.NewServer(fixture.router)
 	defer server.Close()
@@ -350,14 +350,14 @@ func TestCollaborationSSEAllowsLoopbackQueryToken(t *testing.T) {
 	req.Host = "localhost:9090"
 	req.Header.Set("Origin", "app://obsidian.md")
 
-	// EventSource 以查询 token 建流。
+	// EventSource 以查询 token 建流
 	response, err := server.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
 
-	// 本地回环 HTTP 放行并首发 ready 事件，远端 HTTP 仍拒绝。
+	// 本地回环 HTTP 放行并首发 ready 事件，远端 HTTP 仍拒绝
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("loopback SSE: %d, want 200", response.StatusCode)
 	}
@@ -394,7 +394,7 @@ func TestCollaborationSSEAllowsLoopbackQueryToken(t *testing.T) {
 }
 
 func TestCollaborationAccountSSEAllowsObsidianOrigin(t *testing.T) {
-	// 已认证协作者从 Obsidian 打开账号级推送流。
+	// 已认证协作者从 Obsidian 打开账号级推送流
 	fixture := newAcceptedCollaborationFixture(t)
 	server := httptest.NewServer(fixture.router)
 	defer server.Close()
@@ -408,14 +408,14 @@ func TestCollaborationAccountSSEAllowsObsidianOrigin(t *testing.T) {
 	req.Host = "localhost:9090"
 	req.Header.Set("Origin", "app://obsidian.md")
 
-	// 建流。
+	// 建流
 	response, err := server.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
 
-	// 账号流允许 CORS 读取并立即发出 ready 事件。
+	// 账号流允许 CORS 读取并立即发出 ready 事件
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("account SSE: %d, want 200", response.StatusCode)
 	}

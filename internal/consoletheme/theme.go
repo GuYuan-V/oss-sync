@@ -1,4 +1,4 @@
-// 控制台主题的选择与持久化。
+// Package consoletheme 提供控制台主题的选择、持久化与文件管理
 package consoletheme
 
 import (

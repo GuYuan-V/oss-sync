@@ -22,7 +22,7 @@ func isProcessAlive(pid int) bool {
 	if err == nil {
 		return true
 	}
-	// 进程不存在时返回假，无权限时同样按不存在处理。
+	// 进程不存在时返回假，无权限时同样按不存在处理
 	if err.Error() == "os: process already finished" {
 		return false
 	}

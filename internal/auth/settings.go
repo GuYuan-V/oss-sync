@@ -1,4 +1,3 @@
-// 持久化的认证设置。
 package auth
 
 import (
@@ -12,7 +11,7 @@ import (
 
 const systemSettingsID uint = 1
 
-// EnsureRegistrationSetting 创建新数据库的注册开关；已有记录不会被部署配置覆盖。
+// EnsureRegistrationSetting 创建新数据库的注册开关；已有记录不会被部署配置覆盖
 func EnsureRegistrationSetting(db *gorm.DB, defaultEnabled bool) error {
 	var setting models.SystemSetting
 	err := db.First(&setting, systemSettingsID).Error

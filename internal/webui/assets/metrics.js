@@ -1,4 +1,4 @@
-// metrics.js 刷新概览和管理员数据页上的实时服务器指标。
+// metrics.js 刷新概览和管理员数据页上的实时服务器指标
 (function () {
   "use strict";
 

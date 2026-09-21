@@ -1,4 +1,3 @@
-// 系统指标
 package webui
 
 import (

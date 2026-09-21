@@ -1,4 +1,3 @@
-// 控制台仪表盘渲染与指标接口。
 package webui
 
 import (
@@ -155,7 +154,7 @@ func (h *Handler) createVault(c *gin.Context) {
 
 // 仓库上下文
 
-// resolveVaultPage 解析当前用户对仓库的权限，返回 (vault, role, ok)。
+// resolveVaultPage 解析当前用户对仓库的权限，返回 (vault, role, ok)
 func (h *Handler) resolveVaultPage(c *gin.Context) (models.Vault, string, bool) {
 	u := h.webUser(c)
 	vault, role, err := vaultaccess.Resolve(h.DB, u.ID, c.Param("vault_id"))
@@ -174,7 +173,7 @@ func (h *Handler) resolveVaultPage(c *gin.Context) (models.Vault, string, bool) 
 	return vault, role, true
 }
 
-// setVaultLayout 填充侧边栏"当前仓库"上下文。
+// setVaultLayout 填充侧边栏"当前仓库"上下文
 func (h *Handler) setVaultLayout(ld *layoutData, vault models.Vault) {
 	ld.CurrentVault = &vaultNav{
 		ID:   vault.ID,
@@ -307,7 +306,7 @@ func buildVaultBreadcrumbs(directory string) []breadcrumbRow {
 	return breadcrumbs
 }
 
-// renderVault 使用带"当前仓库"上下文的布局渲染。
+// renderVault 使用带"当前仓库"上下文的布局渲染
 func (h *Handler) renderVault(c *gin.Context, ld layoutData, page, title string, data any) {
 	h.renderVaultStatus(c, http.StatusOK, ld, page, title, data)
 }
@@ -337,7 +336,7 @@ func (h *Handler) renderVaultStatus(c *gin.Context, status int, ld layoutData, p
 	h.renderWithLayout(c, status, ld, data)
 }
 
-// downloadFile 预览或下载仓库文件（角色校验）。
+// downloadFile 预览或下载仓库文件（角色校验）
 func (h *Handler) downloadFile(c *gin.Context) {
 	vault, _, ok := h.resolveVaultPage(c)
 	if !ok {
@@ -376,7 +375,7 @@ func (h *Handler) downloadFile(c *gin.Context) {
 	_, _ = io.Copy(c.Writer, fh)
 }
 
-// deleteFile 网页端删除文件：移入回收站并记录历史。
+// deleteFile 网页端删除文件：移入回收站并记录历史
 func (h *Handler) deleteFile(c *gin.Context) {
 	vault, role, ok := h.resolveVaultPage(c)
 	if !ok {
@@ -399,7 +398,7 @@ func (h *Handler) deleteFile(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID)
 }
 
-// webDeleteFile 供网页端使用的删除服务，写入历史并把正文移入回收站。
+// webDeleteFile 供网页端使用的删除服务，写入历史并把正文移入回收站
 func (h *Handler) webDeleteFile(vault models.Vault, u *models.User, path string) error {
 	lock := synclock.Vault(vault.ID)
 	lock.Lock()
@@ -410,7 +409,7 @@ func (h *Handler) webDeleteFile(vault models.Vault, u *models.User, path string)
 		return errors.New("文件不存在")
 	}
 	return h.DB.Transaction(func(tx *gorm.DB) error {
-		// 快照旧正文。
+		// 快照旧正文
 		contentPath := filestore.DiskPath(h.Cfg.Storage.DataDir, file)
 		if _, err := os.Stat(contentPath); err == nil {
 			revision, err := nextWebRevision(tx, vault.ID)
@@ -549,7 +548,7 @@ func (h *Handler) createShare(c *gin.Context) {
 	isFolder := c.PostForm("is_folder") == "on"
 	allowCopy := c.PostForm("allow_copy") == "on"
 
-	// 复用 shares 服务生成 ID 与校验。
+	// 复用 shares 服务生成 ID 与校验
 	if _, err := h.newSharesService().CreateWeb(vault.OwnerID, vault.ID, target, isFolder, allowCopy); err != nil {
 		c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/shares?error="+url.QueryEscape(err.Error()))
 		return
@@ -1029,7 +1028,7 @@ func (h *Handler) devicesPage(c *gin.Context) {
 		h.render(c, http.StatusInternalServerError, "devices", h.t(c, "page.devices"), "", "devices", d)
 		return
 	}
-	// 用户可访问的全部仓库（供授权选择）。
+	// 用户可访问的全部仓库（供授权选择）
 	var owned []models.Vault
 	h.DB.Where("owner_id = ?", u.ID).Find(&owned)
 	var memberships []models.VaultMember
@@ -1068,7 +1067,7 @@ func (h *Handler) devicesPage(c *gin.Context) {
 			}
 		}
 	}
-	// 回填设备授权。
+	// 回填设备授权
 	byID := map[string]*vaultOption{}
 	for i := range d.AllVaults {
 		byID[d.AllVaults[i].ID] = &d.AllVaults[i]
@@ -1100,7 +1099,7 @@ func (h *Handler) devicesPage(c *gin.Context) {
 	h.render(c, http.StatusOK, "devices", h.t(c, "page.devices"), "", "devices", d)
 }
 
-// saveDeviceAuthorization 批准设备并更新仓库授权。
+// saveDeviceAuthorization 批准设备并更新仓库授权
 func (h *Handler) saveDeviceAuthorization(
 	targetUserID uint,
 	clientID, name, status string,
@@ -1126,12 +1125,11 @@ func (h *Handler) saveDeviceAuthorization(
 			Updates(updates).Error; err != nil {
 			return err
 		}
-		// 整体替换仓库授权。
 		return deviceauth.ReplaceVaultAccesses(tx, targetUserID, clientID, vaultIDs, actorID)
 	})
 }
 
-// approveDevice 仅批准设备。
+// approveDevice 仅批准设备
 func (h *Handler) approveDevice(c *gin.Context) {
 	u := h.webUser(c)
 	clientID := deviceauth.NormalizeClientID(c.Param("client_id"))
@@ -1162,7 +1160,7 @@ func (h *Handler) approveDevice(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/devices?saved=1")
 }
 
-// renameDevice 仅允许修改待批准设备。
+// renameDevice 仅允许修改待批准设备
 func (h *Handler) renameDevice(c *gin.Context) {
 	u := h.webUser(c)
 	clientID := deviceauth.NormalizeClientID(c.Param("client_id"))
@@ -1181,7 +1179,7 @@ func (h *Handler) renameDevice(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/devices?saved=1")
 }
 
-// authorizeDevice 保存设备授权。
+// authorizeDevice 保存设备授权
 func (h *Handler) authorizeDevice(c *gin.Context) {
 	u := h.webUser(c)
 	clientID := deviceauth.NormalizeClientID(c.Param("client_id"))
@@ -1201,7 +1199,7 @@ func (h *Handler) authorizeDevice(c *gin.Context) {
 
 	name := dev.Name
 
-	// 待批准设备必须提交 approved 状态。
+	// 待批准设备必须提交 approved 状态
 	status := strings.TrimSpace(c.PostForm("status"))
 	if status == "" {
 		status = dev.Status
@@ -1211,7 +1209,7 @@ func (h *Handler) authorizeDevice(c *gin.Context) {
 		return
 	}
 
-	// 授权仓库必须属于当前用户。
+	// 授权仓库必须属于当前用户
 	var wanted []string
 	for _, id := range c.PostFormArray("vault_ids") {
 		id = strings.TrimSpace(id)

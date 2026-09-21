@@ -1,4 +1,3 @@
-// admin 包的主题管理路由。
 package admin
 
 import (
@@ -16,7 +15,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-// themesRouter 注册模板管理 API。
+// themesRouter 注册模板管理 API
 func (h *Handler) themesRouter(g *gin.RouterGroup) {
 	g.GET("/themes", h.listThemes)
 	g.POST("/themes", h.uploadTheme)

@@ -1,4 +1,3 @@
-// GitHub 更新源
 package update
 
 import (
@@ -17,17 +16,17 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// maxReleaseBody 限制 Release 元数据响应体大小。
+// maxReleaseBody 限制 Release 元数据响应体大小
 const maxReleaseBody = 4 << 20 // 4 MiB
 
 var (
-	// ErrNoRelease 表示上游仓库没有任何 Release。
+	// ErrNoRelease 表示上游仓库没有任何 Release
 	ErrNoRelease = errors.New("上游仓库暂无 Release")
-	// errRateLimited 表示请求过于频繁，被限流拒绝。
+	// errRateLimited 表示请求过于频繁，被限流拒绝
 	errRateLimited = errors.New("请求过于频繁，请稍后再试")
 )
 
-// Release 是 GitHub Release 元数据的子集，包含不可变身份与严格校验所需字段。
+// Release 是 GitHub Release 元数据的子集，包含不可变身份与严格校验所需字段
 type Release struct {
 	ID          int64   `json:"id"`
 	TagName     string  `json:"tag_name"`
@@ -39,7 +38,7 @@ type Release struct {
 	Assets      []Asset `json:"assets"`
 }
 
-// Asset 是 Release 中的一个可下载资产，包含不可变身份与校验所需字段。
+// Asset 是 Release 中的一个可下载资产，包含不可变身份与校验所需字段
 type Asset struct {
 	ID                 int64  `json:"id"`
 	Name               string `json:"name"`
@@ -49,10 +48,10 @@ type Asset struct {
 	Digest             string `json:"digest"`
 }
 
-// GitHubClient 封装 GitHub API 请求，内置超时、可选 Token 与限流。
+// GitHubClient 封装 GitHub API 请求，内置超时、可选 Token 与限流
 type GitHubClient struct {
 	http    *http.Client
-	apiBase string // 测试时可指向本地模拟服务。
+	apiBase string // 测试时可指向本地模拟服务
 	owner   string
 	repo    string
 	token   string
@@ -102,7 +101,7 @@ func newGitHubClient(cfg *config.Config, httpClient *http.Client) *GitHubClient 
 	}
 }
 
-// fetchLatest 拉取最新的正式 Release，强制执行严格稳定版本契约。
+// fetchLatest 拉取最新的正式 Release，强制执行严格稳定版本契约
 func (c *GitHubClient) fetchLatest(ctx context.Context) (*Release, error) {
 	if !c.limiter.Allow("github-api") {
 		return nil, errRateLimited
@@ -137,8 +136,8 @@ func (c *GitHubClient) fetchLatest(ctx context.Context) (*Release, error) {
 		return nil, fmt.Errorf("解析 GitHub 响应失败: %w", err)
 	}
 	if err := validateRelease(&rel); err != nil {
-		// 格式错误、prerelease 与 draft 均视为无可用 Release。
-		// 稳定版本校验失败时包装 ErrNoRelease 返回，调用方按 github_error 处理，草稿不会被误判为可用更新。
+		// 格式错误、prerelease 与 draft 均视为无可用 Release
+		// 稳定版本校验失败时包装 ErrNoRelease 返回，调用方按 github_error 处理，草稿不会被误判为可用更新
 		if errors.Is(err, ErrInvalidVersion) {
 			return nil, fmt.Errorf("%w: %v", ErrNoRelease, err)
 		}
@@ -147,7 +146,7 @@ func (c *GitHubClient) fetchLatest(ctx context.Context) (*Release, error) {
 	return &rel, nil
 }
 
-// validateRelease 严格校验 Release：不可变 ID、稳定 tag，拒绝 draft 与 prerelease。
+// validateRelease 严格校验 Release：不可变 ID、稳定 tag，拒绝 draft 与 prerelease
 func validateRelease(rel *Release) error {
 	if rel == nil {
 		return ErrNoRelease
@@ -174,7 +173,7 @@ func validateRelease(rel *Release) error {
 	return nil
 }
 
-// selectAsset 按当前平台挑选可下载资产：仅接受与 AssetName 精确匹配的唯一资产，且须携带有效 sha256 digest。
+// selectAsset 按当前平台挑选可下载资产：仅接受与 AssetName 精确匹配的唯一资产，且须携带有效 sha256 digest
 func selectAsset(assets []Asset, tag, goos, goarch string) (*Asset, error) {
 	if len(assets) == 0 {
 		return nil, errors.New("该 Release 没有可下载的资产")
@@ -183,7 +182,7 @@ func selectAsset(assets []Asset, tag, goos, goarch string) (*Asset, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 规范化 tag 并要求其为稳定版本。
+	// 规范化 tag 并要求其为稳定版本
 	sv, err := version.Parse(tag)
 	if err != nil {
 		return nil, newUpdateError(CodeInvalidVersion, fmt.Sprintf("invalid tag %q", tag), err)
@@ -229,7 +228,7 @@ func selectAsset(assets []Asset, tag, goos, goarch string) (*Asset, error) {
 	if a.URL != "" && !isValidAssetURL(a.URL) {
 		return nil, newUpdateError(CodeInvalidURL, fmt.Sprintf("asset %q url must be https, got %q", expected, a.URL), ErrInvalidURL)
 	}
-	// 生产环境要求 https；测试环境允许 http loopback，最终下载层会二次校验并拒绝降级。
+	// 生产环境要求 https；测试环境允许 http loopback，最终下载层会二次校验并拒绝降级
 	if a.BrowserDownloadURL != "" && !isHTTPSURL(a.BrowserDownloadURL) && !isLoopbackURL(a.BrowserDownloadURL) {
 		return nil, newUpdateError(CodeInvalidURL, fmt.Sprintf("asset %q browser_download_url must be https, got %q", expected, a.BrowserDownloadURL), ErrInvalidURL)
 	}
@@ -239,7 +238,7 @@ func selectAsset(assets []Asset, tag, goos, goarch string) (*Asset, error) {
 	return a, nil
 }
 
-// isHTTPSURL 校验字符串为 https URL。
+// isHTTPSURL 校验字符串为 https URL
 func isHTTPSURL(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -273,7 +272,7 @@ func isLoopbackURL(s string) bool {
 	return host == "127.0.0.1" || host == "localhost" || host == "::1"
 }
 
-// isValidDigest 校验 sha256:<64 hex> 格式。
+// isValidDigest 校验 sha256:<64 hex> 格式
 func isValidDigest(d string) bool {
 	if !strings.HasPrefix(d, "sha256:") {
 		return false

@@ -1,4 +1,4 @@
-// Package vaultbackup 提供永久删除 Vault 前的管理员归档。
+// Package vaultbackup 提供永久删除 Vault 前的管理员归档
 package vaultbackup
 
 import (
@@ -39,7 +39,7 @@ func Path(dataDir, fileName string) (string, error) {
 	return filepath.Join(Root(dataDir), fileName), nil
 }
 
-// ExistingPath 解析升级前归档与数据目录内归档。
+// ExistingPath 解析升级前归档与数据目录内归档
 func ExistingPath(dataDir, fileName string) (string, error) {
 	path, err := Path(dataDir, fileName)
 	if err != nil {
@@ -133,7 +133,7 @@ func Purge(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup,
 	return purge(db, dataDir, vault, false)
 }
 
-// PurgeWithTx 在调用方事务内执行仓库删除清理，用于管理员删除用户时的批量操作。
+// PurgeWithTx 在调用方事务内执行仓库删除清理，用于管理员删除用户时的批量操作
 func PurgeWithTx(tx *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup, error) {
 	return purge(tx, dataDir, vault, true)
 }
