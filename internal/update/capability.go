@@ -61,5 +61,9 @@ func CheckCapability(execPath string, goos, goarch string) error {
 
 // CheckCurrentCapability 使用当前版本与平台校验能力
 func CheckCurrentCapability(execPath string) error {
+	// systemd 负责进程生命周期，自更新辅助进程不能接管服务
+	if os.Getenv("OSS_UPDATE_MANAGER") == "systemd" {
+		return ErrExternalUpdate
+	}
 	return CheckCapability(execPath, runtime.GOOS, runtime.GOARCH)
 }

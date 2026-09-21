@@ -46,8 +46,8 @@ func IsCurrentPlatformSupported() bool {
 
 // AssetName 返回严格的发布资产文件名，格式：
 //
-//	oss-server_<version>_<goos>_<goarch>.tar.gz      // linux, darwin
-//	oss-server_<version>_<goos>_<goarch>.zip         // windows
+//	oss-sync_<version>_<goos>_<goarch>.tar.gz      // linux, darwin
+//	oss-sync_<version>_<goos>_<goarch>.zip         // windows
 //
 // version 允许带或不带 v 前缀，内部会规范化并校验为严格 SemVer
 // 不支持的平台返回错误
@@ -70,7 +70,7 @@ func AssetName(v, goos, goarch string) (string, error) {
 	if goos == "windows" {
 		ext = ".zip"
 	}
-	return fmt.Sprintf("oss-server_%s_%s_%s%s", norm, goos, goarch, ext), nil
+	return fmt.Sprintf("oss-sync_%s_%s_%s%s", norm, goos, goarch, ext), nil
 }
 
 // CurrentAssetName 返回当前平台的资产文件名

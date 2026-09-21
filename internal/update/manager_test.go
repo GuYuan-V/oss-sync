@@ -10,7 +10,7 @@ import (
 )
 
 func testCandidate(version string) Candidate {
-	c, err := newTestCandidate(version, "linux", "amd64", "https://example.com/oss-server_"+version+"_linux_amd64.tar.gz", "https://example.com/releases/tag/v"+version, 1234)
+	c, err := newTestCandidate(version, "linux", "amd64", "https://example.com/oss-sync_"+version+"_linux_amd64.tar.gz", "https://example.com/releases/tag/v"+version, 1234)
 	if err != nil {
 		panic(err)
 	}

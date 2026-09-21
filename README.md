@@ -89,44 +89,46 @@ export OSS_DB_DSN='postgres://user:pass@127.0.0.1:5432/oss?sslmode=disable'
 go run ./cmd/server
 ```
 
-### Docker
+### Linux binary deployment (systemd)
 
-One-command install or upgrade on a Linux server:
+The unified Linux installation/management script downloads an official Linux amd64/arm64 binary, verifies its SHA-256 checksum and version, extracts its bundled production configuration, and registers `oss-sync.service`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/helantianshen/oss-sync/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/helantianshen/oss-sync/main/oss.sh | sudo bash
 ```
 
-The official bootstrap script asks for the host port, GitHub Release source, deployment path, and a total project storage limit. The source can be the accelerated URL, GitHub official, or a custom HTTPS URL prefix. It downloads both the latest amd64/arm64 container archive and its `checksums.txt` through the selected source, verifies SHA-256, and imports it with `docker load`. It detects Docker and offers to install it with Docker's official installer. Leave the port blank to choose one randomly from `10000-25565` while skipping common service ports. New installations keep persistent data under `/opt/oss-sync/data`; the application-wide storage limit rejects further sync writes when reached, and `0` means unlimited.
+Requirements: Linux with a running systemd, root access, Python 3, curl, coreutils, util-linux (`flock`), and system account tools (`useradd`, `getent`). The installer does not install Docker, Go, or other dependencies. Unsupported architectures fail with guidance to build manually; download or checksum failures never fall back to compilation.
 
-After installation, run the global `oss` or `oss-sync` command to update or uninstall OSS Sync, inspect runtime and storage usage, start, stop or restart it, and change the project capacity or mapped port. Each update asks which source to use, so the accelerated URL can be changed without reinstalling. Uninstalling removes the container and commands while retaining project data by default.
+Without arguments, the script installs when no deployment exists and opens the management menu otherwise. Use `sudo bash oss.sh install` to explicitly install or reinstall. It asks for the deployment directory, port (default `8080`), storage limit in GiB (`0` means unlimited), and Release source (default `https://gh-proxy.com/`, direct GitHub, or a custom HTTPS prefix). Set `OSS_INSTALL_DIR` to change the default `/opt/oss-sync` directory. It resolves the latest Release once and downloads all assets from that exact tag. The initial bootstrap URL above is direct; the selected proxy applies after the script has started.
 
-Running the same install command again downloads the latest Release and recreates the container while reusing its port, deployment path, and capacity setting. Legacy `oss-data` volumes remain in place and are not migrated automatically. Non-interactive installs can set `OSS_PORT`, `OSS_RELEASE_PROXY=official` (or a custom HTTPS URL prefix), `OSS_INSTALL_DIR`, `OSS_STORAGE_LIMIT_GB`, and `OSS_INSTALL_DOCKER=1`. For the global manager, set `OSS_RELEASE_SOURCE=official`, `OSS_RELEASE_SOURCE=proxy`, or `OSS_RELEASE_PROXY=https://example.com/` to select the source for an update. `OSS_IMAGE` remains an advanced override for a complete registry image such as `ghcr.io/helantianshen/oss-sync-server:<version>`.
+The service runs as the dedicated `oss-sync` system account. The default directory contains `bin/oss-server`, `configs/config.prod.yaml`, `data/oss.db`, `service.env`, `VERSION`, and the standalone `oss.sh` management script. Existing YAML and data are preserved during updates; the new default template is saved as `configs/config.prod.yaml.dist`. The generated `service.env` overrides the port and storage limit; use the management command to change these values. Other application settings remain in the YAML. See [deployment details and Docker migration](docs/deployment.md).
 
-The default SQLite installation does not pull PostgreSQL. If Docker Hub dependencies are added manually, a complete 1Panel mirror reference such as `docker.1panel.live/library/postgres:17` can be used without changing the Release download source or the Docker daemon configuration.
+```bash
+sudo oss             # management menu
+sudo oss 1           # update using an explicitly selected source
+sudo oss 3           # systemd status
+sudo oss 6           # restart
+sudo oss 7 10        # set storage limit to 10 GiB
+sudo oss 8 9090      # change port
+sudo oss 9           # follow journal logs
+```
 
-Source development can still build through Docker Compose:
+Updates verify all artifacts before stopping the service, replace the binary, and validate `/readyz` and the expected version. On failure they attempt to restore the previous binary and configuration; database migrations are not reversed. Back up data before upgrading. For this systemd deployment, the web UI checks versions and directs administrators to the host management command; it does not launch the in-process update helper.
 
-Build and start a complete SQLite-backed environment with Docker Compose:
+Non-interactive installation can set `OSS_PORT`, `OSS_STORAGE_LIMIT_GB`, `OSS_INSTALL_DIR`, and `OSS_RELEASE_PROXY=official` (or an HTTPS prefix). `OSS_VERSION` selects an exact Release tag, including its `v` prefix if present. Existing Docker deployments are not automatically migrated or deleted.
+
+The installer requires a Release containing `oss.sh` and `oss-sync_<version>_<os>_<arch>.tar.gz` (Windows: `.zip`), listed in `checksums.txt`. Each runtime package contains `bin/oss-server` (Windows: `bin/oss-server.exe`), `configs/config.prod.yaml`, and `VERSION`; scripts and data are not included. A Release built with the updated workflow must be published before the new one-command installer can install successfully from the public latest Release.
+
+### Docker (optional / existing deployments)
+
+Docker remains available for source development and existing installations. It is no longer used by the one-command installer:
 
 ```bash
 docker compose up -d --build
 docker compose logs -f backend
 ```
 
-The service is available at `http://localhost:8080`, and persistent data is stored in the `oss-data` named volume. Set `OSS_PORT=9090` to change the host port and `OSS_STORAGE_MAX_TOTAL_SIZE_MB` to apply an application-wide data-directory limit.
-
-To build and run only the backend image:
-
-```bash
-docker build -t oss-sync-backend .
-docker run --rm -p 8080:8080 \
-  -v oss-data:/app/data \
-  oss-sync-backend
-```
-
-
-Container deployments can update in place from Admin → System → Server update. The image keeps the server binary in a writable runtime directory; after a verified replacement, the process exits and Docker's restart policy starts the new binary. Rebuilding or replacing the image remains the way to apply image-level changes. Removing the container keeps the named volume; `docker compose down -v` deletes its data and must be used with care.
+Compose exposes port `8080` by default and stores data in the `oss-data` named volume. Update this deployment by rebuilding/replacing the image. Do not run the new binary installer over an existing Docker data directory; follow the migration guide. `docker compose down -v` deletes the data volume.
 
 ### Build plugin
 

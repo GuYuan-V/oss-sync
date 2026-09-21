@@ -132,3 +132,14 @@ func TestUpdateError_Is(t *testing.T) {
 		t.Error("IsDevelopmentVersionError should be true")
 	}
 }
+
+func TestSystemdDeploymentRequiresExternalUpdate(t *testing.T) {
+	withVersion(t, "1.2.3")
+	t.Setenv("OSS_UPDATE_MANAGER", "systemd")
+	if err := CheckCurrentCapability(regularFile(t)); !IsExternalUpdateError(err) {
+		t.Fatalf("expected external update requirement, got %v", err)
+	}
+	if err := CheckHandoffCapability(regularFile(t)); !IsExternalUpdateError(err) {
+		t.Fatalf("handoff must reject systemd deployment, got %v", err)
+	}
+}

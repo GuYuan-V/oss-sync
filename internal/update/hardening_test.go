@@ -34,7 +34,7 @@ func hardeningAssetName(tag string) string {
 func TestHardening_MalformedSemverRejected(t *testing.T) {
 	malformed := []string{"", "v", "1.2", "01.2.3", "1.02.3", "not-semver", "1.2.3-01", "v1.2.3.4.5"}
 	for _, tag := range malformed {
-		assets := []Asset{{ID: 1, Name: "oss-server_1.0.0_linux_amd64.tar.gz", Size: 100, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", BrowserDownloadURL: "https://example.com/a.tar.gz"}}
+		assets := []Asset{{ID: 1, Name: "oss-sync_1.0.0_linux_amd64.tar.gz", Size: 100, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", BrowserDownloadURL: "https://example.com/a.tar.gz"}}
 		_, err := selectAsset(assets, tag, "linux", "amd64")
 		if err == nil {
 			t.Errorf("selectAsset should fail for malformed tag %q", tag)
@@ -66,7 +66,7 @@ func TestHardening_PrereleaseDraftRejected(t *testing.T) {
 		t.Errorf("prerelease flag should be ErrNoRelease, got %v", err)
 	}
 	// selectAsset 同样拒绝预发布 tag
-	assets := []Asset{{ID: 1, Name: "oss-server_1.2.3-alpha.1_linux_amd64.tar.gz", Size: 100, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", BrowserDownloadURL: "https://example.com/a.tar.gz"}}
+	assets := []Asset{{ID: 1, Name: "oss-sync_1.2.3-alpha.1_linux_amd64.tar.gz", Size: 100, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", BrowserDownloadURL: "https://example.com/a.tar.gz"}}
 	if _, err := selectAsset(assets, "v1.2.3-alpha.1", "linux", "amd64"); err == nil {
 		t.Error("selectAsset should reject prerelease tag")
 	}

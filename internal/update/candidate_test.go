@@ -6,7 +6,7 @@ import (
 )
 
 func validCandidate() *Candidate {
-	c, err := newTestCandidate("v1.2.3", "linux", "amd64", "https://example.com/oss-server_1.2.3_linux_amd64.tar.gz", "https://example.com/releases/tag/v1.2.3", 1234)
+	c, err := newTestCandidate("v1.2.3", "linux", "amd64", "https://example.com/oss-sync_1.2.3_linux_amd64.tar.gz", "https://example.com/releases/tag/v1.2.3", 1234)
 	if err != nil {
 		panic(err)
 	}
@@ -49,12 +49,12 @@ func TestNewCandidate_MalformedVersion(t *testing.T) {
 func TestCandidate_AssetMismatch(t *testing.T) {
 	// 版本正确但资产名错误
 	c := validCandidate()
-	c.AssetName = "oss-server_1.2.3_linux_amd64.zip" // linux 要求 tar.gz，后缀错误
+	c.AssetName = "oss-sync_1.2.3_linux_amd64.zip" // linux 要求 tar.gz，后缀错误
 	if err := c.Validate(); err == nil {
 		t.Error("Validate should fail for asset name mismatch (ext)")
 	}
 	c = validCandidate()
-	c.AssetName = "oss-server_9.9.9_linux_amd64.tar.gz" // 资产内版本与候选版本不一致
+	c.AssetName = "oss-sync_9.9.9_linux_amd64.tar.gz" // 资产内版本与候选版本不一致
 	if err := c.Validate(); err == nil {
 		t.Error("Validate should fail for asset name version mismatch")
 	}
@@ -120,7 +120,7 @@ func TestCandidate_NonHTTPSURL(t *testing.T) {
 	}
 	// 不限定 GitHub 域名，任意 https 主机均可接受
 	c := validCandidate()
-	c.AssetURL = "https://my-custom-host.example.net/files/oss-server_1.2.3_linux_amd64.tar.gz"
+	c.AssetURL = "https://my-custom-host.example.net/files/oss-sync_1.2.3_linux_amd64.tar.gz"
 	c.ReleaseURL = "https://my-custom-host.example.net/releases/v1.2.3"
 	if err := c.Validate(); err != nil {
 		t.Errorf("Validate should accept any https host, got %v", err)

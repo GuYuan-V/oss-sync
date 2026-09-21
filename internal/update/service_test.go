@@ -200,3 +200,21 @@ func mustNewCandidateForService(t *testing.T, ver string) *Candidate {
 	}
 	return c
 }
+
+func TestService_SystemdRejectsHelperBeforeShutdown(t *testing.T) {
+	mgr, up, cfg, exePath := newServiceTestManager(t)
+	checkID := newCheckedForHelperService(t, mgr)
+	t.Setenv("OSS_UPDATE_MANAGER", "systemd")
+	svc := NewService(mgr, up, cfg)
+	svc.SetOnShutdown(func() { t.Error("systemd update must not request shutdown") })
+	if _, err := svc.StartHelperUpdate(context.Background(), checkID, "", ""); !IsExternalUpdateError(err) {
+		t.Fatalf("expected external update requirement, got %v", err)
+	}
+	content, err := os.ReadFile(exePath)
+	if err != nil || string(content) != "old-binary" {
+		t.Fatalf("managed executable changed: %q, %v", content, err)
+	}
+	if status := mgr.CurrentStatus(); status.Active != nil {
+		t.Fatalf("managed update must not start an operation: %+v", status.Active)
+	}
+}

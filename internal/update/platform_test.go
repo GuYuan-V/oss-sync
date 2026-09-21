@@ -56,14 +56,14 @@ func TestAssetName_Exact(t *testing.T) {
 		goarch  string
 		want    string
 	}{
-		{"1.2.3", "linux", "amd64", "oss-server_1.2.3_linux_amd64.tar.gz"},
-		{"v1.2.3", "linux", "amd64", "oss-server_1.2.3_linux_amd64.tar.gz"},
-		{"1.2.3", "linux", "arm64", "oss-server_1.2.3_linux_arm64.tar.gz"},
-		{"1.2.3", "darwin", "amd64", "oss-server_1.2.3_darwin_amd64.tar.gz"},
-		{"1.2.3", "darwin", "arm64", "oss-server_1.2.3_darwin_arm64.tar.gz"},
-		{"1.2.3", "windows", "amd64", "oss-server_1.2.3_windows_amd64.zip"},
-		{"1.0.0-alpha.1", "linux", "amd64", "oss-server_1.0.0-alpha.1_linux_amd64.tar.gz"},
-		{"v2.0.0-beta+build.1", "darwin", "arm64", "oss-server_2.0.0-beta+build.1_darwin_arm64.tar.gz"},
+		{"1.2.3", "linux", "amd64", "oss-sync_1.2.3_linux_amd64.tar.gz"},
+		{"v1.2.3", "linux", "amd64", "oss-sync_1.2.3_linux_amd64.tar.gz"},
+		{"1.2.3", "linux", "arm64", "oss-sync_1.2.3_linux_arm64.tar.gz"},
+		{"1.2.3", "darwin", "amd64", "oss-sync_1.2.3_darwin_amd64.tar.gz"},
+		{"1.2.3", "darwin", "arm64", "oss-sync_1.2.3_darwin_arm64.tar.gz"},
+		{"1.2.3", "windows", "amd64", "oss-sync_1.2.3_windows_amd64.zip"},
+		{"1.0.0-alpha.1", "linux", "amd64", "oss-sync_1.0.0-alpha.1_linux_amd64.tar.gz"},
+		{"v2.0.0-beta+build.1", "darwin", "arm64", "oss-sync_2.0.0-beta+build.1_darwin_arm64.tar.gz"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.want, func(t *testing.T) {
@@ -113,10 +113,10 @@ func TestExpectedAssetNames(t *testing.T) {
 	if len(m) != 5 {
 		t.Fatalf("expected 5 entries, got %d", len(m))
 	}
-	if got := m["linux/amd64"]; got != "oss-server_1.2.3_linux_amd64.tar.gz" {
+	if got := m["linux/amd64"]; got != "oss-sync_1.2.3_linux_amd64.tar.gz" {
 		t.Errorf("linux/amd64 = %q", got)
 	}
-	if got := m["windows/amd64"]; got != "oss-server_1.2.3_windows_amd64.zip" {
+	if got := m["windows/amd64"]; got != "oss-sync_1.2.3_windows_amd64.zip" {
 		t.Errorf("windows/amd64 = %q", got)
 	}
 }

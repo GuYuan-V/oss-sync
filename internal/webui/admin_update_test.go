@@ -508,6 +508,18 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 	if strings.Contains(page2, `data-external-update="true"`) {
 		t.Errorf("container deployment should not require an external updater")
 	}
+	managed := data.Data["Update"].(adminUpdateStatus)
+	managed.CapabilityOK = false
+	managed.ExternalUpdate = true
+	data.Data["Update"] = managed
+	buf.Reset()
+	if err := tpl.ExecuteTemplate(&buf, "admin-system", data); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `data-update-download-source`) ||
+		!strings.Contains(buf.String(), `data-external-update="true"`) {
+		t.Fatal("systemd deployment must retain version check source selection")
+	}
 }
 
 func TestAdminUpdateStatus_ContainerUsesInProcessUpdater(t *testing.T) {
@@ -645,4 +657,14 @@ func sha256Sum(b []byte) string {
 func getLaunchFn() func(string, string) error { return func(string, string) error { return nil } }
 func getVerifyFn() func(string, string, string) error {
 	return func(string, string, string) error { return nil }
+}
+
+func TestAdminUpdateStatus_SystemdRequiresHostUpdate(t *testing.T) {
+	db, cfg, _ := newWebUITestDB(t)
+	h, _, _ := newWebUIHandlerWithUpdate(t, db, cfg)
+	t.Setenv("OSS_UPDATE_MANAGER", "systemd")
+	status := h.buildUpdateStatus()
+	if status.CapabilityOK || !status.ExternalUpdate || status.CapabilityErr != "" {
+		t.Fatalf("unexpected systemd update status: %+v", status)
+	}
 }

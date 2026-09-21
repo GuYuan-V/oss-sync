@@ -25,8 +25,8 @@ import (
 
 func TestSelectAsset(t *testing.T) {
 	assets := []Asset{
-		{ID: 1, Name: "oss-server_1.0.0_darwin_arm64.tar.gz", Size: 100, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", BrowserDownloadURL: "https://example.com/a.tar.gz"},
-		{ID: 2, Name: "oss-server_1.0.0_linux_amd64.tar.gz", Size: 100, Digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", BrowserDownloadURL: "https://example.com/b.tar.gz"},
+		{ID: 1, Name: "oss-sync_1.0.0_darwin_arm64.tar.gz", Size: 100, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", BrowserDownloadURL: "https://example.com/a.tar.gz"},
+		{ID: 2, Name: "oss-sync_1.0.0_linux_amd64.tar.gz", Size: 100, Digest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", BrowserDownloadURL: "https://example.com/b.tar.gz"},
 		{ID: 3, Name: "checksums.txt", Size: 100, Digest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", BrowserDownloadURL: "https://example.com/c.txt"},
 	}
 	got, err := selectAsset(assets, "v1.0.0", "linux", "amd64")
@@ -649,5 +649,35 @@ func TestTriggerRestart_CallsCallbackOnce(t *testing.T) {
 	case <-calls:
 		t.Error("callback should fire only once")
 	case <-time.After(500 * time.Millisecond):
+	}
+}
+
+func TestExtractRuntimePackage(t *testing.T) {
+	binary := fakeExecBytes()
+	entries := map[string][]byte{
+		"bin/oss-server":           binary,
+		"configs/config.prod.yaml": []byte("server:\n  port: 8080\n"),
+		"VERSION":                  []byte("1.2.3\n"),
+	}
+	for _, format := range []string{"tar.gz", "zip"} {
+		t.Run(format, func(t *testing.T) {
+			dir := t.TempDir()
+			content := makeTarGz(t, entries)
+			if format == "zip" {
+				content = makeZip(t, entries)
+			}
+			archive := filepath.Join(dir, "runtime."+format)
+			if err := os.WriteFile(archive, content, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			path, err := extractBinary(archive, dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual, err := os.ReadFile(path)
+			if err != nil || !bytes.Equal(actual, binary) {
+				t.Fatalf("runtime package binary mismatch: %v", err)
+			}
+		})
 	}
 }

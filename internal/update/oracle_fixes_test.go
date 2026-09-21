@@ -150,7 +150,7 @@ func sha256Sum(b []byte) []byte {
 
 // 生产 NewCandidate 必须要求真实 ID 与 digest，伪造输入一律拒绝
 func TestOracle_NewCandidateRequiresRealIdentity(t *testing.T) {
-	assetURL := "https://example.com/oss-server_1.2.3_linux_amd64.tar.gz"
+	assetURL := "https://example.com/oss-sync_1.2.3_linux_amd64.tar.gz"
 	releaseURL := "https://example.com/releases/tag/v1.2.3"
 	validDigest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	// ID 缺失
@@ -227,7 +227,7 @@ func TestOracle_StatusImmutableCopy(t *testing.T) {
 	cfg := &config.Config{Update: config.UpdateConfig{GitHubRepo: "fake/oss-sync"}}
 	// 构造 CheckUpdate 隔离性用的桩服务
 	content := fakeExecBytes()
-	assetName := "oss-server_9.9.9_linux_amd64.tar.gz"
+	assetName := "oss-sync_9.9.9_linux_amd64.tar.gz"
 	// 覆盖 CheckUpdate 隔离分支的桩输入
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
