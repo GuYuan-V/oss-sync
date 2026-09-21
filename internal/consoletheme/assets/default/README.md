@@ -6,7 +6,7 @@
 - 其他图片或字体资源：通过 `/ui/themes/<主题名>/<相对路径>` 引用。
 - `README.md`：维护说明，不会加载到页面中。
 
-优先覆盖 `DESIGN.md` 中记录的 CSS custom properties。请同时定义亮色和 `[data-theme="dark"]` 状态，并保留可见焦点、文本对比度、响应式布局和 reduced-motion 行为。
+优先覆盖 `.agent/DESIGN.md` 中记录的 CSS custom properties。请同时定义亮色和 `[data-theme="dark"]` 状态，并保留可见焦点、文本对比度、响应式布局和 reduced-motion 行为。
 
 主题只能改变网页视觉，不能改变页面结构、路由、权限或表单语义。表格单元格不要设为 `display: flex`，否则列宽和分隔线会错位；需要对齐操作时，在单元格内部的容器上布局。服务器主题不适用于 Obsidian 插件，插件应继续使用 Obsidian 宿主变量和控件样式。
 

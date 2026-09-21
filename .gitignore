@@ -49,8 +49,10 @@ coverage.out
 /.omo/
 /.playwright-mcp/
 /.claude/
-/.agent/
 /plugin-install-backup-*/
+
+# Local agent task state
+/.agent/tasks/
 
 # Temp
 *.tmp

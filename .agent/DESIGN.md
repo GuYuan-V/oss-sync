@@ -191,4 +191,4 @@ The console uses a mixed border-and-shadow strategy. Strong one-pixel borders de
 
 The target is WCAG 2.2 AA: visible keyboard focus, native form semantics, status messaging through appropriate live roles, reduced-motion support, and readable reflow from 375px upward. Primary page content must not create document-level horizontal scrolling.
 
-No new accessibility debt is accepted for the current device-management and theme-control correction. Existing raw color literals in legacy console rules are an observed consolidation opportunity, not approval to introduce additional undeclared colors.
+New work must not introduce additional accessibility debt or undeclared colors. Existing raw color literals in legacy console rules remain a consolidation opportunity.
