@@ -24,6 +24,8 @@ import type {
 } from "./api";
 import type { AuthResponse } from "./api";
 import {
+  normalizeUpdateSource,
+  UpdateSourceError,
   checkForUpdates,
   downloadUpdateAssets,
   GitHubReleaseSource,
@@ -363,6 +365,9 @@ export default class OSSPlugin extends Plugin {
     } else {
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
     }
+    this.settings.updateDownloadSource = normalizeUpdateSource(this.settings.updateDownloadSource);
+    this.settings.updateDownloadProxy = typeof this.settings.updateDownloadProxy === "string"
+      ? this.settings.updateDownloadProxy.trim() : "";
     // 旧版本遗留的密码在加载后不保留
     this.settings.password = "";
     if (!this.settings.clientId) {
@@ -512,26 +517,44 @@ export default class OSSPlugin extends Plugin {
     return this.api.hasToken();
   }
 
-  /** 当前登录用户是否服务端管理员；在线更新仅对管理员开放*/
+  /** 当前登录用户是否服务端管理员*/
   isAdmin(): boolean {
     return this.settings.role === "admin";
   }
 
-  /** 查询 GitHub Release 并返回当前/远端版本对比结果*/
+  pluginUpdateInProgress = false;
+  pluginUpdateSettingsRevision = 0;
+
+  pluginUpdateConfigKey(): string {
+    return JSON.stringify([this.settings.updateRepo, this.settings.updateDownloadSource,
+      this.settings.updateDownloadProxy, this.pluginUpdateSettingsRevision]);
+  }
+
+  pluginUpdateError(error: unknown): string {
+    return error instanceof UpdateSourceError
+      ? this.t("settings.update.invalidProxy") : this.localizedError(error);
+  }
+
   async checkPluginUpdate(): Promise<UpdateCheckResult> {
     return checkForUpdates(this.settings.updateRepo, this.manifest.version, this.githubReleaseSource());
   }
 
-  /** 下载最新 Release 三件套、原子替换并重载插件；失败时回滚*/
   async updatePluginFromRelease(): Promise<void> {
-    const source = this.githubReleaseSource();
-    const check = await checkForUpdates(this.settings.updateRepo, this.manifest.version, source);
-    if (!isUpdateAvailable(check)) {
-      new Notice(this.t("notice.updateNoUpdate"));
-      return;
+    if (this.pluginUpdateInProgress) throw new Error(this.t("settings.update.installing"));
+    this.pluginUpdateInProgress = true;
+    try {
+      const repo = this.settings.updateRepo;
+      const source = this.githubReleaseSource();
+      const check = await checkForUpdates(repo, this.manifest.version, source);
+      if (!isUpdateAvailable(check)) {
+        new Notice(this.t("notice.updateNoUpdate"));
+        return;
+      }
+      const files = await downloadUpdateAssets(source, check.release);
+      await this.applyPluginUpdateFiles(files);
+    } finally {
+      this.pluginUpdateInProgress = false;
     }
-    const files = await downloadUpdateAssets(source, check.release);
-    await this.applyPluginUpdateFiles(files);
   }
 
   // 服务端更新
@@ -611,7 +634,7 @@ export default class OSSPlugin extends Plugin {
         arrayBuffer: response.arrayBuffer,
         headers: response.headers,
       };
-    });
+    }, this.settings.updateDownloadSource, this.settings.updateDownloadProxy);
   }
 
   private isDeviceIdentityError(error: unknown): boolean {
@@ -650,8 +673,9 @@ export default class OSSPlugin extends Plugin {
     await new Promise((r) => setTimeout(r, 5000));
     if (!this.loaded || !this.isLoggedIn()) return;
     try {
+      const configKey = this.pluginUpdateConfigKey();
       const result = await this.checkPluginUpdate();
-      if (isUpdateAvailable(result)) {
+      if (configKey === this.pluginUpdateConfigKey() && isUpdateAvailable(result)) {
         new Notice(`插件有新版本 ${result.remoteVersion}（当前 ${result.currentVersion}），请到设置 → 插件更新中一键更新`, 10000);
       }
     } catch {}

@@ -3,7 +3,7 @@ import type { ButtonComponent } from "obsidian";
 import type OSSPlugin from "./main";
 import type { OSSSettings } from "./settings";
 import { validateLoginCredentials, validateServerURL } from "./login-state";
-import { isUpdateAvailable } from "./plugin-update";
+import { normalizeUpdateSource, resolveUpdateURL, isUpdateAvailable } from "./plugin-update";
 
 export class OSSSettingTab extends PluginSettingTab {
   private vaultRefreshTimer: number | null = null;
@@ -483,74 +483,129 @@ export class OSSSettingTab extends PluginSettingTab {
 
   private renderUpdateSection(containerEl: HTMLElement): void {
     new Setting(containerEl).setName(this.plugin.t("settings.update.title")).setHeading();
-
+    const controls: { setDisabled(value: boolean): unknown }[] = [];
+    let checking = false;
+    let applyButton: ButtonComponent | null = null;
+    const configKey = () => this.plugin.pluginUpdateConfigKey();
+    const busy = () => this.plugin.pluginUpdateInProgress;
+    const invalidate = async () => {
+      this.plugin.pluginUpdateSettingsRevision++;
+      applyButton?.buttonEl.remove();
+      applyButton = null;
+      status.setDesc(this.plugin.t("settings.update.recheck"));
+      await this.plugin.saveSettings();
+    };
     new Setting(containerEl)
       .setName(this.plugin.t("settings.update.repo"))
       .setDesc(this.plugin.t("settings.update.repoDesc"))
-      .addText((text) =>
-        text
-          .setPlaceholder("helantianshen/oss-sync")
-          .setValue(this.plugin.settings.updateRepo)
-          .onChange(async (value) => {
-            this.plugin.settings.updateRepo = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
+      .addText((text) => {
+        controls.push(text);
+        text.setValue(this.plugin.settings.updateRepo).setDisabled(busy()).onChange(async (value) => {
+          if (busy()) return;
+          this.plugin.settings.updateRepo = value.trim();
+          await invalidate();
+        });
+      });
+    new Setting(containerEl)
+      .setName(this.plugin.t("settings.update.source"))
+      .setDesc(this.plugin.t("settings.update.sourceDesc"))
+      .addDropdown((dropdown) => {
+        controls.push(dropdown);
+        for (const source of ["proxy", "official", "custom"] as const) {
+          dropdown.addOption(source, this.plugin.t(`settings.update.${source}`));
+        }
+        dropdown.setValue(this.plugin.settings.updateDownloadSource).setDisabled(busy()).onChange(async (value) => {
+          if (busy()) return;
+          this.plugin.settings.updateDownloadSource = normalizeUpdateSource(value);
+          proxy.settingEl.hidden = value !== "custom";
+          proxy.setDesc(this.plugin.t("settings.update.proxyDesc"));
+          await invalidate();
+        });
+      });
+    const validate = () => {
+      try {
+        resolveUpdateURL("https://api.github.com", this.plugin.settings.updateDownloadSource, this.plugin.settings.updateDownloadProxy);
+        proxy.setDesc(this.plugin.t("settings.update.proxyDesc"));
+        return true;
+      } catch (error) {
+        proxy.setDesc(this.plugin.pluginUpdateError(error));
+        return false;
+      }
+    };
+    const proxy = new Setting(containerEl)
+      .setName(this.plugin.t("settings.update.proxyPrefix"))
+      .setDesc(this.plugin.t("settings.update.proxyDesc"))
+      .addText((text) => {
+        controls.push(text);
+        text.setPlaceholder("https://mirror.example.com/").setValue(this.plugin.settings.updateDownloadProxy)
+          .setDisabled(busy()).onChange(async (value) => {
+            if (busy()) return;
+            this.plugin.settings.updateDownloadProxy = value.trim();
+            await invalidate();
+          });
+        text.inputEl.addEventListener("blur", validate);
+      });
+    proxy.settingEl.hidden = this.plugin.settings.updateDownloadSource !== "custom";
     const status = new Setting(containerEl)
       .setName(this.plugin.t("settings.update.status"))
-      .setDesc(
-        this.plugin.t("settings.update.currentVersion", {
-          version: this.plugin.manifest.version,
-        })
-      );
-
-    let applyButton: ButtonComponent | null = null;
-    status.addButton((button) =>
-      button.setButtonText(this.plugin.t("settings.update.check")).onClick(async () => {
+      .setDesc(this.plugin.t(busy() ? "settings.update.installing" : "settings.update.currentVersion", {
+        version: this.plugin.manifest.version,
+      }));
+    status.addButton((button) => {
+      const setBusy = (value: boolean) => {
+        controls.forEach((control) => control.setDisabled(value));
+        button.setDisabled(value || checking);
+        applyButton?.setDisabled(value);
+      };
+      const sourceLabel = () => this.plugin.t(`settings.update.${this.plugin.settings.updateDownloadSource}`);
+      button.setButtonText(this.plugin.t("settings.update.check")).setDisabled(busy()).onClick(async () => {
+        if (busy() || checking || !validate()) return;
+        const key = configKey();
+        const source = sourceLabel();
+        checking = true;
         button.setDisabled(true);
+        applyButton?.buttonEl.remove();
+        applyButton = null;
         status.setDesc(this.plugin.t("settings.update.checking"));
-        if (applyButton) {
-          applyButton.buttonEl.remove();
-          applyButton = null;
-        }
         try {
           const result = await this.plugin.checkPluginUpdate();
+          if (key !== configKey()) return;
           if (isUpdateAvailable(result)) {
-            status.setDesc(
-              this.plugin.t("settings.update.available", {
-                from: result.currentVersion,
-                to: result.remoteVersion,
-              })
-            );
+            status.setDesc(this.plugin.t("settings.update.available", { from: result.currentVersion, to: result.remoteVersion }));
             status.addButton((updateButton) => {
               applyButton = updateButton;
-              updateButton
-                .setButtonText(this.plugin.t("settings.update.apply"))
-                .setCta()
-                .onClick(async () => {
-                  updateButton.setDisabled(true);
-                  try {
-                    await this.plugin.updatePluginFromRelease();
-                    new Notice(this.plugin.t("notice.updateCompleted"));
-                  } catch (error: unknown) {
-                    updateButton.setDisabled(false);
-                    new Notice(this.plugin.t("notice.updateFailed", { error: this.errorMessage(error) }));
-                  }
-                });
+              updateButton.setButtonText(this.plugin.t("settings.update.apply")).setCta().onClick(async () => {
+                if (busy() || key !== configKey() || !validate()) return;
+                setBusy(true);
+                status.setDesc(this.plugin.t("settings.update.installing"));
+                try {
+                  await this.plugin.updatePluginFromRelease();
+                  new Notice(this.plugin.t("notice.updateCompleted"));
+                } catch (error) {
+                  const message = this.plugin.t("notice.updateFailed", {
+                    error: `${source}: ${this.plugin.pluginUpdateError(error)}`,
+                  });
+                  status.setDesc(message);
+                  new Notice(message);
+                } finally {
+                  // 重开设置页后需要从当前实例状态恢复控件
+                  this.display();
+                }
+              });
             });
           } else {
-            status.setDesc(
-              this.plugin.t("settings.update.latest", { version: result.remoteVersion })
-            );
+            status.setDesc(this.plugin.t("settings.update.latest", { version: result.remoteVersion }));
           }
-        } catch (error: unknown) {
-          status.setDesc(this.plugin.t("settings.update.checkFailed", { error: this.errorMessage(error) }));
+        } catch (error) {
+          if (key === configKey()) status.setDesc(this.plugin.t("settings.update.checkFailed", {
+            error: `${source}: ${this.plugin.pluginUpdateError(error)}`,
+          }));
         } finally {
-          button.setDisabled(false);
+          checking = false;
+          button.setDisabled(busy());
         }
-      })
-    );
+      });
+    });
   }
 
   private renderServerUpdateSection(containerEl: HTMLElement): void {

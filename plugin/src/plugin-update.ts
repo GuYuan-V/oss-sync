@@ -4,6 +4,34 @@
 // 更新流程：查询最新 Release → 读取 manifest.json 得到远端版本 → 下载三件套 →
 // 由 plugin-update-apply.ts 原子替换并重载插件
 
+export type UpdateDownloadSource = "official" | "proxy" | "custom";
+
+export function normalizeUpdateSource(value: unknown): UpdateDownloadSource {
+  const source = typeof value === "string" ? value.trim() : "";
+  return source === "official" || source === "custom" ? source : "proxy";
+}
+
+export class UpdateSourceError extends Error {}
+
+export function resolveUpdateURL(rawURL: string, source: UpdateDownloadSource, customProxy: string): string {
+  if (source === "official") return rawURL;
+  if (source === "proxy") return "https://gh-proxy.com/" + rawURL;
+  const prefix = customProxy.trim();
+  if (!prefix || prefix.length > 1024 || /[\s\x00-\x1f\x7f\\?#]/.test(prefix)) {
+    throw new UpdateSourceError("invalid update proxy prefix");
+  }
+  let url: URL;
+  try {
+    url = new URL(prefix);
+  } catch {
+    throw new UpdateSourceError("invalid update proxy prefix");
+  }
+  if (!/^https:\/\/[^/]/i.test(prefix) || /^https:\/\/[^/]*@/i.test(prefix) || url.protocol !== "https:" || !url.hostname || url.username || url.password) {
+    throw new UpdateSourceError("invalid update proxy prefix");
+  }
+  return prefix.replace(/\/+$/, "") + "/" + rawURL;
+}
+
 export interface HttpResult {
   status: number;
   json: unknown;
@@ -120,14 +148,20 @@ export function manifestVersionFromText(text: string | null): string | null {
 // GitHub Release 查询与下载
 
 export class GitHubReleaseSource {
-  constructor(private readonly fetchImpl: HttpFetch) {}
+  constructor(
+    private readonly fetchImpl: HttpFetch,
+    private readonly source: UpdateDownloadSource = "official",
+    private readonly customProxy = "",
+  ) {
+    resolveUpdateURL("https://api.github.com", source, customProxy);
+  }
 
   async latestRelease(repo: string): Promise<GitHubRelease> {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
       throw new Error(`invalid GitHub repository "${repo}"`);
     }
     const result = await this.fetchImpl({
-      url: `https://api.github.com/repos/${repo}/releases/latest`,
+      url: resolveUpdateURL(`https://api.github.com/repos/${repo}/releases/latest`, this.source, this.customProxy),
       method: "GET",
       headers: {
         Accept: "application/vnd.github+json",
@@ -186,7 +220,7 @@ export class GitHubReleaseSource {
     if (assetURL.protocol !== "https:" || assetURL.hostname.toLowerCase() !== "github.com") {
       throw new Error(`release asset "${name}" has invalid download URL`);
     }
-    const result = await this.fetchImpl({ url: assetURL.toString(), method: "GET" });
+    const result = await this.fetchImpl({ url: resolveUpdateURL(assetURL.toString(), this.source, this.customProxy), method: "GET" });
     if (result.status >= 400) {
       throw new Error(`failed to download "${name}": HTTP ${result.status}`);
     }

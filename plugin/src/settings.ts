@@ -1,4 +1,5 @@
 // 插件设置及默认值
+import type { UpdateDownloadSource } from "./plugin-update";
 import type { LanguagePreference } from "./i18n";
 
 export interface OSSSettings {
@@ -34,10 +35,12 @@ export interface OSSSettings {
   vaultSyncMode: "short_poll" | "long_poll";
   /** 插件界面语言；auto 跟随 Obsidian*/
   language: LanguagePreference;
-  /** 当前登录用户在服务端上的角色；admin 才能执行插件在线更新*/
+  /** 当前登录用户在服务端上的角色*/
   role: string;
   /** GitHub 仓库（owner/repo），用于检查与下载 Release*/
   updateRepo: string;
+  updateDownloadSource: UpdateDownloadSource;
+  updateDownloadProxy: string;
   /** 未解决冲突文件的编辑前是否持续警告，默认开启 */
   conflictEditWarning: boolean;
 }
@@ -62,5 +65,7 @@ export const DEFAULT_SETTINGS: OSSSettings = {
   language: "auto",
   role: "",
   updateRepo: "helantianshen/oss-sync",
+  updateDownloadSource: "proxy",
+  updateDownloadProxy: "",
   conflictEditWarning: true,
 };
