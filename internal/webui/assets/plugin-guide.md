@@ -1,4 +1,4 @@
-A server plugin owns functionality. It can provide settings, routes, hooks, admin pages, tasks, database tables, and integrations. Only administrators can upload plugins.
+A server plugin owns functionality. It can provide settings, routes, hooks, admin pages, tasks, database tables, and integrations.
 
 ## 1. Create a Go plugin
 

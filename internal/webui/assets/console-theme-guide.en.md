@@ -32,7 +32,7 @@ my-console-theme/
 └── fonts/display.woff2
 ```
 
-Themes must not change permissions, routes, or business behavior.
+Themes do not change permissions, routes, or business logic, and have no functional settings.
 
 ## 2. Link a feature plugin
 
