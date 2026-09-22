@@ -665,7 +665,13 @@ export class SyncEngine {
   }
 
   private async applyDownload(vaultID: string, remote: SyncFileMeta, expected: ExpectedLocalState): Promise<OrdinarySyncActionOutcome> {
-    const downloaded = await this.api.downloadV2(vaultID, remote.path, remote.revision);
+    let downloaded;
+    try {
+      downloaded = await this.api.downloadV2(vaultID, remote.path, remote.revision);
+    } catch (error) {
+      if (!isOrdinarySyncConflict409(error)) throw error;
+      return this.conflictOutcome(remote.path, await this.ordinaryFileAccess.readExact(remote.path), error.current);
+    }
     const bytes = new Uint8Array(downloaded.content).slice();
     const write = expected.kind === "absent"
       ? await this.ordinaryFileAccess.create(remote.path, expected, bytes)
@@ -825,7 +831,18 @@ export class SyncEngine {
     if (!vaultID || !conflict) throw new Error(this.plugin.t("sync.conflictNotFound"));
     const expected = expectedFromHash(conflict.localHash);
     let outcome: OrdinarySyncActionOutcome;
-    if (typeof resolution === "object" && (resolution as { kind: string }).kind === "ordered_merge") {
+    if (resolution === "keep_both" && conflict.remoteType === "attachment" &&
+        !conflict.remoteDeleted && conflict.localHash === conflict.remoteHash) {
+      try {
+        outcome = await this.createResolver().resolve({
+          vaultId: vaultID, path, expectedHash: conflict.localHash, remote: conflictToMeta(conflict),
+        });
+      } catch (error) {
+        if (!isOrdinarySyncConflict409(error)) throw error;
+        outcome = await this.conflictOutcome(path, await this.ordinaryFileAccess.readExact(path), error.current);
+      }
+    } else if (typeof resolution === "object" && (resolution as { kind: string }).kind === "ordered_merge") {
+      if (conflict.remoteType === "attachment") throw new Error(this.plugin.t("notice.conflictTextUnavailable"));
       outcome = await this.orderedMergeConflict(vaultID, conflict, expected, (resolution as { kind: "ordered_merge"; content: string }).content);
     } else {
       switch (resolution as "accept_remote" | "force_local" | "keep_both") {

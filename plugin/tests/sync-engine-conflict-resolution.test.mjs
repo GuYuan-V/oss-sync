@@ -6,6 +6,78 @@ import {
   enc,
 } from "./helpers/sync-engine-conflict-resolution-fixture.mjs";
 
+for (const resolution of ["accept_remote", "force_local", "keep_both"]) {
+  test(`attachment ${resolution} preserves exact binary bytes`, async () => {
+    const localBytes = new Uint8Array([137, 80, 78, 71, 0, 255, 1]);
+    const remoteBytes = new Uint8Array([137, 80, 78, 71, 0, 254, 2]);
+    const fixture = await createConflictFixture({ localBytes, remoteBytes, path: "附件/image.png", type: "attachment" });
+    try {
+      const uploads = [];
+      fixture.api.downloadV2 = async () => ({ content: remoteBytes.slice().buffer, meta: fixture.remote });
+      fixture.api.uploadV2 = async (_vault, input) => {
+        uploads.push(new Uint8Array(input.content));
+        return { ...fixture.remote, hash: fixture.state.conflict().localHash, revision: 10 };
+      };
+      await fixture.engine.resolveConflict(fixture.path, resolution);
+      assert.equal(fixture.state.conflict(), null);
+      assert.deepEqual(fixture.state.vault.bytes(fixture.path), resolution === "force_local" ? localBytes : remoteBytes);
+      if (resolution === "force_local") assert.deepEqual(uploads, [localBytes]);
+      if (resolution === "keep_both") {
+        const sibling = fixture.state.vault.paths().find((path) => path !== fixture.path);
+        assert.deepEqual(fixture.state.vault.bytes(sibling), localBytes);
+        assert.deepEqual(fixture.state.pending(), [{ kind: "upsert", path: sibling }]);
+      }
+    } finally { await fixture.cleanupFixture(); }
+  });
+}
+
+test("upload 409 for identical bytes from a second device converges without a conflict or sibling", async () => {
+  const content = new Uint8Array([137, 80, 78, 71, 0, 255]);
+  const fixture = await createConflictFixture({ localBytes: content, remoteBytes: content, path: "附件/image.png", type: "attachment" });
+  try {
+    fixture.engine.dismissConflict(fixture.path);
+    let attempts = 0;
+    fixture.api.uploadV2 = async () => {
+      attempts++;
+      throw Object.assign(new Error("revision conflict"), { status: 409, current: fixture.remote });
+    };
+    fixture.api.downloadV2 = async () => ({ content: content.slice().buffer, meta: fixture.remote });
+    const outcome = await fixture.engine.applyAction("vault-1", {
+      kind: "upload", path: fixture.path, baseRevision: 0, operationID: "device-b-upload",
+      local: { path: fixture.path, hash: fixture.remote.hash, size: content.length, mtime: 10 },
+    });
+    assert.equal(outcome.kind, "resolved");
+    assert.equal(attempts, 1);
+    assert.equal(fixture.state.conflict(), null);
+    assert.deepEqual(fixture.state.vault.paths(), [fixture.path]);
+    assert.deepEqual(fixture.state.vault.bytes(fixture.path), content);
+    assert.deepEqual(fixture.state.pending(), []);
+  } finally { await fixture.cleanupFixture(); }
+});
+
+test("identical persisted attachment conflict does not create another copy", async () => {
+  const content = new Uint8Array([137, 80, 78, 71, 0, 255]);
+  const fixture = await createConflictFixture({ localBytes: content, remoteBytes: content, path: "image.png", type: "attachment" });
+  try {
+    fixture.api.downloadV2 = async () => ({ content: content.slice().buffer, meta: fixture.remote });
+    await fixture.engine.resolveConflict(fixture.path, "keep_both");
+    assert.equal(fixture.state.conflict(), null);
+    assert.deepEqual(fixture.state.vault.paths(), [fixture.path]);
+    assert.deepEqual(fixture.state.pending(), []);
+  } finally { await fixture.cleanupFixture(); }
+});
+
+test("accept remote refreshes obsolete attachment revision after a 409", async () => {
+  const fixture = await createConflictFixture({ localBytes: enc("local"), remoteBytes: enc("remote"), path: "image.png", type: "attachment" });
+  try {
+    const current = { ...fixture.remote, revision: 10 };
+    fixture.api.downloadV2 = async () => { throw Object.assign(new Error("changed"), { status: 409, current }); };
+    await assert.rejects(fixture.engine.resolveConflict(fixture.path, "accept_remote"));
+    assert.equal(fixture.state.conflict().remoteRevision, 10);
+    assert.deepEqual(fixture.state.vault.bytes(fixture.path), enc("local"));
+  } finally { await fixture.cleanupFixture(); }
+});
+
 test("resolveConflict force-local preserves an upload queued for a local change during the request", async () => {
   const localBytes = enc("local before force");
   const freshBytes = enc("local changed during force");

@@ -171,6 +171,19 @@ function createModal(ConflictModal, local, remote) {
   );
 }
 
+test("attachment modal never reads text and retains all resolution choices", async () => {
+  const { ConflictModal, cleanup } = await loadConflictModal();
+  try {
+    const modal = new ConflictModal(
+      { vault: { read: async () => { throw new Error("binary must not be read as text"); } } },
+      pluginWithTranslations(), {}, { path: "附件/Pasted image.png" }, "", async () => {}, { binary: true },
+    );
+    await modal.onOpen();
+    assert.equal(findByClass(modal.contentEl, "oss-diff-preview").length, 0);
+    assert.equal(findByClass(modal.contentEl, "setting").length, 5);
+  } finally { await cleanup(); }
+});
+
 test("renders structured conflict rows without HTML and marks the modal", async () => {
   const { ConflictModal, cleanup } = await loadConflictModal();
   try {

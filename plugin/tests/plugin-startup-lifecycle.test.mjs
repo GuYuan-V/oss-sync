@@ -194,6 +194,22 @@ test("expired device token is removed and prompts for login without losing vault
   } finally { await plugin.onunload(); await cleanup(); restore(); }
 });
 
+test("attachment conflict opens a binary resolver without downloading text", async () => {
+  const restore = installWindow();
+  const { plugin, cleanup } = await createPlugin({ cb: null });
+  try {
+    plugin.app.vault.getAbstractFileByPath = () => ({ __tfile: true, path: "附件/image.png" });
+    plugin.syncEngine.getConflict = () => ({ remoteDeleted: false, remoteRevision: 75, remoteType: "attachment" });
+    plugin.syncEngine.getBaseline = () => null;
+    plugin.api.downloadV2 = async () => { throw new Error("must not preload binary as text"); };
+    plugin.openConflictModal("附件/image.png");
+    await flushTicks(2);
+    assert.equal(globalThis.__ossOpenedModals.length, 1);
+    assert.equal(globalThis.__ossOpenedModals[0].options.binary, true);
+    assert.equal(globalThis.__ossNotices.length, 0);
+  } finally { await plugin.onunload(); await cleanup(); restore(); }
+});
+
 test("opens one resolver for a remote deletion conflict and releases the path when closed", async () => {
   const restore = installWindow();
   const captured = { cb: null };

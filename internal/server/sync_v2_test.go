@@ -411,6 +411,20 @@ func TestSyncV2MultiVaultIsolationCASAndSharing(t *testing.T) {
 		t.Fatalf("stale conflict current=%v", current)
 	}
 
+	attachment := "\x89PNG\r\n\x1a\n\x00\xffsame bytes"
+	code, image := uploadV2(t, router, tokenA, defaultVault, "附件/Pasted image.png", attachment, 0, "device-a", "image-a")
+	if code != http.StatusOK {
+		t.Fatalf("first attachment: %d %v", code, image)
+	}
+	code, sameImage := uploadV2(t, router, tokenB, defaultVault, "附件/Pasted image.png", attachment, 0, "device-b", "image-b")
+	if code != http.StatusOK || revisionOf(t, sameImage) != revisionOf(t, image) {
+		t.Fatalf("identical attachment from second device: %d %v", code, sameImage)
+	}
+	code, differentImage := uploadV2(t, router, tokenB, defaultVault, "附件/Pasted image.png", attachment+"changed", 0, "device-b", "image-changed")
+	if code != http.StatusConflict {
+		t.Fatalf("different stale attachment must conflict: %d %v", code, differentImage)
+	}
+
 	code, retry := uploadV2(
 		t, router, tokenA, defaultVault, "Notes/Same.md", "# Default Vault",
 		0, "device-a", "default-create",

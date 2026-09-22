@@ -828,6 +828,7 @@ export default class OSSPlugin extends Plugin {
     void (async () => {
       let remote: string;
       let baseText: string | null = null;
+      let binary = false;
       try {
         const conflict = this.syncEngine.getConflict(path);
         if (!conflict) {
@@ -836,7 +837,8 @@ export default class OSSPlugin extends Plugin {
           return;
         }
         baseText = this.syncEngine.getBaseline(path)?.baseText ?? null;
-        if (conflict.remoteDeleted) {
+        binary = conflict.remoteType === "attachment";
+        if (conflict.remoteDeleted || binary) {
           remote = "";
         } else {
           const res = await this.api.downloadV2(
@@ -853,7 +855,7 @@ export default class OSSPlugin extends Plugin {
       }
       new ConflictModal(this.app, this, this.api, file, remote, async (r) => {
         await this.applyConflictResolution(path, r);
-      }, { baseText, onClose: () => this.conflictOpenings.end(path) }).open();
+      }, { baseText, binary, onClose: () => this.conflictOpenings.end(path) }).open();
     })();
   }
 

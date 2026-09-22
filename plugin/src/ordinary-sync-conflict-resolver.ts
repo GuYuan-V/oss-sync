@@ -112,6 +112,14 @@ export class OrdinarySyncConflictResolver {
       remoteBytes: copyBytes(downloaded.content),
       remote: downloaded.meta,
     };
+    if (change.local.hash === change.remote.hash &&
+        change.local.bytes.length === change.remoteBytes.length &&
+        change.local.bytes.every((value, index) => value === change.remoteBytes[index])) {
+      this.stageRemote(change, local);
+      this.deps.baseline.removePendingForPath(change.path);
+      await this.deps.baseline.save();
+      return { kind: "resolved" };
+    }
     const decision = decideOrdinarySyncReconciliation({
       path: change.path,
       baseText: this.deps.baseline.get(change.path)?.baseText ?? null,

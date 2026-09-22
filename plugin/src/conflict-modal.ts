@@ -18,6 +18,7 @@ export type ConflictResolution =
 
 export class ConflictModal extends Modal {
   private remoteContent = "";
+  private resolving = false;
 
   constructor(
     app: App,
@@ -26,7 +27,7 @@ export class ConflictModal extends Modal {
     private file: TFile,
     remoteContent: string,
     private onResolved: (r: ConflictResolution) => Promise<void>,
-    private readonly options: { baseText?: string | null; onClose?: () => void } = {},
+    private readonly options: { baseText?: string | null; onClose?: () => void; binary?: boolean } = {},
   ) {
     super(app);
     this.remoteContent = remoteContent;
@@ -37,6 +38,12 @@ export class ConflictModal extends Modal {
     this.modalEl.addClass("oss-conflict-modal");
     titleEl.empty();
     appendTextWithPathBreaks(titleEl, this.plugin.t("conflict.title", { path: this.file.path }));
+
+    if (this.options.binary) {
+      contentEl.createDiv({ text: this.plugin.t("conflict.binaryDescription") });
+      this.renderChoices();
+      return;
+    }
 
     const preview = contentEl.createDiv({ cls: "oss-diff-preview" });
     const localContent = await this.app.vault.read(this.file);
@@ -131,6 +138,11 @@ export class ConflictModal extends Modal {
       }
     }
 
+    this.renderChoices();
+  }
+
+  private renderChoices(): void {
+    const { contentEl } = this;
     new Setting(contentEl)
       .setName(this.plugin.t("conflict.choose"))
       .setHeading();
@@ -169,12 +181,16 @@ export class ConflictModal extends Modal {
   }
 
   private async resolve(r: ConflictResolution): Promise<void> {
+    if (this.resolving) return;
+    this.resolving = true;
     try {
       await this.onResolved(r);
       this.close();
     } catch (error) {
       const message = error instanceof Error ? error.message : this.plugin.t("common.unknownError");
       new Notice(this.plugin.t("conflict.failed", { error: message }));
+    } finally {
+      this.resolving = false;
     }
   }
 }

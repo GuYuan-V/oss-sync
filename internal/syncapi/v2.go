@@ -391,15 +391,16 @@ func (h *Handler) V2Upload(c *gin.Context) {
 					currentRevision = baseRevision
 				}
 			}
+			// 已存在的相同正文无需写入，不受客户端旧修订影响
+			if exists && !current.IsDeleted && current.Hash == actualHash {
+				result = current
+				return nil
+			}
 			if currentRevision != baseRevision {
 				if exists {
 					conflict = current
 				}
 				return errRevisionConflict
-			}
-			if exists && !current.IsDeleted && current.Hash == actualHash {
-				result = current
-				return nil
 			}
 
 			if err := ensureVaultQuota(tx, vaultQuotaChange{

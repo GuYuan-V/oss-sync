@@ -85,7 +85,7 @@ async function shaHex(bytes) {
     .join("");
 }
 
-export async function createConflictFixture({ localBytes, remoteBytes, remoteDeleted = false }) {
+export async function createConflictFixture({ localBytes, remoteBytes, remoteDeleted = false, path = "Notes/Conflict.md", type = "markdown" }) {
   const { SyncEngine, cleanup } = await loadSyncEngine();
   const installedWindow = globalThis.window === undefined;
   if (installedWindow) {
@@ -94,12 +94,11 @@ export async function createConflictFixture({ localBytes, remoteBytes, remoteDel
       clearTimeout: () => {},
     };
   }
-  const path = "Notes/Conflict.md";
   const events = [];
   const localHash = await shaHex(localBytes);
   const remote = {
     path,
-    type: "markdown",
+    type,
     hash: remoteDeleted ? "" : await shaHex(remoteBytes),
     size: remoteDeleted ? 0 : remoteBytes.byteLength,
     mtime: 50,

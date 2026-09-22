@@ -70,6 +70,7 @@ function createResolver(mod, {
   preserve,
   upload,
   initial,
+  remoteHash,
 } = {}) {
   const events = [];
   const baseline = createBaseline(events, path, initial ?? {
@@ -86,6 +87,7 @@ function createResolver(mod, {
   const uploads = [];
   const writes = {};
   const downloaded = remote({ path, type, body: remoteBody, content: remoteBytes });
+  if (remoteHash) downloaded.meta.hash = remoteHash;
   const fileAccess = {
     async readExact() { events.push("read"); return firstLocal; },
     async replace(path, expected, value) {
@@ -128,6 +130,23 @@ function createResolver(mod, {
     writes,
   };
 }
+
+test("identical attachment after another device uploads is acknowledged without copies or writes", async () => {
+  const { module: mod, cleanup } = await loadModule("src/ordinary-sync-conflict-resolver.ts");
+  try {
+    const content = new Uint8Array([137, 80, 78, 71, 0, 255]);
+    const fixture = createResolver(mod, {
+      path: "附件/Pasted image.png", type: "attachment", localBytes: content,
+      remoteBytes: content, remoteHash: "local-hash", baseText: null,
+    });
+    assert.equal((await fixture.resolve()).kind, "resolved");
+    assert.equal(fixture.conflicts.length, 0);
+    assert.deepEqual(fixture.writes, {});
+    assert.equal(fixture.uploads.length, 0);
+    assert.deepEqual(fixture.baseline.pending, []);
+    assert.equal(fixture.baseline.entries.get("附件/Pasted image.png").serverRevision, 8);
+  } finally { await cleanup(); }
+});
 
 test("recognizes a structural 409 only with complete current metadata", async () => {
   const { module: mod, cleanup } = await loadModule("src/ordinary-sync-conflict-resolver.ts");
