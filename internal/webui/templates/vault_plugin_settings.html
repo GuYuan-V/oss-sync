@@ -2,7 +2,7 @@
 <section class="dashboard-heading">
   <div>
     <span class="eyebrow">Plugin settings · {{.Data.PluginID}}</span>
-    <h1>{{.Data.VaultName}} · {{.Data.PluginName}} {{.Layout.T "common.settings"}}</h1>
+    <h1>{{if .Data.VaultName}}{{.Data.VaultName}} · {{end}}{{.Data.PluginName}} {{.Layout.T "common.settings"}}</h1>
     <p class="lead">{{.Layout.T "vault.plugin_settings_generated" .Data.PluginName .Data.PluginVersion}}</p>
   </div>
 </section>
@@ -10,12 +10,33 @@
 {{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
 {{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "vault.plugin_settings_saved" .Data.PluginName}}</div>{{end}}
 
+{{if .Data.NoVault}}
+<div class="control-grid">
+  <article class="gate-panel">
+    <div class="gate-panel__copy">
+      <span class="eyebrow">{{.Data.PluginName}}</span>
+      <h2>{{.Layout.T "vault.plugin_settings_no_vault_title"}}</h2>
+      <p>{{.Layout.T "vault.plugin_settings_no_vault"}}</p>
+    </div>
+  </article>
+</div>
+{{else}}
 <div class="control-grid">
   <article class="gate-panel">
     <div class="gate-panel__copy">
       <span class="eyebrow">{{.Data.PluginName}} · v{{.Data.PluginVersion}}</span>
       <h2>{{.Data.PluginName}} {{.Layout.T "common.settings"}}</h2>
       <p>{{.Layout.T "vault.plugin_settings_hosted"}}</p>
+      {{if .Data.Vaults}}
+      <form method="get" action="/dashboard/plugins/{{.Data.PluginID}}/settings" class="gate-form stack-form">
+        <label for="plugin-setting-vault"><span>{{.Layout.T "vault.plugin_settings_vault"}}</span>
+          <select id="plugin-setting-vault" name="vault_id" onchange="this.form.submit()">
+            {{range .Data.Vaults}}<option value="{{.ID}}" {{if eq $.Data.VaultID .ID}}selected{{end}}>{{.Name}}</option>{{end}}
+          </select>
+        </label>
+        <noscript><button class="button" type="submit">{{.Layout.T "common.save"}}</button></noscript>
+      </form>
+      {{end}}
     </div>
     <form method="post" action="/dashboard/plugins/{{.Data.PluginID}}/settings" class="gate-form stack-form">
       <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
@@ -53,4 +74,5 @@
     </form>
   </article>
 </div>
+{{end}}
 {{end}}

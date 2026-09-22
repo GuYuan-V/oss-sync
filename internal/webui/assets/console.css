@@ -1048,6 +1048,24 @@ body.body--console .console {
   display: none;
 }
 .side-nav__item.is-open > .side-nav__sub { display: block; }
+.side-nav__sub .side-nav__item { margin: 0; }
+.side-nav__sub .side-nav__item--child { border-left: 1px solid var(--sidebar-border); }
+.side-nav__sub--nested { margin: 2px 0 6px; padding-left: 10px; }
+.side-nav__toggle--child {
+  width: 100%;
+  padding: 6px 8px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+.side-nav__vault-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .side-nav__sublink {
   display: block;
   padding: 6px 10px;

@@ -70,7 +70,8 @@ type layoutData struct {
 	ActivePluginID   string
 	PluginSettings   []pluginNav
 	PluginAdminPages []serverplugin.PluginAdminPage
-	CurrentVault     *vaultNav // 进入仓库页后为当前仓库导航
+	CurrentVault     *vaultNav  // 当前仓库页的上下文
+	NavVaults        []vaultNav // 侧边栏仓库导航，所有控制台页面可见
 	Flash            string
 	FlashKind        string // success 或 error
 	ConsoleThemeName string
@@ -418,6 +419,7 @@ func (h *Handler) render(c *gin.Context, status int, page, title string, activeG
 		ld.IsAdmin = u.Role == "admin"
 		ld.ConsoleThemeName = h.selectedConsoleTheme(u.ID)
 		ld.Language = h.userLang(c)
+		ld.NavVaults = h.accessibleVaults(u)
 		h.setPluginNavigationForUser(&ld, u)
 		if ld.IsAdmin && h.pluginManager != nil {
 			ld.PluginAdminPages = h.pluginManager.AdminPages()
@@ -429,18 +431,14 @@ func (h *Handler) render(c *gin.Context, status int, page, title string, activeG
 	h.renderWithLayout(c, status, ld, data)
 }
 
-func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
-	if h.hasAccessibleTheme(u, "papertrail") {
-		papertrailAdded := false
-		for _, manifest := range serverplugin.BuiltinManifests() {
-			if manifest.ID == "papertrail-settings" {
-				ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
-				papertrailAdded = true
-				break
-			}
-		}
-		if !papertrailAdded {
-			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: "papertrail-settings", Name: "Papertrail"})
+// setPluginNavigationForUser 构造插件设置导航。
+// 所有声明了设置的启用插件都会列出，不依赖是否进入某个仓库；
+// 具体生效的仓库由插件设置页的仓库选择器决定。
+func (h *Handler) setPluginNavigationForUser(ld *layoutData, _ *models.User) {
+	for _, manifest := range serverplugin.BuiltinManifests() {
+		if manifest.ID == "papertrail-settings" && len(manifest.Settings) > 0 {
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
+			break
 		}
 	}
 	var plugins []models.ServerPlugin
@@ -454,69 +452,48 @@ func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 				manifest.Settings = registration.Settings
 			}
 		}
-		if err == nil && len(manifest.Settings) > 0 && pluginHasNoAssociations(h.DB, manifest.ID) {
-			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
+		if err == nil && len(manifest.Settings) > 0 {
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: plugin.ID, Name: plugin.Name})
 		}
 	}
 }
 
-// hasAccessibleTheme 判断当前用户是否可访问至少一个使用目标博客主题的仓库；内置主题设置为全局导航入口，不依赖当前仓库页面
-func (h *Handler) hasAccessibleTheme(u *models.User, themeName string) bool {
-	var count int64
-	query := h.DB.Model(&models.VaultSetting{}).
-		Where("theme_name = ?", themeName)
-	if u.Role == "admin" {
-		return query.Count(&count).Error == nil && count > 0
+// accessibleVaults 返回当前用户可访问的仓库（owner 或有效成员），
+// 供侧边栏仓库导航使用；默认仓库排在前面。
+func (h *Handler) accessibleVaults(u *models.User) []vaultNav {
+	if u == nil {
+		return nil
 	}
-	var vaultIDs []string
-	if err := h.DB.Model(&models.Vault{}).Where("owner_id = ?", u.ID).Pluck("id", &vaultIDs).Error; err != nil {
-		return false
+	var owned []models.Vault
+	if err := h.DB.Where("owner_id = ?", u.ID).
+		Order("is_default desc, created_at asc").Find(&owned).Error; err != nil {
+		return nil
+	}
+	seen := make(map[string]bool, len(owned))
+	out := make([]vaultNav, 0, len(owned))
+	for _, vault := range owned {
+		seen[vault.ID] = true
+		out = append(out, vaultNav{ID: vault.ID, Name: vault.Name})
 	}
 	var memberIDs []string
-	if err := h.DB.Model(&models.VaultMember{}).Where("user_id = ? AND role IN ?", u.ID, []string{vaultaccess.RoleManager, vaultaccess.RoleParticipant}).Pluck("vault_id", &memberIDs).Error; err == nil {
-		vaultIDs = append(vaultIDs, memberIDs...)
+	if err := h.DB.Model(&models.VaultMember{}).
+		Where("user_id = ? AND role IN ?", u.ID, []string{vaultaccess.RoleManager, vaultaccess.RoleParticipant}).
+		Pluck("vault_id", &memberIDs).Error; err != nil || len(memberIDs) == 0 {
+		return out
 	}
-	if len(vaultIDs) == 0 {
-		return false
+	var shared []models.Vault
+	if err := h.DB.Where("id IN ?", memberIDs).
+		Order("is_default desc, created_at asc").Find(&shared).Error; err != nil {
+		return out
 	}
-	return query.Where("vault_id IN ?", vaultIDs).Count(&count).Error == nil && count > 0
-}
-
-func (h *Handler) setPluginNavigationForVault(ld *layoutData, vaultID string, u *models.User) {
-	var setting models.VaultSetting
-	_ = h.DB.Where("vault_id = ?", vaultID).First(&setting).Error
-	if setting.ThemeName == "" {
-		setting.ThemeName = "default"
-	}
-	h.setPluginNavigationForUser(ld, u)
-	var plugins []models.ServerPlugin
-	if err := h.DB.Where("enabled = ?", true).Order("id asc").Find(&plugins).Error; err != nil {
-		return
-	}
-	for _, plugin := range plugins {
-		manifest, err := serverplugin.ParseManifest([]byte(plugin.ManifestJSON))
-		if err != nil {
+	for _, vault := range shared {
+		if seen[vault.ID] {
 			continue
 		}
-		if h.pluginManager != nil {
-			if registration, ok := h.pluginManager.RegistrationFor(plugin.ID); ok && len(registration.Settings) > 0 {
-				manifest.Settings = registration.Settings
-			}
-		}
-		if len(manifest.Settings) == 0 || pluginHasNoAssociations(h.DB, manifest.ID) {
-			continue
-		}
-		var links []models.ServerPluginAssociation
-		if err := h.DB.Where("plugin_id = ?", manifest.ID).Find(&links).Error; err != nil {
-			continue
-		}
-		for _, link := range links {
-			if link.Kind == "blog_theme" && link.TargetID == setting.ThemeName {
-				ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
-				break
-			}
-		}
+		seen[vault.ID] = true
+		out = append(out, vaultNav{ID: vault.ID, Name: vault.Name})
 	}
+	return out
 }
 
 func pluginHasNoAssociations(db *gorm.DB, pluginID string) bool {

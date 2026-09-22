@@ -325,10 +325,10 @@ func (h *Handler) renderVaultStatus(c *gin.Context, status int, ld layoutData, p
 	ld.IsAdmin = u.Role == "admin"
 	ld.ConsoleThemeName = h.selectedConsoleTheme(u.ID)
 	ld.Language = h.userLang(c)
-	if vaultID := c.Param("vault_id"); vaultID != "" {
-		h.setPluginNavigationForVault(&ld, vaultID, h.webUser(c))
-	} else {
-		h.setPluginNavigationForUser(&ld, h.webUser(c))
+	ld.NavVaults = h.accessibleVaults(u)
+	h.setPluginNavigationForUser(&ld, u)
+	if ld.IsAdmin && h.pluginManager != nil {
+		ld.PluginAdminPages = h.pluginManager.AdminPages()
 	}
 	if token, err := c.Cookie(csrfCookie); err == nil {
 		ld.CSRF = token
