@@ -99,7 +99,7 @@ OSS_PLUGIN_DIR         absolute installed plugin directory
 OSS_PLUGIN_PROTOCOL    protocol version, currently 1
 ```
 
-## WordPress-style host extensions
+## Host extensions
 
 An executable plugin can register its own host extensions in the `ready` frame. Registration is not limited to OSS Sync's built-in hook names:
 
@@ -185,7 +185,7 @@ If an enabled plugin cannot be loaded after restart, it remains recorded with it
 
 ## Security model
 
-WASM provides memory isolation. Executable plugins intentionally do not: they are administrator-trusted server programs. They inherit the server account's filesystem, network, database, environment, and command-execution permissions. Install only code that the administrator has reviewed. The server still validates ZIP boundaries and the declared protocol, but those checks are not a sandbox.
+WASM provides memory isolation. Executable plugins intentionally do not: they are administrator-trusted server programs. They can read and write server files, access the database, use the network, read environment variables, and run system commands, with the same permissions as the server account. Install only code that the administrator has reviewed. The server still validates ZIP boundaries and the declared protocol, but those checks are not a sandbox.
 
 The host capabilities are namespaced HTTP routes, Vault-scoped settings, blog/HTML content filters, theme render filters, administrator pages, and Obsidian editor commands. `comment.content` is reserved until OSS Sync has a comment entity and renderer.
 
