@@ -305,40 +305,150 @@ PY
   info '管理命令：sudo oss；日志：sudo journalctl -u oss-sync -f'
 }
 
-manage() {
-  choice="${1:-}"
-  if [[ -z "$choice" ]]; then
-    printf '1 更新\n2 卸载（保留数据）\n3 状态\n4 启动\n5 停止\n6 重启\n7 修改容量\n8 修改端口\n9 日志\n0 退出\n'
-    choice="$(prompt '选择 [0]：')"
-    choice="${choice:-0}"
+service_state() {
+  if systemctl is-active --quiet oss-sync 2>/dev/null; then printf '运行中'; else printf '未运行'; fi
+}
+
+installed_version() {
+  local version=""
+  [[ -r "$DIR/VERSION" ]] && version="$(tr -d '[:space:]' < "$DIR/VERSION")"
+  if [[ -z "$version" && -x "$DIR/bin/oss-server" ]]; then
+    version="$("$DIR/bin/oss-server" --version 2>/dev/null || true)"
   fi
-  case "$choice" in
-    4|5|6|start|stop|restart)
-      exec 9>/run/lock/oss-sync-deploy.lock
-      flock -n 9 || fail '已有部署操作正在运行'
-      ;;
-  esac
-  case "$choice" in
+  printf '%s' "${version:-未知}"
+}
+
+service_url() {
+  local ip port
+  port="${DEPLOY_PORT:-8080}"
+  ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  [[ -n "$ip" ]] || ip="$(ip -4 route get 1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')"
+  [[ -n "$ip" ]] || ip="127.0.0.1"
+  printf 'http://%s:%s' "$ip" "$port"
+}
+
+print_header() {
+  local used_bytes limit_gb
+  used_bytes="$(du -sb "$DIR/data" 2>/dev/null | awk '{print $1}')"
+  [[ "$used_bytes" =~ ^[0-9]+$ ]] || used_bytes=0
+  limit_gb="${DEPLOY_LIMIT:-0}"
+  python3 - "$(installed_version)" "$(service_state)" "$(service_url)" "$used_bytes" "$limit_gb" <<'PY'
+import sys, unicodedata
+version, state, url, used, limit = sys.argv[1:6]
+used, limit = int(used), int(limit)
+
+def fmt(size):
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024 or unit == "TB":
+            return f"{size} B" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+
+storage = f"存储：{fmt(used)} / {limit} GiB" if limit > 0 else f"存储：{fmt(used)} / 不限"
+lines = [f"OSS Sync {version}", f"状态：{state}", f"地址：{url}", storage]
+
+def width(text):
+    return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
+
+inner = max(width(line) for line in lines)
+rule = "─" * (inner + 2)
+print(f"┌{rule}┐")
+for line in lines:
+    print(f"│ {line}{' ' * (inner - width(line))} │")
+print(f"└{rule}┘")
+PY
+}
+
+print_menu() {
+  local state
+  state="$(service_state)"
+  print_header
+  printf '\n'
+  if [[ "$state" == 运行中 ]]; then
+    printf '1 更新\n2 停止\n3 重启\n4 修改\n5 日志\n6 卸载\n0 退出\n'
+  else
+    printf '1 更新\n2 启动\n3 重启\n4 修改\n5 日志\n6 卸载\n0 退出\n'
+  fi
+}
+
+acquire_lock() {
+  exec 9>/run/lock/oss-sync-deploy.lock
+  flock -n 9 || fail '已有部署操作正在运行'
+}
+
+manage_update() {
+  local source_url="${OSS_RELEASE_PROXY:-}"
+  if [[ -n "$source_url" ]]; then
+    acquire_lock
+    OSS_INSTALL_DIR="$DIR" OSS_RELEASE_PROXY="$source_url" deploy install
+    return 0
+  fi
+  printf '1 默认加速\n2 官方\n3 自定义\n0 返回\n'
+  local selection
+  selection="$(prompt '更新源 [1]：')"
+  case "$selection" in
     0) return 0 ;;
-    1|update)
-      source_url="${OSS_RELEASE_PROXY:-}"
+    ''|1|proxy) source_url=https://gh-proxy.com/ ;;
+    2|official) source_url=official ;;
+    3|custom)
+      source_url="$(prompt 'HTTPS 前缀：')"
       if [[ -z "$source_url" ]]; then
-        selection="${OSS_RELEASE_SOURCE:-$(prompt '更新源：1 默认加速；2 官方；3 自定义 [1]：')}"
-        case "$selection" in
-          ''|1|proxy) source_url=https://gh-proxy.com/ ;;
-          2|official) source_url=official ;;
-          3|custom) source_url="$(prompt 'HTTPS 前缀：')" ;;
-          https://*) source_url="$selection" ;;
-          *) fail '无效更新源' ;;
-        esac
+        info '已取消更新'
+        return 0
       fi
-      OSS_INSTALL_DIR="$DIR" OSS_RELEASE_PROXY="$source_url" deploy install
       ;;
-    2|uninstall)
-      answer="${2:-$(prompt '卸载服务并保留配置和数据？[y/N]：')}"
+    https://*) source_url="$selection" ;;
+    *) fail '无效更新源' ;;
+  esac
+  acquire_lock
+  OSS_INSTALL_DIR="$DIR" OSS_RELEASE_PROXY="$source_url" deploy install
+}
+
+manage_modify() {
+  printf '1 修改容量\n2 修改端口\n0 返回\n'
+  local choice value
+  choice="$(prompt '选择 [0]：')"
+  choice="${choice:-0}"
+  case "$choice" in
+    1|storage)
+      acquire_lock
+      value="$(prompt "容量上限 GiB（当前 ${DEPLOY_LIMIT:-0}，0 不限）：")"
+      OSS_INSTALL_DIR="$DIR" OSS_STORAGE_LIMIT_GB="$value" deploy configure
+      ;;
+    2|port)
+      acquire_lock
+      value="$(prompt "新端口（当前 ${DEPLOY_PORT:-8080}）：")"
+      OSS_INSTALL_DIR="$DIR" OSS_PORT="$value" deploy configure
+      ;;
+    0) return 0 ;;
+    *) fail '无效操作' ;;
+  esac
+}
+
+manage_uninstall() {
+  printf '1 卸载全部（同时删除数据）\n2 保留数据\n0 返回\n'
+  local choice answer
+  choice="$(prompt '选择 [0]：')"
+  choice="${choice:-0}"
+  case "$choice" in
+    1|all)
+      answer="$(prompt '将删除全部数据且无法恢复，确认卸载全部？[y/N]：')"
       [[ "$answer" == y || "$answer" == yes ]] || return 0
-      exec 9>/run/lock/oss-sync-deploy.lock
-      flock -n 9 || fail '已有部署操作正在运行'
+      acquire_lock
+      systemctl disable --now oss-sync
+      rm -f /etc/systemd/system/oss-sync.service
+      systemctl daemon-reload
+      for name in oss oss-sync; do
+        [[ "$(readlink -f "$DEPLOY_BIN_DIR/$name")" != "$DIR/oss.sh" ]] || rm -f "$DEPLOY_BIN_DIR/$name"
+      done
+      printf '服务已卸载，正在删除 %s ...\n' "$DIR"
+      rm -rf "$DIR"
+      printf '已全部卸载，数据已删除\n'
+      MENU_EXIT=1
+      ;;
+    2|keep)
+      answer="$(prompt '保留数据，仅卸载服务？[y/N]：')"
+      [[ "$answer" == y || "$answer" == yes ]] || return 0
+      acquire_lock
       systemctl disable --now oss-sync
       rm -f /etc/systemd/system/oss-sync.service
       systemctl daemon-reload
@@ -346,22 +456,51 @@ manage() {
         [[ "$(readlink -f "$DEPLOY_BIN_DIR/$name")" != "$DIR/oss.sh" ]] || rm -f "$DEPLOY_BIN_DIR/$name"
       done
       printf '服务已卸载；配置、程序、服务账户和数据保留在 %s\n' "$DIR"
+      MENU_EXIT=1
       ;;
-    3|status) systemctl status oss-sync --no-pager ;;
-    4|start) systemctl start oss-sync ;;
-    5|stop) systemctl stop oss-sync ;;
-    6|restart) systemctl restart oss-sync ;;
-    7|storage)
-      value="${2:-$(prompt '容量上限 GiB（0 不限）：')}"
-      OSS_INSTALL_DIR="$DIR" OSS_STORAGE_LIMIT_GB="$value" deploy configure
-      ;;
-    8|port)
-      value="${2:-$(prompt '新端口：')}"
-      OSS_INSTALL_DIR="$DIR" OSS_PORT="$value" deploy configure
-      ;;
-    9|logs) journalctl -u oss-sync -f ;;
+    0) return 0 ;;
     *) fail '无效操作' ;;
   esac
+}
+
+manage() {
+  local choice="${1:-}"
+  MENU_EXIT=0
+  while :; do
+    if [[ -z "$choice" ]]; then
+      print_menu
+      choice="$(prompt '选择 [0]：')"
+      choice="${choice:-0}"
+    fi
+    case "$choice" in
+      0) return 0 ;;
+      1|update) manage_update ;;
+      2|start|stop)
+        acquire_lock
+        if [[ "$(service_state)" == 运行中 ]]; then
+          systemctl stop oss-sync
+          info '服务已停止'
+        else
+          systemctl start oss-sync
+          info '服务已启动'
+        fi
+        ;;
+      3|restart)
+        acquire_lock
+        systemctl restart oss-sync
+        info '服务已重启'
+        ;;
+      4|modify) manage_modify ;;
+      5|logs) journalctl -u oss-sync -f ;;
+      6|uninstall) manage_uninstall ;;
+      status) systemctl status oss-sync --no-pager ;;
+      *) fail '无效操作' ;;
+    esac
+    # 命令行一次性调用执行完即退出；交互模式返回主菜单。
+    if [[ -n "${1:-}" ]]; then return 0; fi
+    if ((MENU_EXIT)); then return 0; fi
+    choice=""
+  done
 }
 
 main() {

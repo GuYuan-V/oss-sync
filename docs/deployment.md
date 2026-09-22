@@ -51,7 +51,7 @@ sudo bash oss.sh install
 
 默认监听 `0.0.0.0:8080`，不会自动配置防火墙、TLS 或反向代理。健康检查访问本机 `127.0.0.1:<端口>/readyz`，YAML 中的监听地址须允许此访问。受 `ProtectHome` 与文件权限约束，外部数据库/存储目录需要自行配置合适权限；推荐使用默认 data 目录。
 
-端口和容量保存在生成的 `service.env`，会覆盖 YAML 同名设置，通过管理命令修改。其他配置直接编辑 YAML 后执行 `sudo oss 6`。更新保留现有 YAML，将新版本模板保存为 `configs/config.prod.yaml.dist`，管理员可比较并按发布说明合并新增配置项。不要手工编辑或 source 来历不明的 `deployment.env`。
+端口和容量保存在生成的 `service.env`，会覆盖 YAML 同名设置，通过管理命令 `sudo oss 4` 修改。其他配置直接编辑 YAML 后执行 `sudo oss 3` 重启生效。更新保留现有 YAML，将新版本模板保存为 `configs/config.prod.yaml.dist`，管理员可比较并按发布说明合并新增配置项。不要手工编辑或 source 来历不明的 `deployment.env`。
 
 ## 下载与版本
 
@@ -70,17 +70,40 @@ sudo env OSS_RELEASE_PROXY=official OSS_VERSION=v1.2.3 oss 1
 
 ## 服务管理与更新
 
-`sudo oss` 或 `sudo oss-sync` 打开菜单；也可直接传递编号或名称：
+`sudo oss` 或 `sudo oss-sync` 打开菜单；菜单头部显示已安装版本、服务状态、访问地址和存储用量：
+
+```text
+┌──────────────────────────┐
+│ OSS Sync 0.1.22          │
+│ 状态：运行中             │
+│ 地址：http://0.0.0.0:8080 │
+│ 存储：000 KB / 不限      │
+└──────────────────────────┘
+```
+
+主菜单及二级菜单：
+
+```text
+1 更新        ← 先选更新源：默认加速 / 官方 / 自定义 / 0 返回
+2 停止        ← 服务运行时为“停止”，停止时为“启动”
+3 重启
+4 修改        ← 1 修改容量、2 修改端口、0 返回
+5 日志
+6 卸载        ← 1 卸载全部（含数据）、2 保留数据、0 返回
+0 退出
+```
+
+所有二级菜单均支持 `0` 返回主菜单，只有主菜单的 `0` 退出。也可直接传递编号或名称：
 
 | 操作 | 命令 |
 | --- | --- |
 | 更新 | `sudo oss 1` / `sudo oss update` |
-| 卸载服务，保留配置和数据 | `sudo oss 2` / `sudo oss uninstall` |
-| 查看状态 | `sudo oss 3` / `sudo oss status` |
-| 启动、停止、重启 | `sudo oss 4`、`sudo oss 5`、`sudo oss 6` |
-| 存储上限，GiB | `sudo oss 7 10` |
-| 端口 | `sudo oss 8 9090` |
-| 持续查看日志 | `sudo oss 9` |
+| 启动或停止 | `sudo oss 2` / `sudo oss start`、`sudo oss stop` |
+| 重启 | `sudo oss 3` / `sudo oss restart` |
+| 修改容量或端口 | `sudo oss 4` |
+| 持续查看日志 | `sudo oss 5` |
+| 详细状态 | `sudo oss status` |
+| 卸载 | `sudo oss 6` / `sudo oss uninstall` |
 
 更新和修改端口/容量需要短暂停机。下载、SHA-256、归档结构、程序版本和脚本语法检查均在停机前完成；下载失败不停止旧服务。包内路径、文件类型、VERSION 和二进制版本都通过校验后，备份旧程序/配置/脚本和 unit，停止服务、替换文件、启动并核对就绪版本。健康检查约等待 60 轮，每轮 HTTP 超时上限 2 秒，轮间等待 1 秒。失败时尝试恢复旧程序和配置以及原启停状态。
 
@@ -88,7 +111,12 @@ sudo env OSS_RELEASE_PROXY=official OSS_VERSION=v1.2.3 oss 1
 
 systemd 使用 `Restart=on-failure`，异常退出由 systemd 重启。`OSS_UPDATE_MANAGER=systemd` 是部署标记，阻止现有网页/插件更新 API 启动 helper；网页仍可检查版本并提示使用宿主机命令。它不控制下载源。普通手动二进制部署没有该标记时继续使用原有自更新机制。
 
-卸载移除 unit 和全局命令，保留运行目录、数据、配置及服务账户。执行 `sudo bash /opt/oss-sync/oss.sh install` 可以重新注册服务；自定义路径请相应替换。保留原目录才能识别旧设置。
+卸载分两种，均需二次确认：
+
+- `1 卸载全部`：移除 unit、全局命令和整个部署目录，包括 `data/` 中的数据，不可恢复。
+- `2 保留数据`：只移除 unit 和全局命令，运行目录、数据、配置及服务账户保留。
+
+两种方式都会先 `systemctl disable --now` 停止服务。执行 `sudo bash /opt/oss-sync/oss.sh install` 可以重新注册服务；自定义路径请相应替换。保留原目录才能识别旧设置。
 
 升级时一并下载、校验并原子替换同一 Release 的 `oss.sh`。本次流程继续执行已加载的脚本，新脚本从下次调用生效；升级失败时脚本与 VERSION、配置模板一起回退。
 
