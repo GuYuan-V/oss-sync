@@ -1,87 +1,171 @@
 # OSS Sync
 
-> Self-hosted Obsidian sync & share — Markdown, attachments and collaboration in one binary.
+> Self-hosted Obsidian sync and share: notes, attachments, collaboration, and a public blog, deployed from a single binary.
 
-[![Go](https://img.shields.io/badge/Go-1.25-%2300ADD8?logo=go)](https://go.dev)
-[![Node](https://img.shields.io/badge/Node-20-%23339933?logo=node.js)](https://nodejs.org)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev)
+[![Node](https://img.shields.io/badge/Node-20-339933?logo=node.js)](https://nodejs.org)
 [![Obsidian](https://img.shields.io/badge/Obsidian-1.4+-7C3AED)](https://obsidian.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[English](#) | [中文](./README_zh.md)
+English | [中文](./README_zh.md)
 
-## Overview
+Data is served to the Obsidian client plugin: search for **OSS Sync and Share** in the Obsidian community plugin marketplace, or build it from source as described in *Build the plugin* below.
 
-OSS Sync is a self-hosted alternative to Obsidian Sync. It consists of a Go (Gin) backend and a TypeScript Obsidian plugin. Data stays on your own server: files, versions, shares and collaboration are all managed by you.
+If you run into problems, please open an [issue](https://github.com/helantianshen/oss-sync/issues).
 
-- **Vault-based**: one account can own multiple Vaults.
-- **Device-aware**: each Obsidian client has a stable `client_id` with pending / approved / revoked states.
-- **Offline-first**: local edits are queued, merged with three-way merge, and synced with revision-based CAS.
-- **Durable queue**: pending ordinary Vault uploads are written to `.oss-sync-state.json` before transfer and resume after Obsidian restarts.
+---
 
-## Features
+## Core features
 
-- Markdown, attachments and optional `.obsidian` config sync
-- Create / modify / delete / rename with full and incremental manifest checks
-- Revision-based conflict detection with “keep local / keep remote / keep both / ordered merge”
-- Recycle bin with restore / permanent delete / retention
-- File history: gzip snapshot, line diff, restore to any version
-- Sharing: single file or folder, public URL, allow-copy toggle, GFM + wikilinks
-- Blog: two built-in themes (`default`, `papertrail`), public index `/`, per-vault `/b/:vaultId`
-- Collaboration on Markdown: invite / accept / revoke, real-time via SSE (fallback to long polling)
-- Vault-scoped sync strategy: `user_choice` / `short_poll` / `long_poll`
-- Console themes and blog themes as ZIP uploads
-- Device onboarding starts with a device name; approval and per-Vault authorization are separate, and the authorized Vault list refreshes automatically in plugin settings
-- WordPress-style server extensions: WASM compatibility plus administrator-trusted executable plugins with dynamic hooks, routes, middleware, admin pages, tasks, migrations, dependencies, and host RPC
-- Public Go SDK: `github.com/helantianshen/oss-sync/pkg/ossplugin` for building trusted extensions without hand-written JSON Lines
-- SQLite by default, PostgreSQL optional; periodic storage reconciliation
+- **Vault isolation**: one account can own multiple Vaults; sync revisions, file paths, members, and permissions are fully independent.
+  - Supports Vault members (manager / participant), with Vault authorization granted per device.
+- **Multi-device sync**: create, modify, delete, rename, and move folders.
+  - Changes are distributed in real time; short polling and long polling switch by Vault policy or user preference.
+- **Offline-first with a durable queue**:
+  - Local edits are written to the `.oss-sync-state.json` queue before transfer.
+  - After closing and reopening Obsidian, queued work resumes automatically instead of being silently lost.
+- **Conflict handling**:
+  - Revision-based CAS detection with keep local, keep remote, keep both, and ordered merge.
+  - Markdown supports three-way merge; attachments and other binaries keep a copy of each side.
+- **Device management**:
+  - Every client is identified by a stable `client_id` with states pending / approved / revoked.
+  - First launch asks for a device name; device approval and Vault authorization are separate on the server, so a device can be approved before any Vault exists.
+- **Attachment and config sync**:
+  - Images, PDFs, and other non-note files are supported; `.obsidian` config sync is off by default.
+- **Recycle bin and file history**:
+  - Deletions go to the recycle bin with restore and retention-based cleanup.
+  - History supports version browsing, line diff, and restore to any version.
+- **Sharing and public blog**:
+  - Public links for a single note or a folder, with an allow-copy toggle.
+  - Two built-in blog themes (`default` and `papertrail`) with a public index and per-Vault access.
+- **Markdown collaboration**:
+  - Invite, accept, and revoke collaborators; real-time over SSE with long-polling fallback.
+- **Server plugin extensions**:
+  - WASM compatible, plus administrator-trusted executable plugins.
+  - Plugins can register routes, hooks, middleware, admin pages, cron tasks, database migrations, dependencies, and host RPC.
+  - A public Go SDK removes the need to hand-write the process protocol.
+- **Data and deployment**:
+  - SQLite by default, PostgreSQL optional, with periodic storage reconciliation.
+  - One script installs the binary and registers systemd; Docker remains available.
+
+---
 
 ## Architecture
 
 ```
-cmd/server        # HTTP entry
-configs/          # dev / prod YAML
+cmd/server        HTTP entry
+configs/          dev / prod YAML
 internal/
-  auth            # register, login, JWT, device auth
-  syncapi         # Vault revision, upload/download, rename/delete
-  vaults          # Vault CRUD, members, settings
-  devices         # device state, vault authorization, cursor
-  collaboration   # invite, accept, content write, events
-  history/recycle # snapshots, restore, retention
-  blog            # themes, public pages
-  serverplugin    # WASM and trusted executable plugins with namespaced routes
-  webui           # console pages, admin
-plugin/src        # Obsidian plugin
+  auth            register, login, JWT, device auth
+  syncapi         Vault revisions, upload/download, rename/delete
+  vaults          Vault CRUD, members, settings
+  devices         device state, Vault authorization, cursor
+  collaboration   invite, accept, content write, events
+  history/recycle snapshots, restore, retention
+  blog            blog themes and public pages
+  serverplugin    WASM and executable plugin runtime
+  webui           web console and admin
+pkg/ossplugin     public Go SDK
+plugin/src        Obsidian plugin
 ```
 
-Sync uses only HTTP. Short polling `wait=0` or long polling `wait=30` per Vault. Collaboration uses an account-level channel: SSE over HTTPS (or `app://obsidian.md` with CORS), long polling over plain LAN HTTP.
+Sync uses HTTP only. Short polling `wait=0` or long polling `wait=30` runs per Vault. Collaboration pushes per account: SSE over HTTPS (`app://obsidian.md` allowed via CORS), long polling over plain LAN HTTP.
 
-## Quick Start
+---
 
-### Prerequisites
+## Quick start
 
-- Go 1.25+
-- Node 20+, npm
-- Obsidian 1.4+
+The one-command script is recommended; Docker and manual binaries are also supported.
 
-### Run backend
+### Method 1: one-command script (recommended)
+
+Downloads the official binary for the current architecture, verifies its SHA-256 and version, and registers `oss-sync.service`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/helantianshen/oss-sync/main/oss.sh | sudo bash
+```
+
+Requirements: a running systemd, root, Python 3, curl, coreutils, util-linux (`flock`), and `useradd`/`getent`. The script does not install Docker, Go, or other dependencies. Unsupported architectures exit with guidance to build manually, and download or checksum failures never fall back to compiling from source.
+
+Script behavior:
+
+- Asks for the deployment directory, port (default `8080`), storage limit in GiB (`0` means unlimited), and Release source (accelerated by default, GitHub direct, or a custom HTTPS prefix).
+- Installs to `/opt/oss-sync` by default; override with `OSS_INSTALL_DIR`.
+- Creates the global commands `oss` and `oss-sync` in `/usr/local/bin`.
+- Runs the service as a dedicated `oss-sync` system account with no extra Linux capabilities.
+
+After installation, run `sudo oss` to open the management menu:
+
+```text
+┌──────────────────────────┐
+│ OSS Sync 0.1.22          │
+│ 状态：运行中             │
+│ 地址：http://0.0.0.0:8080 │
+│ 存储：000 KB / 不限      │
+└──────────────────────────┘
+
+1 更新    Update       pick a source: accelerated / official / custom / 0 back
+2 停止    Stop         shows Start when the service is stopped
+3 重启    Restart
+4 修改    Modify       1 storage limit, 2 port, 0 back
+5 日志    Logs
+6 卸载    Uninstall    1 everything including data, 2 keep data, 0 back
+0 退出    Exit
+```
+
+Every submenu supports `0` to return to the main menu. Numbers can also be passed directly:
+
+```bash
+sudo oss 1        # update
+sudo oss 2        # start or stop
+sudo oss 3        # restart
+sudo oss 4        # modify storage limit or port
+sudo oss 5        # follow logs
+sudo oss status   # detailed systemd status
+```
+
+Updates verify all artifacts before stopping the service, replace the binary, and check `/readyz` plus the expected version. On failure the previous program and configuration are restored, but database migrations are not reversed, so back up before upgrading.
+
+Non-interactive installs accept `OSS_PORT`, `OSS_STORAGE_LIMIT_GB`, `OSS_INSTALL_DIR`, `OSS_RELEASE_PROXY=official` (or an HTTPS prefix), and `OSS_VERSION` for an exact tag. See [binary and systemd deployment](docs/deployment.md).
+
+### Method 2: Docker
+
+Docker remains for source development and existing deployments; it is no longer used by the one-command installer:
+
+```bash
+docker compose up -d --build
+docker compose logs -f backend
+```
+
+Compose exposes port `8080` and stores data in the `oss-data` named volume. Update this deployment by rebuilding or replacing the image. Do not run the binary installer over an existing Docker data directory; follow the migration guide. `docker compose down -v` deletes the data volume.
+
+### Method 3: manual binary
+
+Download the runtime package for your platform from [Releases](https://github.com/helantianshen/oss-sync/releases), extract it, and run from that directory:
+
+```bash
+./bin/oss-server          # Linux / macOS
+./bin/oss-server.exe      # Windows
+```
+
+Set `OSS_ENV=prod` to load the bundled production config; data and SQLite resolve relative to the current directory.
+
+### Running the backend from source
+
+For development:
 
 ```bash
 go run ./cmd/server
 ```
 
-First registered user automatically becomes admin. Afterwards use that admin account to create others.
-
-
-Listens on `http://localhost:8080` by default, data in `data/`. Health:
+Listens on `http://localhost:8080` with data in `data/`. Health:
 
 ```bash
 curl http://localhost:8080/healthz
 curl http://localhost:8080/readyz
 ```
 
-Config via `OSS_ENV=dev|prod` → `configs/config.dev.yaml` / `configs/config.prod.yaml`, overridable by env: `OSS_SERVER_HOST`, `OSS_SERVER_PORT`, `OSS_DB_DRIVER`, `OSS_DB_DSN`, `OSS_STORAGE_DIR`, etc.
-
-Postgres example:
+Use `OSS_ENV=dev|prod` to select the config file, overridable with `OSS_SERVER_HOST`, `OSS_SERVER_PORT`, `OSS_DB_DRIVER`, `OSS_DB_DSN`, `OSS_STORAGE_DIR`, and others. For PostgreSQL:
 
 ```bash
 export OSS_DB_DRIVER=postgres
@@ -89,77 +173,37 @@ export OSS_DB_DSN='postgres://user:pass@127.0.0.1:5432/oss?sslmode=disable'
 go run ./cmd/server
 ```
 
-### Linux binary deployment (systemd)
+---
 
-The unified Linux installation/management script downloads an official Linux amd64/arm64 binary, verifies its SHA-256 checksum and version, extracts its bundled production configuration, and registers `oss-sync.service`:
+## Usage guide
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/helantianshen/oss-sync/main/oss.sh | sudo bash
-```
+1. **Register the admin**: open `http://{server-ip}:8080`; the first registered user becomes admin. Disable registration afterwards in the admin console.
+2. **Install the plugin**: install **OSS Sync and Share** from the Obsidian marketplace, or build it and copy to `<vault>/.obsidian/plugins/oss-sync/`.
+3. **Set the device name**: the first time the plugin settings open, enter a device name and save it; the login form appears afterwards.
+4. **Sign in**: enter a server URL that includes `http://` or `https://`, plus username and password. A missing protocol produces a specific error instead of a generic login failure.
+5. **Approve the device**: approve it in the web console. Device approval and Vault authorization are separate, so approval works before any Vault exists.
+6. **Bind a Vault**: pick an existing Vault in the plugin settings, or create one and run a full sync immediately. The settings page refreshes the authorized Vault list every three seconds while open.
+7. **Sync**: local edits are queued durably and uploaded; changes from other devices are downloaded on the next poll.
 
-Requirements: Linux with a running systemd, root access, Python 3, curl, coreutils, util-linux (`flock`), and system account tools (`useradd`, `getent`). The installer does not install Docker, Go, or other dependencies. Unsupported architectures fail with guidance to build manually; download or checksum failures never fall back to compilation.
+The plugin maintains `.oss-sync-state.json` (v3) at the Vault root for baselines, the pending queue, and conflicts. It is never uploaded.
 
-Without arguments, the script installs when no deployment exists and opens the management menu otherwise. Use `sudo bash oss.sh install` to explicitly install or reinstall. It asks for the deployment directory, port (default `8080`), storage limit in GiB (`0` means unlimited), and Release source (default `https://gh-proxy.com/`, direct GitHub, or a custom HTTPS prefix). Set `OSS_INSTALL_DIR` to change the default `/opt/oss-sync` directory. It resolves the latest Release once and downloads all assets from that exact tag. The initial bootstrap URL above is direct; the selected proxy applies after the script has started.
-
-The service runs as the dedicated `oss-sync` system account. The default directory contains `bin/oss-server`, `configs/config.prod.yaml`, `data/oss.db`, `service.env`, `VERSION`, and the standalone `oss.sh` management script. Existing YAML and data are preserved during updates; the new default template is saved as `configs/config.prod.yaml.dist`. The generated `service.env` overrides the port and storage limit; use the management command to change these values. Other application settings remain in the YAML. See [deployment details and Docker migration](docs/deployment.md).
-
-```bash
-sudo oss             # management menu
-sudo oss 1           # update using an explicitly selected source
-sudo oss 3           # systemd status
-sudo oss 6           # restart
-sudo oss 7 10        # set storage limit to 10 GiB
-sudo oss 8 9090      # change port
-sudo oss 9           # follow journal logs
-```
-
-Updates verify all artifacts before stopping the service, replace the binary, and validate `/readyz` and the expected version. On failure they attempt to restore the previous binary and configuration; database migrations are not reversed. Back up data before upgrading. For this systemd deployment, the web UI checks versions and directs administrators to the host management command; it does not launch the in-process update helper.
-
-Non-interactive installation can set `OSS_PORT`, `OSS_STORAGE_LIMIT_GB`, `OSS_INSTALL_DIR`, and `OSS_RELEASE_PROXY=official` (or an HTTPS prefix). `OSS_VERSION` selects an exact Release tag, including its `v` prefix if present. Existing Docker deployments are not automatically migrated or deleted.
-
-The installer requires a Release containing `oss.sh` and `oss-sync_<version>_<os>_<arch>.tar.gz` (Windows: `.zip`), listed in `checksums.txt`. Each runtime package contains `bin/oss-server` (Windows: `bin/oss-server.exe`), `configs/config.prod.yaml`, and `VERSION`; scripts and data are not included. A Release built with the updated workflow must be published before the new one-command installer can install successfully from the public latest Release.
-
-### Docker (optional / existing deployments)
-
-Docker remains available for source development and existing installations. It is no longer used by the one-command installer:
-
-```bash
-docker compose up -d --build
-docker compose logs -f backend
-```
-
-Compose exposes port `8080` by default and stores data in the `oss-data` named volume. Update this deployment by rebuilding/replacing the image. Do not run the new binary installer over an existing Docker data directory; follow the migration guide. `docker compose down -v` deletes the data volume.
-
-### Build plugin
-
-Regular users can install **OSS Sync and Share** directly from Obsidian Community Plugins. The following steps are only for source development:
-
-```bash
-cd plugin
-npm ci
-npm run build
-# outputs plugin/manifest.json, main.js, styles.css
-# copy to vault: <vault>/.obsidian/plugins/oss-sync/
-```
-
-Reload Obsidian → Enable *Obsidian Sync & Share* → Set the device name → Enter a server URL including `http://` or `https://` → Sign in. Approve the device separately in the web console, then grant Vault access. The open settings page refreshes the authorized Vault list every three seconds. The plugin keeps a local `.oss-sync-state.json` (v3) at Vault root; it is never uploaded and stores the durable pending-operation queue.
+---
 
 ## Plugins, blog templates, and console themes
 
-The extension model has one simple rule:
+The extension model has one rule:
 
 - **Plugins own functionality**: settings, routes, hooks, data, admin pages, tasks, and integrations.
 - **Blog templates own public-page structure and style**: `template.html`, `style.css`, optional `theme.js`, and `theme.json` capabilities.
 - **Console themes own console appearance**: `theme.css`, images, and fonts.
 
-Templates and themes must not contain functional settings. Do not add `settings.json` to a blog template. Declare settings in a plugin; OSS Sync renders them in the top-level **Plugin settings** menu and stores values per Vault.
+Templates and themes do not store functional settings; do not add `settings.json` to a blog template. Declare settings in a plugin and the server renders them in the top-level **Plugin settings** menu, stored per Vault.
 
-### Fastest plugin workflow
+### Create a plugin
 
-1. Copy [`examples/server-plugin-echo`](examples/server-plugin-echo).
-2. Change the plugin ID and handlers.
-3. Build the executable and ZIP it with `manifest.json`.
-4. Upload it from **Admin settings → Plugins**.
+1. Copy [`examples/server-plugin-echo`](examples/server-plugin-echo) and change the plugin ID and handlers.
+2. Build the executable next to `manifest.json`.
+3. Package it as a ZIP and upload it from **Admin settings → Plugins**.
 
 ```powershell
 cd examples/server-plugin-echo
@@ -167,11 +211,9 @@ go build -o plugin.exe .
 Compress-Archive manifest.json,plugin.exe my-plugin.zip
 ```
 
-Use the public Go SDK at `github.com/helantianshen/oss-sync/pkg/ossplugin`; it handles the JSON-lines process protocol. The short in-console guide covers settings, hooks, routes, pages, tasks, migrations, and host services. The complete reference is [`docs/server-plugins.md`](docs/server-plugins.md).
+Plugins use the public Go SDK at `github.com/helantianshen/oss-sync/pkg/ossplugin`, so no JSON Lines protocol code is needed. Executable plugins run on the server, and one ZIP may contain `plugin.exe`, `plugin`, and `plugin-arm64` with `windows-amd64`, `linux-amd64`, and `linux-arm64` entries in `manifest.json`; the server selects the matching one. Build only the platform you deploy to for the simplest setup.
 
-Executable plugins run on the server, so their binary must match the server platform. This does not require separate plugin records: one ZIP may contain `plugin.exe`, `plugin`, and `plugin-arm64`, with `windows-amd64`, `linux-amd64`, and `linux-arm64` entries in `manifest.json`. OSS Sync automatically selects the matching entry. For the simplest setup, build only the platform used by your server.
-
-### Fastest template or theme workflow
+### Create a template or theme
 
 Blog template:
 
@@ -194,31 +236,31 @@ my-console-theme.zip
 └── plugin.zip   # optional functionality
 ```
 
-To associate functionality, place the already-built plugin ZIP at the package root as `plugin.zip`. Uploading the template or theme automatically installs, enables, and associates the plugin. No additional association form is required. The web console includes concise **Template guide**, **Console theme guide**, and **Plugin guide** pages with copyable minimal examples.
+To associate functionality, place the built plugin ZIP at the package root as `plugin.zip`. Uploading the template or theme installs, enables, and associates it automatically, with no extra association form. The web console ships concise template, console theme, and plugin guides with copyable minimal examples.
+
+---
 
 ## Configuration
 
 | Env | Description |
 |---|---|
 | `OSS_ENV` | `dev` or `prod` |
-| `OSS_SERVER_HOST` / `PORT` | listen address |
+| `OSS_SERVER_HOST` / `PORT` | listen address and port |
 | `OSS_DB_DRIVER` / `DSN` | sqlite or postgres |
 | `OSS_STORAGE_DIR` | file storage root |
-| `OSS_ALLOW_ANONYMOUS_REGISTRATION` | initial register switch |
-| `OSS_WEB_SESSION_TTL_HOURS` | web console session lifetime in hours; default `24` |
-| `OSS_DEVICE_JWT_TTL_HOURS` | plugin device token lifetime in hours; default `720` (30 days) |
+| `OSS_ALLOW_ANONYMOUS_REGISTRATION` | initial registration switch |
+| `OSS_WEB_SESSION_TTL_HOURS` | web session lifetime in hours; default `24` |
+| `OSS_DEVICE_JWT_TTL_HOURS` | plugin device token lifetime in hours; default `720` |
 | `OSS_DEVICE_STALE_DAYS` | stale device threshold |
-| `OSS_RECONCILE_INTERVAL_HOURS` | storage check interval |
-| `OSS_UPDATE_DOWNLOAD_SOURCE` | server update source: `official`, `proxy`, or `custom` |
-| `OSS_UPDATE_DOWNLOAD_PROXY` | HTTPS URL prefix used when the source is `custom` |
+| `OSS_RECONCILE_INTERVAL_HOURS` | storage reconciliation interval |
+| `OSS_UPDATE_DOWNLOAD_SOURCE` | update source: `official`, `proxy`, or `custom` |
+| `OSS_UPDATE_DOWNLOAD_PROXY` | HTTPS prefix used when the source is `custom` |
 
+Vault settings (admin can force): `sync_mode` (`user_choice` / `short_poll` / `long_poll`), recycle bin days, storage quota, and upload size limit.
 
-Vault settings (per Vault, admin can force):
+`download_source` and `download_proxy` live in the update section of `configs/config.dev.yaml` or `configs/config.prod.yaml`. The admin update panel can override them per check. The selected address is used for both release metadata and the binary download, so updates still work when the server cannot reach GitHub directly.
 
-- `sync_mode`: `user_choice` | `short_poll` | `long_poll`
-- recycle bin days, storage quota, upload size
-
-Server updates use `download_source` and `download_proxy` from the update section in `configs/config.dev.yaml` or `configs/config.prod.yaml`. The Admin → System → Server update panel can override them for the current check and update. The selected source is used for both release metadata and the binary download, which allows updates when the server cannot reach GitHub directly.
+---
 
 ## Development
 
@@ -230,30 +272,49 @@ go vet ./...
 
 # plugin
 cd plugin
+npm ci
 npm exec tsc -- --noEmit
 npm test
 npm run build
 ```
 
-Project conventions: Go with `gofumpt` + `golangci-lint`, TypeScript strict, `uv`/`pnpm` not required, no emoji in UI, CSS via `console.css` tokens, no inline styles.
+Conventions: `gofumpt` + `golangci-lint` for Go, strict TypeScript, no emoji in the UI, styling through `console.css` tokens, and no inline styles.
 
-## Deployment
+---
 
-- Put a reverse proxy with HTTPS in front of the Go binary.
-- Back up `data/` (SQLite file or Postgres dump) and the JWT secret stored in DB.
-- After initial users are created, turn off open registration in *Admin → System*.
-- Monitor `/readyz`; alert on non-200 or repeated reconcile failures.
+## Deployment notes
+
+- Put a reverse proxy with HTTPS in front of the Go service.
+- Back up `data/` (SQLite file or Postgres dump) and the JWT secret stored in the database.
+- Disable open registration after the initial users are created.
+- Monitor `/readyz`; alert on non-200 or repeated reconciliation failures.
+- An Nginx reverse-proxy example is available at [scripts/https-nginx-example.conf](scripts/https-nginx-example.conf).
+
+---
 
 ## Security
 
-- Passwords are bcrypt-hashed, never logged.
-- JWT is HS256 with per-deployment random secret.
-- Sessions: web uses 24-hour HttpOnly Secure SameSite cookies + CSRF; plugin uses a 30-day device-bound Bearer JWT. Expired plugin tokens are removed locally and require a new login.
-- All mutating web requests require CSRF; all sync/collab requests require approved device + vault authorization.
-- Server plugins accept WASM packages or administrator-trusted executable packages. WASM modules receive no WASI, filesystem, network, database, or environment access and use the legacy ABI. Executable packages declare platform entrypoints and communicate over a persistent bidirectional JSON-lines protocol; they can register arbitrary hooks, routes, middleware, admin pages, tasks, migrations, and dependencies, call host data/services through RPC, and inherit the server account's filesystem, network, database, environment, and command-execution permissions. The executable host model is intentionally comparable to WordPress plugin freedom.
-- Enabled plugins may declare host-rendered settings; OSS Sync adds them to the top-level **Plugin settings** menu and stores values per Vault without allowing plugin HTML or JavaScript injection. Theme-linked settings such as Papertrail remain available outside the current Vault page and automatically select an accessible matching Vault.
-- ABI v1 exposes blog/HTML content filters, theme render filters, administrator pages, and Obsidian editor commands. Comment filtering is reserved until the server has a comment entity and renderer; arbitrary JavaScript injection remains outside the host API.
+- Passwords are bcrypt-hashed and never logged.
+- JWT is HS256 with a per-deployment random secret stored in the database.
+- Web sessions use 24-hour HttpOnly Secure SameSite cookies with CSRF validation; the plugin uses a 30-day device-bound Bearer JWT that is removed locally on expiry and requires a new login.
+- All mutating web requests require CSRF; all sync and collaboration requests require an approved device plus Vault authorization.
+- Server plugins accept WASM packages or administrator-trusted executable packages. WASM modules receive no WASI, filesystem, network, database, or environment access. Executable packages can read and write server files, access the database, use the network, read environment variables, and run system commands, with the same permissions as the server account. Plugins are uploaded only by administrators, so install only reviewed code.
+- Plugins may declare host-rendered settings but cannot inject HTML or JavaScript.
+
+---
+
+## Roadmap
+
+- [ ] Support a Protobuf transport format for higher sync efficiency.
+- [ ] Improve real-time note updates in the web GUI.
+- [ ] Add more intranet penetration (relay gateway) support.
+- [ ] Add comment support and the comment hook.
+- [ ] Continue improving documentation.
+
+Suggestions and new ideas are welcome as issues.
+
+---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
