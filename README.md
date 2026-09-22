@@ -303,18 +303,6 @@ Conventions: `gofumpt` + `golangci-lint` for Go, strict TypeScript, no emoji in 
 
 ---
 
-## Roadmap
-
-- [ ] Support a Protobuf transport format for higher sync efficiency.
-- [ ] Improve real-time note updates in the web GUI.
-- [ ] Add more intranet penetration (relay gateway) support.
-- [ ] Add comment support and the comment hook.
-- [ ] Continue improving documentation.
-
-Suggestions and new ideas are welcome as issues.
-
----
-
 ## License
 
 MIT, see [LICENSE](LICENSE).
