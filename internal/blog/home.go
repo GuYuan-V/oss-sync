@@ -24,6 +24,9 @@ type PaperTrailConfig struct {
 	BlogName    string             `json:"blog_name"`
 	Description string             `json:"description"`
 	Buttons     []PaperTrailButton `json:"buttons"`
+	// 自定义主题可用的页面横幅
+	BannerURL       string `json:"banner_url"`
+	MobileBannerURL string `json:"mobile_banner_url"`
 }
 
 // PaperTrailButton 博客自定义按钮
@@ -58,6 +61,12 @@ func ParsePaperTrailConfig(themeConfig map[string]any) PaperTrailConfig {
 	}
 	if v, ok := themeConfig["description"].(string); ok {
 		cfg.Description = v
+	}
+	if v, ok := themeConfig["banner_url"].(string); ok {
+		cfg.BannerURL = v
+	}
+	if v, ok := themeConfig["mobile_banner_url"].(string); ok {
+		cfg.MobileBannerURL = v
 	}
 	if rawButtons, ok := themeConfig["buttons"].([]any); ok {
 		for _, raw := range rawButtons {
@@ -106,6 +115,11 @@ type HomePost struct {
 	URL     string
 	Date    string
 	Time    time.Time
+	// 自定义主题使用的文章元数据
+	Category  string
+	Tags      []string
+	CoverURL  string
+	WordCount int
 }
 
 // PublicBlog 描述未登录首页上可发现的一个 Vault
@@ -188,13 +202,19 @@ func (h *Handler) homePosts(userID uint, vaultID string) []HomePost {
 		if err != nil {
 			continue
 		}
-		title, summary := extractPostMeta(string(raw), share.TargetPath)
+		fm, body := splitFrontmatter(string(raw))
+		assetResolver := blogAssetResolver{shareID: share.ShareID}
+		title, meta := buildArticleMeta(fm, body, share.TargetPath, f.UpdatedAt, assetResolver.ResolveAsset)
 		posts = append(posts, HomePost{
-			Title:   title,
-			Summary: summary,
-			URL:     "/p/" + share.ShareID,
-			Date:    f.UpdatedAt.Format("2006-01-02"),
-			Time:    f.UpdatedAt,
+			Title:     title,
+			Summary:   meta.Summary,
+			URL:       "/p/" + share.ShareID,
+			Date:      meta.Date,
+			Time:      f.UpdatedAt,
+			Category:  meta.Category,
+			Tags:      meta.Tags,
+			CoverURL:  meta.CoverURL,
+			WordCount: meta.WordCount,
 		})
 	}
 	return posts
@@ -202,39 +222,9 @@ func (h *Handler) homePosts(userID uint, vaultID string) []HomePost {
 
 // extractPostMeta 提取文章标题与摘要；标题优先使用 frontmatter，否则使用文件名
 func extractPostMeta(raw, fallbackTitle string) (string, string) {
-	title := basenameNoExt(fallbackTitle)
-	summary := ""
-	lines := strings.Split(raw, "\n")
-	inFrontmatter := false
-	frontmatterDone := false
-	for lineIndex, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !frontmatterDone && trimmed == "---" && (inFrontmatter || lineIndex == 0) {
-			if inFrontmatter {
-				inFrontmatter = false
-				frontmatterDone = true
-			} else {
-				inFrontmatter = true
-			}
-			continue
-		}
-		if inFrontmatter && strings.HasPrefix(trimmed, "title:") {
-			value := strings.Trim(strings.TrimSpace(strings.TrimPrefix(trimmed, "title:")), "\"'")
-			if value != "" {
-				title = value
-			}
-		}
-		if summary == "" && trimmed != "" && !strings.HasPrefix(trimmed, "#") && !inFrontmatter {
-			summary = trimmed
-		}
-		if summary != "" && (frontmatterDone || !inFrontmatter) {
-			break
-		}
-	}
-	if len(summary) > 120 {
-		summary = summary[:120] + "…"
-	}
-	return title, summary
+	fm, body := splitFrontmatter(raw)
+	title, meta := buildArticleMeta(fm, body, fallbackTitle, time.Time{}, nil)
+	return title, meta.Summary
 }
 
 // handleVaultBlog 处理 /b/:vault_id 公开博客入口
@@ -258,22 +248,24 @@ func (h *Handler) handleVaultBlog(c *gin.Context) {
 	cfg := ParsePaperTrailConfig(vs.ThemeConfig)
 	customEnabled := settingspolicy.CustomFragmentsEnabled(h.DB)
 	params := renderParams{
-		VaultID:       vaultID,
-		Title:         blogTitle(cfg, vault.Name),
-		ThemeName:     vs.ThemeName,
-		ThemeBaseURL:  themeBaseURL(vs.ThemeName),
-		ThemeConfigJS: template.JS(mustJSON(vs.ThemeConfig)),
-		CustomHeader:  renderSafeCustomFragmentEnabled(vs.CustomHeader, customEnabled),
-		CustomFooter:  renderSafeCustomFragmentEnabled(vs.CustomFooter, customEnabled),
-		IsHome:        true,
-		BlogName:      cfg.BlogName,
-		Description:   cfg.Description,
-		LogoURL:       cfg.LogoURL,
-		LogoSize:      cfg.LogoSize,
-		LogoShape:     cfg.LogoShape,
-		Buttons:       cfg.Buttons,
-		HomePosts:     posts,
-		BlogHomeURL:   "/b/" + vaultID,
+		VaultID:         vaultID,
+		Title:           blogTitle(cfg, vault.Name),
+		ThemeName:       vs.ThemeName,
+		ThemeBaseURL:    themeBaseURL(vs.ThemeName),
+		ThemeConfigJS:   template.JS(mustJSON(vs.ThemeConfig)),
+		CustomHeader:    renderSafeCustomFragmentEnabled(vs.CustomHeader, customEnabled),
+		CustomFooter:    renderSafeCustomFragmentEnabled(vs.CustomFooter, customEnabled),
+		IsHome:          true,
+		BlogName:        cfg.BlogName,
+		Description:     cfg.Description,
+		LogoURL:         cfg.LogoURL,
+		LogoSize:        cfg.LogoSize,
+		LogoShape:       cfg.LogoShape,
+		Buttons:         cfg.Buttons,
+		HomePosts:       posts,
+		BlogHomeURL:     "/b/" + vaultID,
+		BannerURL:       cfg.BannerURL,
+		MobileBannerURL: cfg.MobileBannerURL,
 	}
 	h.renderTemplate(c, params)
 }

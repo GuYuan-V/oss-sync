@@ -156,7 +156,8 @@ func (h *Handler) pluginSettingVaults(u *models.User, pluginID string) []pluginS
 		}
 		out := make([]pluginSettingVaultOption, 0, len(vaults))
 		for _, vault := range vaults {
-			if themeByVault[vault.ID] == "papertrail" {
+			// 内置博客设置对任何支持公开博客的主题生效，不限于 papertrail
+			if blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, themeByVault[vault.ID]) {
 				out = append(out, pluginSettingVaultOption{ID: vault.ID, Name: vault.Name})
 			}
 		}
@@ -301,7 +302,8 @@ func (h *Handler) pluginSettingsLinkedToVault(pluginID, vaultID string) bool {
 	for _, builtin := range serverplugin.BuiltinManifests() {
 		if builtin.ID == pluginID {
 			var theme models.VaultSetting
-			return h.DB.Where("vault_id = ?", vaultID).First(&theme).Error == nil && theme.ThemeName == "papertrail"
+			return h.DB.Where("vault_id = ?", vaultID).First(&theme).Error == nil &&
+				blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, theme.ThemeName)
 		}
 	}
 	var count int64

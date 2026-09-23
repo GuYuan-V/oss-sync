@@ -6,6 +6,7 @@
 
 ## 当前状态
 
+- 2026-09-23：完成自定义博客主题的服务端文章元数据适配。`renderParams` 新增 `ArticlePost`（摘要/日期/分类/标签/封面/字数/阅读分钟）与 `BannerURL`/`MobileBannerURL`，`HomePost` 增加分类/标签/封面/字数；新增 `internal/blog/frontmatter.go` 解析 Markdown frontmatter（有效块从正文隐藏，损坏块保留原文），封面附件经 `frontmatter image` 纳入分享鉴权；内置 `papertrail-settings` 插件的生效范围从仅 papertrail 泛化为所有 `supports_public_blog` 的主题，并新增横幅 URL 字段。HikariTish-Shirone 主题已在 192.168.1.221 冒烟通过（文章页/首页/封面附件/设置页）。改动尚未提交。
 - `0.1.17` 已公开发布，Release 工作流 `33617267604` 成功。
 - Release 包含服务端多平台二进制、Obsidian 插件、`install.sh`、`manage.sh`、amd64/arm64 离线 Docker 镜像归档和覆盖全部资产的 `checksums.txt`。
 - GHCR 已发布 amd64/arm64 多架构镜像及 `latest` 标签。

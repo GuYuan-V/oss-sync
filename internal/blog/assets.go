@@ -91,6 +91,10 @@ func (h *Handler) markdownReferencesAsset(userID uint, vaultID, markdownPath, re
 	if err != nil {
 		return false
 	}
+	// 仅出现在 frontmatter image 中的封面也属于该文章的引用
+	if fm, _ := splitFrontmatter(string(raw)); fm.image != "" && fm.image == reference {
+		return true
+	}
 	return slices.Contains(references, reference)
 }
 

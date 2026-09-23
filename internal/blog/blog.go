@@ -171,6 +171,10 @@ type renderParams struct {
 	LogoShape   string
 	Buttons     []PaperTrailButton
 	HomePosts   []HomePost
+	// 自定义主题可用的横幅与文章元数据
+	BannerURL       string
+	MobileBannerURL string
+	ArticlePost     ArticleMeta
 }
 
 func (h *Handler) shareRenderParams(share models.Share, setting *models.VaultSetting) renderParams {
@@ -185,21 +189,23 @@ func (h *Handler) shareRenderParams(share models.Share, setting *models.VaultSet
 		customFooter = renderSafeCustomFragment(setting.CustomFooter)
 	}
 	return renderParams{
-		ThemeName:     setting.ThemeName,
-		VaultID:       share.VaultID,
-		ThemeBaseURL:  themeBaseURL(setting.ThemeName),
-		ThemeConfigJS: template.JS(mustJSON(setting.ThemeConfig)),
-		CustomHeader:  customHeader,
-		CustomFooter:  customFooter,
-		ShareID:       share.ShareID,
-		AllowCopy:     share.AllowCopy,
-		BlogHomeURL:   blogHomeURL,
-		BlogName:      cfg.BlogName,
-		Description:   cfg.Description,
-		LogoURL:       cfg.LogoURL,
-		LogoSize:      cfg.LogoSize,
-		LogoShape:     cfg.LogoShape,
-		Buttons:       cfg.Buttons,
+		ThemeName:       setting.ThemeName,
+		VaultID:         share.VaultID,
+		ThemeBaseURL:    themeBaseURL(setting.ThemeName),
+		ThemeConfigJS:   template.JS(mustJSON(setting.ThemeConfig)),
+		CustomHeader:    customHeader,
+		CustomFooter:    customFooter,
+		ShareID:         share.ShareID,
+		AllowCopy:       share.AllowCopy,
+		BlogHomeURL:     blogHomeURL,
+		BlogName:        cfg.BlogName,
+		Description:     cfg.Description,
+		LogoURL:         cfg.LogoURL,
+		LogoSize:        cfg.LogoSize,
+		LogoShape:       cfg.LogoShape,
+		Buttons:         cfg.Buttons,
+		BannerURL:       cfg.BannerURL,
+		MobileBannerURL: cfg.MobileBannerURL,
 	}
 }
 
@@ -351,7 +357,10 @@ func (h *Handler) handleSingle(c *gin.Context) {
 	}
 
 	resolver := h.buildResolver(share.UserID, share.VaultID)
-	html, err := markdown.RenderMarkdownWithAssets(resolver, blogAssetResolver{shareID: share.ShareID}, raw)
+	assetResolver := blogAssetResolver{shareID: share.ShareID}
+	// 有效 frontmatter 作为元数据使用并从正文隐藏，损坏区块保留原文
+	fm, body := splitFrontmatter(raw)
+	html, err := markdown.RenderMarkdownWithAssets(resolver, assetResolver, body)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "render failed: %v", err)
 		return
@@ -359,7 +368,7 @@ func (h *Handler) handleSingle(c *gin.Context) {
 
 	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
 	params := h.shareRenderParams(share, us)
-	params.ArticleTitle, _ = extractPostMeta(raw, f.Path)
+	params.ArticleTitle, params.ArticlePost = buildArticleMeta(fm, body, f.Path, f.UpdatedAt, assetResolver.ResolveAsset)
 	params.Title = params.ArticleTitle + " · OSS"
 	params.ContentHTML = template.HTML(html)
 	h.renderTemplate(c, params)
@@ -435,7 +444,9 @@ func (h *Handler) renderFolderFile(c *gin.Context, share models.Share, f models.
 		return
 	}
 	resolver := h.buildResolver(share.UserID, share.VaultID)
-	html, err := markdown.RenderMarkdownWithAssets(resolver, blogAssetResolver{shareID: share.ShareID}, raw)
+	assetResolver := blogAssetResolver{shareID: share.ShareID}
+	fm, body := splitFrontmatter(raw)
+	html, err := markdown.RenderMarkdownWithAssets(resolver, assetResolver, body)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "render failed: %v", err)
 		return
@@ -443,7 +454,7 @@ func (h *Handler) renderFolderFile(c *gin.Context, share models.Share, f models.
 
 	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
 	params := h.shareRenderParams(share, us)
-	params.ArticleTitle, _ = extractPostMeta(raw, f.Path)
+	params.ArticleTitle, params.ArticlePost = buildArticleMeta(fm, body, f.Path, f.UpdatedAt, assetResolver.ResolveAsset)
 	params.Title = params.ArticleTitle + " · " + share.TargetPath
 	params.ContentHTML = template.HTML(html)
 	h.renderTemplate(c, params)
