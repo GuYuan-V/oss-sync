@@ -27,16 +27,21 @@ def package(binary: Path, config: Path, version: str, goos: str, arch: str, outp
         (root / name).chmod(0o755)
         shutil.copyfile(config, root / files[1])
         (root / files[1]).chmod(0o644)
-        (root / "VERSION").write_text(version + "\n", encoding="utf-8")
+        (root / "VERSION").write_bytes((version + "\n").encode("utf-8"))
         (root / "VERSION").chmod(0o644)
         if extension == ".zip":
             with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
                 for entry in files:
                     archive.write(root / entry, entry)
         else:
+            # tarfile.add() 继承源文件 mode，而 Windows 无 POSIX 权限位会让 chmod 结果不可见；
+            # 显式写死条目 mode，保证解包后可执行位与配置权限在各平台一致
             with tarfile.open(target, "w:gz") as archive:
                 for entry in files:
-                    archive.add(root / entry, arcname=entry, recursive=False)
+                    info = archive.gettarinfo(root / entry, arcname=entry)
+                    info.mode = 0o755 if entry == name else 0o644
+                    with open(root / entry, "rb") as payload:
+                        archive.addfile(info, payload)
     return target
 
 
