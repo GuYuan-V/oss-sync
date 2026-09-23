@@ -100,10 +100,12 @@ sudo env OSS_RELEASE_PROXY=official OSS_VERSION=v1.2.3 oss 1
 | 更新 | `sudo oss 1` / `sudo oss update` |
 | 启动或停止 | `sudo oss 2` / `sudo oss start`、`sudo oss stop` |
 | 重启 | `sudo oss 3` / `sudo oss restart` |
-| 修改容量或端口 | `sudo oss 4` |
+| 修改容量或端口 | `sudo oss 4`，非交互可用 `sudo oss 4 1 <GiB>`、`sudo oss 4 2 <端口>` |
 | 持续查看日志 | `sudo oss 5` |
 | 详细状态 | `sudo oss status` |
-| 卸载 | `sudo oss 6` / `sudo oss uninstall` |
+| 卸载 | `sudo oss 6` / `sudo oss uninstall`，非交互可用 `sudo oss 6 1 yes`（全部）、`sudo oss 6 2 yes`（保留数据） |
+
+修改容量/端口和卸载都支持直接把子菜单编号与数值作为参数传入，二级菜单不需要的值不必传；不传时仍然逐级交互询问。
 
 更新和修改端口/容量需要短暂停机。下载、SHA-256、归档结构、程序版本和脚本语法检查均在停机前完成；下载失败不停止旧服务。包内路径、文件类型、VERSION 和二进制版本都通过校验后，备份旧程序/配置/脚本和 unit，停止服务、替换文件、启动并核对就绪版本。健康检查约等待 60 轮，每轮 HTTP 超时上限 2 秒，轮间等待 1 秒。失败时尝试恢复旧程序和配置以及原启停状态。
 
