@@ -404,19 +404,23 @@ manage_update() {
 }
 
 manage_modify() {
-  printf '1 修改容量\n2 修改端口\n0 返回\n'
   local choice value
-  choice="$(prompt '选择 [0]：')"
-  choice="${choice:-0}"
+  choice="${1:-}"
+  value="${2:-}"
+  if [[ -z "$choice" ]]; then
+    printf '1 修改容量\n2 修改端口\n0 返回\n'
+    choice="$(prompt '选择 [0]：')"
+    choice="${choice:-0}"
+  fi
   case "$choice" in
     1|storage)
       acquire_lock
-      value="$(prompt "容量上限 GiB（当前 ${DEPLOY_LIMIT:-0}，0 不限）：")"
+      [[ -n "$value" ]] || value="$(prompt "容量上限 GiB（当前 ${DEPLOY_LIMIT:-0}，0 不限）：")"
       OSS_INSTALL_DIR="$DIR" OSS_STORAGE_LIMIT_GB="$value" deploy configure
       ;;
     2|port)
       acquire_lock
-      value="$(prompt "新端口（当前 ${DEPLOY_PORT:-8080}）：")"
+      [[ -n "$value" ]] || value="$(prompt "新端口（当前 ${DEPLOY_PORT:-8080}：")"
       OSS_INSTALL_DIR="$DIR" OSS_PORT="$value" deploy configure
       ;;
     0) return 0 ;;
@@ -427,11 +431,15 @@ manage_modify() {
 manage_uninstall() {
   printf '1 卸载全部（同时删除数据）\n2 保留数据\n0 返回\n'
   local choice answer
-  choice="$(prompt '选择 [0]：')"
-  choice="${choice:-0}"
+  choice="${1:-}"
+  answer="${2:-}"
+  if [[ -z "$choice" ]]; then
+    choice="$(prompt '选择 [0]：')"
+    choice="${choice:-0}"
+  fi
   case "$choice" in
     1|all)
-      answer="$(prompt '将删除全部数据且无法恢复，确认卸载全部？[y/N]：')"
+      [[ -n "$answer" ]] || answer="$(prompt '将删除全部数据且无法恢复，确认卸载全部？[y/N]：')"
       [[ "$answer" == y || "$answer" == yes ]] || return 0
       acquire_lock
       systemctl disable --now oss-sync
@@ -446,7 +454,7 @@ manage_uninstall() {
       MENU_EXIT=1
       ;;
     2|keep)
-      answer="$(prompt '保留数据，仅卸载服务？[y/N]：')"
+      [[ -n "$answer" ]] || answer="$(prompt '保留数据，仅卸载服务？[y/N]：')"
       [[ "$answer" == y || "$answer" == yes ]] || return 0
       acquire_lock
       systemctl disable --now oss-sync
@@ -490,9 +498,9 @@ manage() {
         systemctl restart oss-sync
         info '服务已重启'
         ;;
-      4|modify) manage_modify ;;
+      4|modify) manage_modify "${2:-}" "${3:-}" ;;
       5|logs) journalctl -u oss-sync -f ;;
-      6|uninstall) manage_uninstall ;;
+      6|uninstall) manage_uninstall "${2:-}" "${3:-}" ;;
       status) systemctl status oss-sync --no-pager ;;
       *) fail '无效操作' ;;
     esac

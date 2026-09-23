@@ -146,10 +146,10 @@ with tempfile.TemporaryDirectory(prefix='oss-deploy-test-') as work:
         (release / asset).write_bytes(original_archive)
         checksums()
         assert (root / 'pid').exists()
-        run(['bash', str(dest / 'oss.sh'), '7', '2'])
+        run(['bash', str(dest / 'oss.sh'), '4', '1', '2'])
         assert 'OSS_STORAGE_MAX_TOTAL_SIZE_MB=2048' in (dest / 'service.env').read_text()
         new_port = free_port()
-        run(['bash', str(dest / 'oss.sh'), '8', str(new_port)])
+        run(['bash', str(dest / 'oss.sh'), '4', '2', str(new_port)])
         assert f'OSS_SERVER_PORT={new_port}' in (dest / 'service.env').read_text()
         with (root / 'run/lock').open('w') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -157,7 +157,7 @@ with tempfile.TemporaryDirectory(prefix='oss-deploy-test-') as work:
             assert (root / 'pid').exists()
         previous = (dest / 'service.env').read_bytes()
         (root / 'fail-start').touch()
-        run(['bash', str(dest / 'oss.sh'), '8', str(free_port())], ok=False)
+        run(['bash', str(dest / 'oss.sh'), '4', '2', str(free_port())], ok=False)
         assert (dest / 'service.env').read_bytes() == previous
         assert (root / 'pid').exists()
         old_binary = (dest / 'bin/oss-server').read_bytes()
@@ -180,7 +180,7 @@ with tempfile.TemporaryDirectory(prefix='oss-deploy-test-') as work:
         run(['bash', str(dest / 'oss.sh'), 'install'], ok=False)
         assert (dest / 'service.env').read_bytes() == previous
         assert config.read_bytes() == original
-        run(['bash', str(dest / 'oss.sh'), '2', 'yes'])
+        run(['bash', str(dest / 'oss.sh'), '6', '2', 'yes'])
         assert (dest / 'data/oss.db').exists()
         assert not (root / 'system/oss-sync.service').exists()
         checksums()
