@@ -51,7 +51,7 @@
           {{range .Data.Files}}
           <tr>
             <td>
-              {{if eq .Type "markdown"}}
+              {{if .Preview}}
               <a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/files/preview?path={{.Path}}">{{.Name}}</a>
               {{else}}
               <strong>{{.Name}}</strong>

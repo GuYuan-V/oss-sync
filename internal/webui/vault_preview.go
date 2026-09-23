@@ -23,25 +23,30 @@ const (
 	sourcePreviewMode   = "source"
 )
 
-type vaultMarkdownPreviewData struct {
+type vaultFilePreviewData struct {
 	VaultID     string
 	Path        string
 	Name        string
 	Directory   string
 	Breadcrumbs []breadcrumbRow
+	Kind        string
 	Mode        string
 	ContentText string
 	ContentHTML template.HTML
 }
 
-func (h *Handler) previewMarkdownFile(c *gin.Context) {
+func (h *Handler) previewFile(c *gin.Context) {
 	vault, _, ok := h.resolveVaultPage(c)
 	if !ok {
 		return
 	}
 	filePath, valid := normalizeWebPath(c.Query("path"))
-	if !valid || !isMarkdownFile(filePath) {
-		c.String(http.StatusBadRequest, "markdown path required")
+	kind := ""
+	if valid {
+		kind = previewKind(filePath)
+	}
+	if !valid || kind == "" {
+		c.String(http.StatusBadRequest, "previewable path required")
 		return
 	}
 
@@ -51,51 +56,53 @@ func (h *Handler) previewMarkdownFile(c *gin.Context) {
 		c.String(http.StatusNotFound, "file not found")
 		return
 	}
-	fh, err := os.Open(filestore.DiskPath(h.Cfg.Storage.DataDir, file))
-	if err != nil {
-		c.String(http.StatusNotFound, "file content missing")
-		return
-	}
-	defer fh.Close()
-
-	raw, err := io.ReadAll(fh)
-	if err != nil {
-		c.String(http.StatusInternalServerError, "file content unreadable")
-		return
-	}
-	mode := strings.ToLower(strings.TrimSpace(c.Query("mode")))
-	if mode != sourcePreviewMode {
-		mode = renderedPreviewMode
-	}
-
-	var contentHTML template.HTML
-	var contentText string
-	if mode == sourcePreviewMode {
-		contentText = string(raw)
-	} else {
-		shareID, err := h.previewMarkdownShareID(vault, filePath)
-		if err != nil {
-			c.String(http.StatusInternalServerError, "markdown preview unavailable")
-			return
-		}
-		rendered, err := markdown.RenderMarkdownWithAssets(nil, blog.NewAssetResolver(shareID), string(raw))
-		if err != nil {
-			c.String(http.StatusInternalServerError, "markdown preview unavailable")
-			return
-		}
-		contentHTML = template.HTML(rendered)
-	}
 
 	directory := filepath.ToSlash(filepath.Dir(filePath))
 	if directory == "." {
 		directory = ""
 	}
+	data := vaultFilePreviewData{
+		VaultID: vault.ID, Path: filePath, Name: filepath.Base(filePath), Directory: directory,
+		Breadcrumbs: buildVaultBreadcrumbs(directory), Kind: kind,
+	}
+
+	if kind == "markdown" {
+		fh, err := os.Open(filestore.DiskPath(h.Cfg.Storage.DataDir, file))
+		if err != nil {
+			c.String(http.StatusNotFound, "file content missing")
+			return
+		}
+		defer fh.Close()
+		raw, err := io.ReadAll(fh)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "file content unreadable")
+			return
+		}
+		mode := strings.ToLower(strings.TrimSpace(c.Query("mode")))
+		if mode != sourcePreviewMode {
+			mode = renderedPreviewMode
+		}
+		data.Mode = mode
+		if mode == sourcePreviewMode {
+			data.ContentText = string(raw)
+		} else {
+			shareID, err := h.previewMarkdownShareID(vault, filePath)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "markdown preview unavailable")
+				return
+			}
+			rendered, err := markdown.RenderMarkdownWithAssets(nil, blog.NewAssetResolver(shareID), string(raw))
+			if err != nil {
+				c.String(http.StatusInternalServerError, "markdown preview unavailable")
+				return
+			}
+			data.ContentHTML = template.HTML(rendered)
+		}
+	}
+
 	ld := layoutData{}
 	h.setVaultLayout(&ld, vault)
-	h.renderVault(c, ld, "vault-preview", h.t(c, "page.vault_preview", vault.Name, filepath.Base(filePath)), vaultMarkdownPreviewData{
-		VaultID: vault.ID, Path: filePath, Name: filepath.Base(filePath), Directory: directory, Mode: mode,
-		Breadcrumbs: buildVaultBreadcrumbs(directory), ContentHTML: contentHTML, ContentText: contentText,
-	})
+	h.renderVault(c, ld, "vault-preview", h.t(c, "page.vault_preview", vault.Name, filepath.Base(filePath)), data)
 }
 
 func isMarkdownFile(path string) bool {

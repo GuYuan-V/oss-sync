@@ -146,7 +146,7 @@ func (h *Handler) Register(r *gin.Engine) {
 		console.GET("/vaults/new", h.newVaultPage)
 		console.GET("/vaults/:vault_id", h.vaultFilesPage)
 		console.POST("/vaults/:vault_id/files/delete", h.deleteFile)
-		console.GET("/vaults/:vault_id/files/preview", h.previewMarkdownFile)
+		console.GET("/vaults/:vault_id/files/preview", h.previewFile)
 		console.GET("/vaults/:vault_id/files/download", h.downloadFile)
 		console.GET("/vaults/:vault_id/shares", h.sharesPage)
 		console.POST("/vaults/:vault_id/shares", h.createShare)

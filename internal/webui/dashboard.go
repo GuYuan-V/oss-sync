@@ -184,10 +184,11 @@ func (h *Handler) setVaultLayout(ld *layoutData, vault models.Vault) {
 // 仓库文件
 
 type fileRow struct {
-	Name string
-	Path string
-	Type string
-	Size int64
+	Name    string
+	Path    string
+	Type    string
+	Size    int64
+	Preview string
 }
 
 type folderRow struct {
@@ -265,10 +266,11 @@ func buildVaultFileBrowser(files []models.File, directory string) vaultFileBrows
 			continue
 		}
 		browser.Files = append(browser.Files, fileRow{
-			Name: name,
-			Path: file.Path,
-			Type: file.Type,
-			Size: file.Size,
+			Name:    name,
+			Path:    file.Path,
+			Type:    file.Type,
+			Size:    file.Size,
+			Preview: previewKind(file.Path),
 		})
 	}
 
@@ -360,9 +362,20 @@ func (h *Handler) downloadFile(c *gin.Context) {
 		return
 	}
 	defer fh.Close()
-	if isTextFile(path) {
+	// 内联预览仅允许位图与 PDF；其余类型即使请求 inline 也强制下载，避免同源脚本注入
+	c.Header("X-Content-Type-Options", "nosniff")
+	switch {
+	case c.Query("inline") == "1":
+		if ctype, ok := inlineContentType(path); ok {
+			c.Header("Content-Type", ctype)
+			c.Header("Content-Disposition", "inline; filename="+strconv.Quote(filepath.Base(path)))
+		} else {
+			c.Header("Content-Type", "application/octet-stream")
+			c.Header("Content-Disposition", "attachment; filename="+strconv.Quote(filepath.Base(path)))
+		}
+	case isTextFile(path):
 		c.Header("Content-Type", "text/plain; charset=utf-8")
-	} else {
+	default:
 		c.Header("Content-Type", "application/octet-stream")
 		c.Header("Content-Disposition", "attachment; filename="+strconv.Quote(filepath.Base(path)))
 	}
