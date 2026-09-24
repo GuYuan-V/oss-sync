@@ -14,6 +14,8 @@ func init() {
 		"vault.create_independent_vault_desc": {"每个仓库拥有独立的同步 revision、文件路径和权限。创建后你自动成为 owner，并可添加成员或授权设备。", "Each vault has independent sync revision, file paths, and permissions. You become the owner on creation and can add members or authorize devices."},
 		"vault.description":                   {"描述", "Description"},
 		"vault.create_vault":                  {"创建仓库", "Create vault"},
+		"vault.edit":                          {"编辑", "Edit"},
+		"vault.preview_sandbox_note":          {"预览已禁用脚本并在隔离沙箱中渲染。", "Preview runs in an isolated sandbox with scripts disabled."},
 		"vault.browse_files_desc":             {"浏览仓库文件，预览 Markdown 或图片，下载附件，或从修改记录与回收站恢复。", "Browse vault files, preview Markdown or images, download attachments, or restore from history and recycle bin."},
 		"vault.template_and_sync":             {"模板与同步策略", "Template and sync"},
 		"vault.file_count":                    {"文件数", "File count"},

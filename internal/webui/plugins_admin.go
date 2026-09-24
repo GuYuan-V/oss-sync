@@ -23,6 +23,8 @@ type adminPluginsData struct {
 	GuideHTML template.HTML
 	Error     string
 	Saved     bool
+	EditID    string
+	EditFiles []serverplugin.EditablePluginFile
 }
 
 func (h *Handler) adminPluginPage(c *gin.Context) {
@@ -61,6 +63,14 @@ func (h *Handler) adminPluginsPage(c *gin.Context) {
 		return
 	}
 	d.Plugins = plugins
+	d.EditID = strings.TrimSpace(c.Query("edit"))
+	if d.EditID != "" {
+		d.EditFiles, err = h.pluginManager.EditableFiles(d.EditID)
+		if err != nil {
+			d.Error = err.Error()
+			d.EditID = ""
+		}
+	}
 	h.render(c, http.StatusOK, "admin-plugins", h.t(c, "page.admin_plugins"), "admin", "admin-plugins", d)
 }
 
@@ -111,6 +121,18 @@ func (h *Handler) adminPluginUpload(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/plugins?saved=1")
+}
+
+func (h *Handler) adminPluginFileSave(c *gin.Context) {
+	if h.pluginManager == nil {
+		h.redirectPluginError(c, "admin.plugins_unavailable")
+		return
+	}
+	if err := h.pluginManager.SaveTextFile(c.Request.Context(), c.Param("id"), c.PostForm("path"), c.PostForm("content")); err != nil {
+		c.Redirect(http.StatusSeeOther, "/dashboard/admin/plugins?edit="+url.QueryEscape(c.Param("id"))+"&error="+url.QueryEscape(err.Error()))
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/dashboard/admin/plugins?edit="+url.QueryEscape(c.Param("id"))+"&saved=1")
 }
 
 func (h *Handler) adminPluginEnable(c *gin.Context) {

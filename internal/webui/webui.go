@@ -148,6 +148,7 @@ func (h *Handler) Register(r *gin.Engine) {
 		console.POST("/vaults/:vault_id/files/delete", h.deleteFile)
 		console.GET("/vaults/:vault_id/files/preview", h.previewFile)
 		console.GET("/vaults/:vault_id/files/download", h.downloadFile)
+		console.GET("/vaults/:vault_id/files/sandbox", h.sandboxPreviewFile)
 		console.GET("/vaults/:vault_id/shares", h.sharesPage)
 		console.POST("/vaults/:vault_id/shares", h.createShare)
 		console.POST("/vaults/:vault_id/shares/:share_id/allow_copy", h.toggleShareCopy)
@@ -205,23 +206,12 @@ func (h *Handler) Register(r *gin.Engine) {
 		adminGroup.GET("/system/update/status", h.adminUpdateStatusJSON)
 		adminGroup.POST("/system/update/check", h.adminUpdateCheck)
 		adminGroup.POST("/system/update", h.adminUpdateTrigger)
-		adminGroup.GET("/themes", h.adminThemesPage)
-		adminGroup.POST("/themes/upload", h.adminThemeUpload)
-		adminGroup.POST("/themes/scaffold", h.adminThemeScaffold)
-		adminGroup.GET("/themes/:name/download", h.adminThemeDownload)
-		adminGroup.POST("/themes/:name/delete", h.adminThemeDelete)
-		adminGroup.POST("/themes/:name/files/save", h.adminThemeFileSave)
-		adminGroup.GET("/console-themes", h.adminConsoleThemesPage)
-		adminGroup.POST("/console-themes/upload", h.adminConsoleThemeUpload)
-		adminGroup.POST("/console-themes/scaffold", h.adminConsoleThemeScaffold)
-		adminGroup.GET("/console-themes/:name/download", h.adminConsoleThemeDownload)
-		adminGroup.POST("/console-themes/:name/files/save", h.adminConsoleThemeFileSave)
-		adminGroup.POST("/console-themes/:name/delete", h.adminConsoleThemeDelete)
 		adminGroup.GET("/plugins", h.adminPluginsPage)
 		adminGroup.POST("/plugins/upload", h.adminPluginUpload)
 		adminGroup.POST("/plugins/:id/enable", h.adminPluginEnable)
 		adminGroup.POST("/plugins/:id/disable", h.adminPluginDisable)
 		adminGroup.POST("/plugins/:id/delete", h.adminPluginDelete)
+		adminGroup.POST("/plugins/:id/files/save", h.adminPluginFileSave)
 		adminGroup.GET("/plugins/:id/page/:slug", h.adminPluginPage)
 		adminGroup.GET("/backups/:id/download", h.downloadBackup)
 		adminGroup.POST("/backups/:id/delete", h.deleteBackup)
@@ -403,21 +393,18 @@ func (h *Handler) t(c *gin.Context, key string, args ...any) string {
 // 渲染
 
 // render 使用统一布局渲染控制台页面；page 为页面模板名
-func (h *Handler) render(c *gin.Context, status int, page, title string, activeGroup, activePage string, data any) {
+func (h *Handler) render(c *gin.Context, status int, page, title, activeGroup, activePage string, data any) {
 	u := h.webUser(c)
-	ld := layoutData{
-		Page:        page,
-		Title:       title,
-		Username:    "",
-		IsAdmin:     false,
-		ShowSidebar: u != nil,
-		ActiveGroup: activeGroup,
-		ActivePage:  activePage,
-	}
+	ld := layoutData{Page: page, Title: title, Username: "", IsAdmin: false, ShowSidebar: u != nil, ActiveGroup: activeGroup, ActivePage: activePage}
 	if u != nil {
 		ld.Username = u.Username
 		ld.IsAdmin = u.Role == "admin"
 		ld.ConsoleThemeName = h.selectedConsoleTheme(u.ID)
+		if selected, disabledTheme := h.selectedConsoleThemeState(u.ID); disabledTheme != "" {
+			ld.ConsoleThemeName = selected
+			ld.Flash = h.t(c, "admin.plugin_theme_disabled", disabledTheme)
+			ld.FlashKind = "error"
+		}
 		ld.Language = h.userLang(c)
 		ld.NavVaults = h.accessibleVaults(u)
 		h.setPluginNavigationForUser(&ld, u)
@@ -432,11 +419,9 @@ func (h *Handler) render(c *gin.Context, status int, page, title string, activeG
 }
 
 // setPluginNavigationForUser 构造插件设置导航。
-// 所有声明了设置的启用插件都会列出，不依赖是否进入某个仓库；
-// 具体生效的仓库由插件设置页的仓库选择器决定。
-func (h *Handler) setPluginNavigationForUser(ld *layoutData, _ *models.User) {
+func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 	for _, manifest := range serverplugin.BuiltinManifests() {
-		if manifest.ID == "papertrail-settings" && len(manifest.Settings) > 0 {
+		if manifest.ID == "papertrail-settings" && len(manifest.Settings) > 0 && len(h.pluginSettingVaults(u, manifest.ID)) > 0 {
 			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
 			break
 		}
@@ -533,7 +518,7 @@ func setPageHeaders(c *gin.Context) {
 	c.Header(
 		"Content-Security-Policy",
 		"default-src 'none'; connect-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; "+
-			"form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+			"frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 	)
 }
 

@@ -382,99 +382,33 @@ go run ./cmd/server
 
 ## 插件、博客模板与控制台主题
 
-  
+插件是唯一可安装的扩展包。插件负责功能、设置、路由、Hook、数据、后台页面、任务与外部集成，也可以在 `manifest.json` 中声明博客模板和控制台主题。
 
-扩展系统：
-
-  
-
-- **插件负责功能**：设置、路由、Hook、数据、后台页面、任务与外部集成。
-
-- **博客模板只负责公开页面的结构与样式**：`template.html`、`style.css`、可选 `theme.js` 与 `theme.json` 能力声明。
-
-- **控制台主题只负责控制台外观**：`theme.css`、图片与字体。
-
-  
-
-需要设置时在插件中声明，服务端会在一级「插件设置」菜单中渲染，并按 Vault 保存。
-
-  
+内置博客模板 `default`、`papertrail` 与内置控制台主题 `default` 始终显示在对应选择框中，不能删除。启用插件声明的资源后，展示名称会追加到对应选择框。模板和控制台主题不再作为独立列表显示，也不再提供独立上传、脚手架、删除或管理页面。
 
 ### 创建插件
 
-  
-
 1. 复制 [`examples/server-plugin-echo`](examples/server-plugin-echo)，修改插件 ID 与处理函数。
-
 2. 在与 `manifest.json` 同级目录构建可执行文件。
-
-3. 打包为 ZIP，在 **管理后台 → 插件管理** 上传。
-
-  
+3. 按需添加 `blog_themes`、`console_themes`，目录分别必须包含 `template.html` 或 `theme.css`。
+4. 打包为 ZIP，在 **管理后台 → 插件管理** 上传。
 
 ```powershell
-
 cd examples/server-plugin-echo
-
 go build -o plugin.exe .
-
 Compress-Archive manifest.json,plugin.exe my-plugin.zip
-
 ```
 
-  
+资源声明示例：
 
-插件使用公开 Go SDK `github.com/helantianshen/oss-sync/pkg/ossplugin`，不需要手写 JSON Lines 协议。可执行插件运行在服务器上，一个 ZIP 可同时包含 `plugin.exe`、`plugin` 与 `plugin-arm64`，并在 `manifest.json` 中声明 `windows-amd64`、`linux-amd64`、`linux-arm64`，服务端自动选择；只部署单一平台时构建该平台即可。
-
-  
-
-### 创建模板或主题
-
-  
-
-博客模板：
-
-  
-
-```text
-
-my-template.zip
-
-├── template.html
-
-├── style.css
-
-├── theme.js
-
-├── theme.json
-
-└── plugin.zip   # 可选功能插件
-
+```json
+{
+  "blog_themes": [{"id":"clean","name":"Clean reading","path":"blog/clean"}],
+  "console_themes": [{"id":"clean","name":"Clean console","path":"console/clean"}]
+}
 ```
 
-  
-
-控制台主题：
-
-  
-
-```text
-
-my-console-theme.zip
-
-├── theme.css
-
-├── images/
-
-├── fonts/
-
-└── plugin.zip   # 可选功能插件
-
-```
-
-  
-
-需要关联功能时，把已构建的插件 ZIP 放到包根目录并命名为 `plugin.zip`。上传模板或主题时会自动安装、启用并建立关联，不需要额外填写关联表单。网页控制台内置简短的模板指南、服务器主题指南与插件指南，均提供可直接修改的最小示例。
+插件使用公开 Go SDK `github.com/helantianshen/oss-sync/pkg/ossplugin`，不需要手写 JSON Lines 协议。服务端直接运行预编译的 WASM 或可执行插件；插件页的在线编辑只允许校验通过的文本资源，二进制入口只读。完整契约见网页内置「插件指南」。
 
   
 

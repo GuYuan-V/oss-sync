@@ -192,6 +192,51 @@ func (s ServiceClient) Hook(ctx context.Context, name string, payload any, resul
 	return s.client.HostCall(ctx, "host.hook", map[string]any{"name": name, "payload": payload}, result)
 }
 
+// FileWriteResult 描述 host.file.put 成功写入后的文件元数据
+type FileWriteResult struct {
+	ID       uint   `json:"id"`
+	VaultID  string `json:"vault_id"`
+	Path     string `json:"path"`
+	Hash     string `json:"hash"`
+	Size     int64  `json:"size"`
+	Revision int64  `json:"revision"`
+}
+
+// PutFile 以内存内容写入 vault 文件，宿主复用真实同步写入管线（落盘、修订、通知、协作）
+// path 为 vault 内相对路径，content 为完整文件内容，空串写入空文件
+func (s ServiceClient) PutFile(ctx context.Context, vaultID, path, content string) (FileWriteResult, error) {
+	var result FileWriteResult
+	err := s.client.HostCall(ctx, "host.file.put", map[string]any{
+		"vault_id": vaultID,
+		"path":     path,
+		"content":  content,
+	}, &result)
+	return result, err
+}
+
+// FileContent 描述 host.file.get 返回的文件元数据；Content 仅对 markdown 文件填充
+type FileContent struct {
+	ID        uint   `json:"id"`
+	VaultID   string `json:"vault_id"`
+	Path      string `json:"path"`
+	Type      string `json:"type"`
+	Hash      string `json:"hash"`
+	Size      int64  `json:"size"`
+	Revision  int64  `json:"revision"`
+	IsDeleted bool   `json:"is_deleted"`
+	Content   string `json:"content"`
+}
+
+// GetFile 读取 vault 文件的元数据与（markdown）内容
+func (s ServiceClient) GetFile(ctx context.Context, vaultID, path string) (FileContent, error) {
+	var result FileContent
+	err := s.client.HostCall(ctx, "host.file.get", map[string]any{
+		"vault_id": vaultID,
+		"path":     path,
+	}, &result)
+	return result, err
+}
+
 type Client struct {
 	in        *bufio.Scanner
 	out       *bufio.Writer
@@ -291,6 +336,19 @@ func (c *Client) handleRequest(incoming frame) {
 
 func (c *Client) WriteTextResponse(status int, text string) Response {
 	return Response{Status: status, Headers: map[string]string{"Content-Type": "text/plain; charset=utf-8"}, BodyBase64: base64.StdEncoding.EncodeToString([]byte(text))}
+}
+
+// WriteJSONResponse 把任意可 JSON 编码的值写成插件响应，适用于 blog.data、API 路由与管理页面数据接口
+func (c *Client) WriteJSONResponse(status int, value any) (Response, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return Response{}, fmt.Errorf("encode JSON response: %w", err)
+	}
+	return Response{
+		Status:     status,
+		Headers:    map[string]string{"Content-Type": "application/json; charset=utf-8"},
+		BodyBase64: base64.StdEncoding.EncodeToString(encoded),
+	}, nil
 }
 
 func (c *Client) HostCall(ctx context.Context, method string, params any, result any) error {

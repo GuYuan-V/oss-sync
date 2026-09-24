@@ -1,98 +1,135 @@
-A server plugin owns functionality. It can provide settings, routes, hooks, admin pages, tasks, database tables, and integrations.
+# Server Plugin Guide
 
-## 1. Create a Go plugin
+## 1. Plugins are the only installation entry point
 
-Copy `examples/server-plugin-echo` and change the plugin ID. Import the SDK:
+Administrators upload one ZIP from **Admin settings → Plugins**. The plugin page is the single place to install, enable, disable, delete, and edit plugin text resources.
 
-```go
-import "github.com/helantianshen/oss-sync/pkg/ossplugin"
-```
+Blog templates and console themes are no longer uploaded, scaffolded, deleted, or maintained as separate packages. They are optional presentation resources carried by a plugin:
 
-Register a route and handler:
+- Built-in blog templates `default` and `papertrail` always exist and cannot be deleted.
+- The built-in console theme `default` always exists and cannot be deleted.
+- Resources declared by enabled plugins are appended to the matching selector.
+- When a plugin is disabled, its options disappear from selectors. A saved selection falls back to a built-in resource while the signed-in user keeps seeing a notice until they switch manually.
 
-```go
-registration := ossplugin.Registration{
-  Routes: []ossplugin.Route{{Method: "GET", Path: "/hello", Callback: "hello", Auth: "public"}},
-}
+## 2. ZIP layout
 
-ossplugin.RunMain(registration, func(client *ossplugin.Client) error {
-  return client.On("hello", func(_ context.Context, _ ossplugin.Request) (ossplugin.Response, error) {
-    return client.WriteTextResponse(200, "hello"), nil
-  })
-})
-```
-
-The SDK handles the process protocol. Do not write JSON Lines frames yourself.
-
-## 2. Build the ZIP
-
-Build only for the platform that runs the server. A Docker/Linux amd64 package is:
+Minimal WASM plugin:
 
 ```text
 manifest.json
-plugin
+plugin.wasm
 ```
 
-Use this manifest:
+Executable plugin:
+
+```text
+manifest.json
+bin/plugin.exe
+bin/plugin
+assets/...
+blog/clean/template.html
+blog/clean/style.css
+blog/clean/theme.json
+console/clean/theme.css
+console/clean/assets/...
+```
+
+Executable plugins must include a prebuilt entrypoint for the server platform. The server runs the binary directly; it does not compile Go or execute a custom build command on the VM. Executable plugins have the file, network, database, environment, and process permissions of the server account. Upload only trusted code.
+
+## 3. Manifest resources
+
+`blog_themes` and `console_themes` are optional arrays. A plugin may provide neither, one kind, or both. Each resource needs a unique ID, display name, and package directory:
 
 ```json
 {
-  "id": "hello-plugin",
-  "name": "Hello plugin",
+  "id": "reading-tools",
+  "name": "Reading tools",
   "version": "1.0.0",
   "api_version": 1,
   "runtime": "executable",
-  "entrypoints": {"linux-amd64": "plugin"}
+  "entrypoints": {
+    "windows-amd64": "bin/plugin.exe",
+    "linux-amd64": "bin/plugin"
+  },
+  "routes": [],
+  "blog_themes": [
+    { "id": "clean", "name": "Clean reading", "path": "blog/clean" }
+  ],
+  "console_themes": [
+    { "id": "clean", "name": "Clean console", "path": "console/clean" }
+  ]
 }
 ```
 
-Build and package from the plugin source directory:
+Rules:
 
-```bash
-GOOS=linux GOARCH=amd64 go build -o plugin .
-zip hello-plugin.zip manifest.json plugin
+- Resource IDs use lowercase letters, digits, `-`, and `_`, and are unique within each array.
+- `path` is a directory inside the ZIP. Absolute paths, `.`, `..`, and backslashes are rejected.
+- A blog resource must contain `template.html`.
+- A console resource must contain `theme.css`.
+- The display name appears in the user selector. The internal value is `plugin-id--resource-id`.
+- Templates and themes own structure, style, and static assets. Functionality, settings, routes, data, and tasks belong to the plugin.
+
+## 4. Blog template fields
+
+Blog templates use Go `html/template`. Common fields:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `.Title` | string | Browser title |
+| `.ThemeName` | string | Current internal template name |
+| `.ThemeBaseURL` | string | Static asset base URL |
+| `.ThemeConfigJS` | JS | Safely serialized plugin settings |
+| `.PluginData` | map | Data returned by enabled plugins through `blog.data` |
+| `.IsHome` | bool | Whether this is the blog home |
+| `.ContentHTML` | HTML | Rendered Markdown body |
+| `.ArticlePost` | struct | Article title, date, categories, tags, cover, and reading metadata |
+
+Plugin IDs may contain hyphens. Use `pluginField` for safe access:
+
+```gotemplate
+{{with pluginField .PluginData "reading-tools" "recommendations"}}
+  {{range .Items}}<a href="{{.URL}}">{{.Title}}</a>{{end}}
+{{end}}
 ```
 
-For a Windows server:
+`safeHTML` is for trusted plugin HTML. Plugins own the safety of their returned content. Inline scripts remain subject to the page CSP; use a same-origin plugin asset or route when script behavior is required.
 
-```powershell
-go build -o plugin.exe .
-Compress-Archive manifest.json,plugin.exe hello-plugin.zip
-```
+## 5. Plugin data and request context
 
-One ZIP may include multiple binaries. Add `windows-amd64`, `linux-amd64`, and `linux-arm64` entries to `entrypoints`; the server selects the matching file automatically. If you only deploy to one platform, include only that platform.
+A plugin registering `blog.data` receives the current page context:
 
-## 3. Add settings or more features
+- `vault_id`, `share_id`, `path`
+- `is_home`, `is_folder`
+- `method`, `request_url`, `query`
+- `headers`, `cookies`, `client_ip`
 
-Put functional settings in `registration.Settings`, not in a template or theme. Add any of these when needed:
+The returned JSON is exposed under `.PluginData[plugin-id]`. A failed or empty response becomes an empty object and does not make the whole page fall back. Comments, VIP, and subscription features can use this context for their own identity and authorization model and register plugin routes for submissions.
 
-```text
-Hooks, Routes, Middleware, AdminPages, Assets,
-Tasks, Migrations, Dependencies, Lifecycle
-```
+## 6. Plugin settings
 
-The SDK service clients include `Users`, `Vaults`, `Files`, `Shares`, `Devices`, `Collaborations`, and `Blog`. They can call the host database, core models, settings, and other plugin hooks.
+Declare `text`, `textarea`, `url`, `choice`, or non-nested `group` fields in `settings`. Once enabled, the plugin appears in the top-level **Plugin settings** menu. Values are stored per Vault and sent to the plugin through `settings`.
 
-## 4. Link a plugin to a template or theme
+Settings do not belong in a blog template or console theme and should not use a separate `settings.json`.
 
-1. Build the plugin ZIP.
-2. Create a blog template or console theme.
-3. Put the plugin ZIP at its root and name it `plugin.zip`.
-4. Upload the template or theme.
+## 7. Online editing
 
-Example:
+The plugin management page can edit recognized text resources, including:
 
-```text
-my-template.zip
-├── template.html
-├── style.css
-├── theme.js
-├── theme.json
-└── plugin.zip
-```
+- `manifest.json`
+- Template HTML, CSS, JS, JSON, and Markdown
+- Console theme CSS, JSON, SVG, and other text metadata
 
-OSS Sync installs, enables, and associates the plugin automatically. The plugin settings then appear in the top-level Plugin settings menu.
+Binary entrypoints, `plugin.wasm`, and other binary files are read-only. Saving a text resource revalidates the manifest, declared resource directories, and plugin startup; validation failure keeps the previous file and running version.
 
-## 5. Important boundary
+Online editing does not compile Go source into a new binary. Change plugin logic locally, build the platform binaries, and upload a new plugin package.
 
-Templates and console themes provide presentation only. Plugins provide all functionality and functional settings. Executable plugins run with the server account's file, network, database, environment, and process permissions. Upload only code you trust.
+## 8. Lifecycle and trust
+
+- ZIP paths, sizes, file counts, entrypoints, and manifest are validated before installation.
+- Enabling a plugin materializes its declared templates and themes.
+- Disabling or deleting a plugin removes its materialized resources.
+- A plugin must be disabled before deletion.
+- Built-in templates and themes are unaffected by plugin deletion.
+- Executable plugins are trusted server code, not a sandbox.
+- Uploaders are responsible for custom template and plugin-returned content.

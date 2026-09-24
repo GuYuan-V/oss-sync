@@ -34,11 +34,35 @@ type Handler struct {
 	Cfg         *config.Config
 	tpl         *template.Template
 	pluginHooks PluginHookRunner
+	pluginData  PluginDataHookRunner
 }
 
 // PluginHookRunner 描述博客渲染所需的宿主插件钩子契约
 type PluginHookRunner interface {
 	ApplyHook(context.Context, string, PluginHookPayload) (string, error)
+}
+
+// PluginDataHookRunner 收集插件为模板注入的展示数据。
+// 每个注册了 blog.data 钩子的插件返回一段 JSON，宿主以插件 ID 为键合并到 .PluginData
+type PluginDataHookRunner interface {
+	ApplyHookData(context.Context, string, PluginDataPayload) (map[string]any, error)
+}
+
+// PluginDataPayload 是 blog.data 钩子的输入，插件据此返回当前页面应展示的数据。
+// HTTP 上下文允许受信插件自建会员 Cookie、评论身份和任意访问策略，不要求宿主预定义业务模型
+type PluginDataPayload struct {
+	VaultID    string              `json:"vault_id"`
+	Theme      string              `json:"theme"`
+	ShareID    string              `json:"share_id"`
+	Path       string              `json:"path"`
+	IsHome     bool                `json:"is_home"`
+	IsFolder   bool                `json:"is_folder"`
+	Method     string              `json:"method"`
+	RequestURL string              `json:"request_url"`
+	Query      map[string][]string `json:"query,omitempty"`
+	Headers    map[string][]string `json:"headers,omitempty"`
+	Cookies    map[string]string   `json:"cookies,omitempty"`
+	ClientIP   string              `json:"client_ip,omitempty"`
 }
 
 type PluginHookPayload struct {
@@ -52,6 +76,11 @@ type PluginHookPayload struct {
 // SetPluginHooks 接入受信服务端插件钩子，供博客渲染调用
 func (h *Handler) SetPluginHooks(runner PluginHookRunner) {
 	h.pluginHooks = runner
+}
+
+// SetPluginDataHooks 接入插件展示数据注入，模板通过 index .PluginData "插件ID" 或 pluginField 读取
+func (h *Handler) SetPluginDataHooks(runner PluginDataHookRunner) {
+	h.pluginData = runner
 }
 
 func New(db *gorm.DB, cfg *config.Config) (*Handler, error) {
@@ -175,6 +204,11 @@ type renderParams struct {
 	BannerURL       string
 	MobileBannerURL string
 	ArticlePost     ArticleMeta
+	// 插件注入的展示数据；插件 ID 可含连字符，模板用 index/pluginField 读取；
+	// 已注册插件注入空对象，未设字段取零值，避免整页回退
+	PluginData map[string]any
+	// FilePath 是当前文章在仓库内的相对路径，仅用于插件数据钩子上下文，不直接渲染
+	FilePath string
 }
 
 func (h *Handler) shareRenderParams(share models.Share, setting *models.VaultSetting) renderParams {
@@ -244,6 +278,8 @@ func (h *Handler) loadVaultSettings(userID uint, vaultID string) (*models.VaultS
 }
 
 func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
+	// 先收集插件展示数据，内容过滤与主题渲染都可能依赖其中的上下文
+	p.PluginData = h.collectPluginData(c, p)
 	if h.pluginHooks != nil && p.ContentHTML != "" {
 		filtered, err := h.pluginHooks.ApplyHook(c.Request.Context(), "blog.content", PluginHookPayload{
 			VaultID: p.VaultID,
@@ -272,15 +308,22 @@ func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
 		p.ThemeName = "default"
 		p.ThemeBaseURL = "/themes/default"
 	} else {
-		if custom, err := h.customThemeTemplate(p.ThemeName); err == nil {
+		custom, err := h.customThemeTemplate(p.ThemeName)
+		if err == nil {
 			var rendered bytes.Buffer
-			if err := custom.Execute(&rendered, p); err == nil {
+			if execErr := custom.Execute(&rendered, p); execErr == nil {
 				c.Header("Content-Type", "text/html; charset=utf-8")
 				_, _ = c.Writer.Write(rendered.Bytes())
 				return
+			} else {
+				err = execErr
 			}
 		}
-		// 自定义主题无效或不完整时不得影响已发布笔记，回退到内置页面与资源
+		// 自定义主题无效或不完整时不得影响已发布笔记，回退到内置页面与资源；
+		// 通过响应头暴露回退原因，避免“静默变默认主题”难以排查
+		if err != nil {
+			c.Header("X-Theme-Fallback", sanitizeHeaderValue(p.ThemeName+": "+err.Error()))
+		}
 		p.ThemeName = "default"
 		p.ThemeBaseURL = "/themes/default"
 	}
@@ -369,6 +412,7 @@ func (h *Handler) handleSingle(c *gin.Context) {
 	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
 	params := h.shareRenderParams(share, us)
 	params.ArticleTitle, params.ArticlePost = buildArticleMeta(fm, body, f.Path, f.UpdatedAt, assetResolver.ResolveAsset)
+	params.FilePath = f.Path
 	params.Title = params.ArticleTitle + " · OSS"
 	params.ContentHTML = template.HTML(html)
 	h.renderTemplate(c, params)
@@ -455,6 +499,7 @@ func (h *Handler) renderFolderFile(c *gin.Context, share models.Share, f models.
 	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
 	params := h.shareRenderParams(share, us)
 	params.ArticleTitle, params.ArticlePost = buildArticleMeta(fm, body, f.Path, f.UpdatedAt, assetResolver.ResolveAsset)
+	params.FilePath = f.Path
 	params.Title = params.ArticleTitle + " · " + share.TargetPath
 	params.ContentHTML = template.HTML(html)
 	h.renderTemplate(c, params)

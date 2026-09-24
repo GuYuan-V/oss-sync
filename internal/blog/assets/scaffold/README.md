@@ -5,9 +5,9 @@
 - `template.html`：页面布局，使用 Go `html/template` 语法。
 - `style.css`：主题样式，使用 CSS custom properties 定义颜色。
 - `theme.js`：页面脚本，提供主题切换与交互。
-- 不要添加 `settings.json`：模板只负责样式，功能设置必须由 `plugin.zip` 提供。
+- 不要添加 `settings.json`：功能设置必须在插件 manifest 的 `settings` 中声明。
 
-可用模板字段（自定义模板以 `missingkey=error` 渲染，引用下表以外的字段会让整页失败并回退到内置 `default` 主题；完整说明见“模板管理 → 模板指南”）：
+可用模板字段（自定义模板以 `missingkey=error` 渲染，引用下表以外的字段会让整页失败并回退到内置 `default` 主题；完整说明见网页内置「插件指南」）：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -34,6 +34,4 @@
 
 文章 Markdown 顶部完整闭合的 `---` frontmatter（`title` / `description` / `published` / `category` / `tags` / `image`）作为上表元数据并从正文隐藏；未闭合或损坏的块保留原文。
 
-主题名仅允许字母、数字、连字符和下划线。修改文件后刷新公开页面即可生效。
-
-如果需要设置项，请创建服务端插件，在插件的 `registration.Settings` 中声明字段，再把插件包放到模板根目录并命名为 `plugin.zip`。
+主题资源目录由插件 manifest 的 `blog_themes[].path` 声明；管理员上传并启用插件后，资源才会出现在选择框。功能设置在插件的 `settings` 中声明，不把插件 ZIP 嵌套进模板目录。

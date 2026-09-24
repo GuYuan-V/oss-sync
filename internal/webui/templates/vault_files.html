@@ -63,6 +63,7 @@
             <td>
               <div class="action-cell">
                 {{if eq .Type "markdown"}}
+                {{if $.Data.MDEditorEnabled}}<a class="quiet-link" href="/md-editor?vault_id={{$.Data.VaultID}}&amp;path={{urlquery .Path}}">{{$.Layout.T "vault.edit"}}</a>{{end}}
                 <a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/history?path={{urlquery .Path}}">{{$.Layout.T "common.history"}}</a>
                 {{end}}
                 <a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/files/download?path={{.Path}}">{{$.Layout.T "common.download"}}</a>

@@ -209,15 +209,16 @@ type vaultFileBrowser struct {
 }
 
 type vaultFilesData struct {
-	VaultID      string
-	VaultName    string
-	StorageUsed  int64
-	StorageQuota int64
-	FileCount    int
-	Folders      []folderRow
-	Files        []fileRow
-	Breadcrumbs  []breadcrumbRow
-	Error        string
+	VaultID         string
+	VaultName       string
+	StorageUsed     int64
+	StorageQuota    int64
+	FileCount       int
+	Folders         []folderRow
+	Files           []fileRow
+	Breadcrumbs     []breadcrumbRow
+	Error           string
+	MDEditorEnabled bool
 }
 
 func (h *Handler) vaultFilesPage(c *gin.Context) {
@@ -242,6 +243,8 @@ func (h *Handler) vaultFilesPage(c *gin.Context) {
 	d.Files = browser.Files
 	d.Breadcrumbs = browser.Breadcrumbs
 	d.FileCount = len(files)
+	// md-editor 插件启用时，模板为 Markdown 文件显示编辑入口
+	d.MDEditorEnabled = h.pluginManager != nil && h.pluginManager.IsEnabled("md-editor")
 	ld := layoutData{}
 	h.setVaultLayout(&ld, vault)
 	h.renderVault(c, ld, "vault-files", h.t(c, "page.vault_files", vault.Name), d)
@@ -326,6 +329,28 @@ func (h *Handler) renderVaultStatus(c *gin.Context, status int, ld layoutData, p
 	ld.Username = u.Username
 	ld.IsAdmin = u.Role == "admin"
 	ld.ConsoleThemeName = h.selectedConsoleTheme(u.ID)
+	if selected, disabledTheme := h.selectedConsoleThemeState(u.ID); disabledTheme != "" {
+		ld.ConsoleThemeName = selected
+		ld.Flash = h.t(c, "admin.plugin_theme_disabled", disabledTheme)
+		ld.FlashKind = "error"
+	}
+	if ld.CurrentVault != nil && h.pluginManager != nil {
+		var setting models.VaultSetting
+		if err := h.DB.Where("vault_id = ?", ld.CurrentVault.ID).First(&setting).Error; err == nil && setting.ThemeName != "" {
+			options, _ := h.pluginManager.EnabledThemeOptions()
+			available := false
+			for _, option := range options {
+				if option.Name == setting.ThemeName {
+					available = true
+					break
+				}
+			}
+			if !available {
+				ld.Flash = h.t(c, "admin.plugin_theme_disabled", setting.ThemeName)
+				ld.FlashKind = "error"
+			}
+		}
+	}
 	ld.Language = h.userLang(c)
 	ld.NavVaults = h.accessibleVaults(u)
 	h.setPluginNavigationForUser(&ld, u)
@@ -868,16 +893,24 @@ func (h *Handler) vaultSettingsPage(c *gin.Context) {
 	if !ok {
 		return
 	}
-	d := vaultSettingsData{
-		VaultID: vault.ID, VaultName: vault.Name,
-		ThemeName: "default", CanManage: vaultaccess.CanManage(role),
-		CustomFragmentsEnabled: settingspolicy.CustomFragmentsEnabled(h.DB),
-		Error:                  c.Query("error"), Saved: c.Query("saved") == "1",
-	}
-	themes, err := blog.ListThemes(h.DB, h.Cfg.Storage.DataDir)
-	if err != nil {
-		h.render(c, http.StatusInternalServerError, "vault-settings", h.t(c, "page.vault_settings", vault.Name), "vault", "vault-settings", d)
-		return
+	d := vaultSettingsData{VaultID: vault.ID, VaultName: vault.Name, ThemeName: "default", CanManage: vaultaccess.CanManage(role), CustomFragmentsEnabled: settingspolicy.CustomFragmentsEnabled(h.DB), Error: c.Query("error"), Saved: c.Query("saved") == "1"}
+	var themes []blog.ThemeInfo
+	if h.pluginManager != nil {
+		blogThemes, _ := h.pluginManager.EnabledThemeOptions()
+		for _, option := range blogThemes {
+			source := blog.SourcePlugin
+			if option.Builtin {
+				source = blog.SourceBuiltin
+			}
+			themes = append(themes, blog.ThemeInfo{Name: option.Name, DisplayName: option.Label, Source: source, SupportsPublicBlog: option.SupportsPublicBlog})
+		}
+	} else {
+		var err error
+		themes, err = blog.ListThemes(h.DB, h.Cfg.Storage.DataDir)
+		if err != nil {
+			h.render(c, http.StatusInternalServerError, "vault-settings", h.t(c, "page.vault_settings", vault.Name), "vault", "vault-settings", d)
+			return
+		}
 	}
 	d.Themes = themes
 	var setting models.VaultSetting
@@ -885,10 +918,8 @@ func (h *Handler) vaultSettingsPage(c *gin.Context) {
 		if setting.ThemeName != "" {
 			d.ThemeName = setting.ThemeName
 		}
-		d.RecycleBinDays = setting.RecycleBinDays
-		d.IsPublicBlog = setting.IsPublicBlog
-		d.CustomHeader = setting.CustomHeader
-		d.CustomFooter = setting.CustomFooter
+		d.RecycleBinDays, d.IsPublicBlog = setting.RecycleBinDays, setting.IsPublicBlog
+		d.CustomHeader, d.CustomFooter = setting.CustomHeader, setting.CustomFooter
 	}
 	for _, theme := range themes {
 		if theme.Name == d.ThemeName {
@@ -899,12 +930,11 @@ func (h *Handler) vaultSettingsPage(c *gin.Context) {
 	if !d.ThemeSupportsPublicBlog {
 		d.IsPublicBlog = false
 	}
-	defDays, err := systemDefaultRecycleDays(h.DB)
-	if err == nil {
-		d.DefaultRecycleDays = defDays
-	} else {
-		d.DefaultRecycleDays = 30
+	defaultDays, defaultErr := systemDefaultRecycleDays(h.DB)
+	if defaultErr != nil {
+		defaultDays = 30
 	}
+	d.DefaultRecycleDays = defaultDays
 	ld := layoutData{}
 	h.setVaultLayout(&ld, vault)
 	h.renderVault(c, ld, "vault-settings", h.t(c, "page.vault_settings", vault.Name), d)
@@ -920,15 +950,15 @@ func (h *Handler) saveVaultSettings(c *gin.Context) {
 		return
 	}
 	themeName := strings.TrimSpace(c.PostForm("theme_name"))
-	themeExists := false
 	themes, err := blog.ListThemes(h.DB, h.Cfg.Storage.DataDir)
 	if err != nil {
 		c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/settings?error="+url.QueryEscape(h.t(c, "err.load_themes_failed")))
 		return
 	}
+	themeExists, supportsPublic := false, false
 	for _, theme := range themes {
 		if theme.Name == themeName {
-			themeExists = true
+			themeExists, supportsPublic = true, theme.SupportsPublicBlog
 			break
 		}
 	}
@@ -940,44 +970,26 @@ func (h *Handler) saveVaultSettings(c *gin.Context) {
 	if err != nil || days < 0 || days > 3650 {
 		days = 0
 	}
-	isPublic := c.PostForm("is_public_blog") == "on"
-	if !blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, themeName) {
-		isPublic = false
+	isPublic := c.PostForm("is_public_blog") == "on" && supportsPublic
+	customHeader, customFooter := "", ""
+	if settingspolicy.CustomFragmentsEnabled(h.DB) {
+		customHeader, customFooter = trimCustomHTMLFragment(c.PostForm("custom_header")), trimCustomHTMLFragment(c.PostForm("custom_footer"))
 	}
-	if !blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, themeName) {
-		isPublic = false
-	}
-	customFragmentsEnabled := settingspolicy.CustomFragmentsEnabled(h.DB)
-	customHeader := ""
-	customFooter := ""
-	if customFragmentsEnabled {
-		customHeader = trimCustomHTMLFragment(c.PostForm("custom_header"))
-		customFooter = trimCustomHTMLFragment(c.PostForm("custom_footer"))
-	}
-
 	var setting models.VaultSetting
-	settingErr := h.DB.Where("vault_id = ?", vault.ID).First(&setting).Error
-	if settingErr != nil && !errors.Is(settingErr, gorm.ErrRecordNotFound) {
-		c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/settings?error="+url.QueryEscape(h.t(c, "err.save_failed")))
-		return
-	}
-	if errors.Is(settingErr, gorm.ErrRecordNotFound) {
-		setting = models.VaultSetting{
-			VaultID: vault.ID, ThemeName: themeName, KeepDirectoryTree: true,
-			RecycleBinDays: days, IsPublicBlog: isPublic,
-			CustomHeader: customHeader, CustomFooter: customFooter,
-		}
+	findErr := h.DB.Where("vault_id = ?", vault.ID).First(&setting).Error
+	if errors.Is(findErr, gorm.ErrRecordNotFound) {
+		setting = models.VaultSetting{VaultID: vault.ID, ThemeName: themeName, KeepDirectoryTree: true, RecycleBinDays: days, IsPublicBlog: isPublic, CustomHeader: customHeader, CustomFooter: customFooter}
 		if err := h.DB.Create(&setting).Error; err != nil {
 			c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/settings?error="+url.QueryEscape(h.t(c, "err.save_failed")))
 			return
 		}
+	} else if findErr != nil {
+		c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/settings?error="+url.QueryEscape(h.t(c, "err.save_failed")))
+		return
 	} else {
-		updates := map[string]any{
-			"theme_name": themeName, "recycle_bin_days": days, "is_public_blog": isPublic,
-		}
-		if customFragmentsEnabled {
-			updates["custom_header"] = customHeader
-			updates["custom_footer"] = customFooter
+		updates := map[string]any{"theme_name": themeName, "recycle_bin_days": days, "is_public_blog": isPublic}
+		if settingspolicy.CustomFragmentsEnabled(h.DB) {
+			updates["custom_header"], updates["custom_footer"] = customHeader, customFooter
 		}
 		if err := h.DB.Model(&setting).Updates(updates).Error; err != nil {
 			c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/settings?error="+url.QueryEscape(h.t(c, "err.save_failed")))

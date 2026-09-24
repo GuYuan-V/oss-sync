@@ -18,7 +18,7 @@ manifest.json
 plugin.wasm
 ```
 
-WASM packages must contain exactly those two files. Existing ABI v1 packages continue to work.
+WASM packages with no declared presentation resources contain exactly those two files. A package that declares blog or console resources may include the declared resource directories as additional text and static asset files.
 
 ### Executable package
 
@@ -52,6 +52,21 @@ The executable entrypoint is selected from the current server platform. `any` is
 ```
 
 Entrypoint paths use forward slashes and must stay inside the package. Use a platform-specific executable when the binary format differs between operating systems. `args` are passed unchanged to the process.
+
+### Optional presentation resources
+
+Plugins may declare presentation resources in `manifest.json`:
+
+```json
+{
+  "blog_themes": [{"id":"clean","name":"Clean reading","path":"blog/clean"}],
+  "console_themes": [{"id":"clean","name":"Clean console","path":"console/clean"}]
+}
+```
+
+Each blog resource directory must contain `template.html`; each console resource directory must contain `theme.css`. Resource IDs are unique within their array. The server materializes resources only while the plugin is enabled, appends their display names to the matching user selector, and removes them when the plugin is disabled or deleted. Built-in `default` and `papertrail` blog templates and built-in console `default` remain independent and read-only.
+
+The plugin admin page is the only resource management page. It can edit validated text files such as `manifest.json`, HTML, CSS, JS, JSON, Markdown, SVG, and YAML. Binary entrypoints and `plugin.wasm` are read-only. Text changes are validated and reloaded immediately; the server does not compile edited Go source.
 
 Plugin IDs are lowercase names containing letters, digits, and hyphens. Route paths are fixed, absolute paths with no wildcards, query markers, or path traversal. A plugin can declare at most 32 routes.
 

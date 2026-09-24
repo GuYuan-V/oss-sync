@@ -71,6 +71,32 @@ func TestValidateManifestAcceptsHostRenderedSettings(t *testing.T) {
 	}
 }
 
+func TestValidateManifestAcceptsPluginThemeResources(t *testing.T) {
+	manifest := Manifest{
+		ID: "theme-plugin", Name: "Theme plugin", Version: "1.0.0", APIVersion: CurrentAPIVersion,
+		Routes:        []RouteSpec{{Method: "GET", Path: "/hello", Public: true}},
+		BlogThemes:    []ThemeResource{{ID: "clean", Name: "Clean", Path: "blog/clean"}},
+		ConsoleThemes: []ThemeResource{{ID: "clean", Name: "Clean console", Path: "console/clean"}},
+	}
+	if err := ValidateManifest(manifest); err != nil {
+		t.Fatalf("ValidateManifest() error = %v", err)
+	}
+	if got := manifest.BlogThemes[0].Key(manifest.ID); got != "theme-plugin--clean" {
+		t.Fatalf("resource key = %q", got)
+	}
+}
+
+func TestValidateManifestRejectsUnsafePluginThemeResource(t *testing.T) {
+	manifest := Manifest{
+		ID: "theme-plugin", Name: "Theme plugin", Version: "1.0.0", APIVersion: CurrentAPIVersion,
+		Routes:     []RouteSpec{{Method: "GET", Path: "/hello", Public: true}},
+		BlogThemes: []ThemeResource{{ID: "clean", Name: "Clean", Path: "../blog"}},
+	}
+	if err := ValidateManifest(manifest); !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("ValidateManifest() error = %v, want ErrInvalidManifest", err)
+	}
+}
+
 func TestPluginRequestIncludesVaultSettings(t *testing.T) {
 	raw, err := json.Marshal(PluginRequest{Method: "GET", Path: "/hello", Settings: map[string]any{"endpoint": "https://example.com"}})
 	if err != nil {

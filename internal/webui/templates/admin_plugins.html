@@ -14,7 +14,7 @@
 <div class="control-grid">
   <article class="gate-panel">
     <div class="gate-panel__copy">
-      <span class="eyebrow">Upload plugin</span>
+      <span class="eyebrow">Install package</span>
       <h2>{{.Layout.T "admin.upload_plugin"}}</h2>
       <p>{{.Layout.T "admin.upload_plugin_desc"}}</p>
     </div>
@@ -56,25 +56,26 @@
               <strong>{{.Name}}</strong>
               <span class="plugin-id">{{.ID}}</span>
               {{if .Description}}<small class="plugin-description">{{.Description}}</small>{{end}}
-              {{if .Associations}}<small class="plugin-association">{{$.Layout.T "admin.plugin_associated_with"}}: {{.AssociationSummary}}</small>{{end}}
               {{if .LastError}}<small class="plugin-error" role="alert">{{.LastError}}</small>{{end}}
             </td>
             <td>{{.Version}}</td>
             <td>
-               {{if .Builtin}}
-               <span class="panel-note">{{$.Layout.T "admin.plugin_builtin"}}</span>
-               {{else if .Enabled}}
+              {{if .Builtin}}
+              <span class="panel-note">{{$.Layout.T "admin.plugin_builtin"}}</span>
+              {{else if .Enabled}}
               <span class="role role--admin">{{$.Layout.T "admin.plugin_enabled"}}</span>
               {{else}}
               <span class="role role--user">{{$.Layout.T "admin.plugin_disabled"}}</span>
-               {{end}}
+              {{end}}
             </td>
             <td>{{len .Routes}}</td>
             <td><span class="panel-note">{{.Runtime}}</span><br>{{formatBytes .PayloadSize}}</td>
             <td class="action-cell">
               {{if .Builtin}}
               <span class="panel-note">{{$.Layout.T "admin.plugin_builtin"}}</span>
-              {{else if .Enabled}}
+              {{else}}
+              <a class="quiet-link" href="/dashboard/admin/plugins?edit={{.ID}}">{{$.Layout.T "common.edit"}}</a>
+              {{if .Enabled}}
               <form method="post" action="/dashboard/admin/plugins/{{.ID}}/disable">
                 <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
                 <button class="text-button" type="submit">{{$.Layout.T "admin.plugin_disable"}}</button>
@@ -84,7 +85,8 @@
                 <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
                 <button class="text-button" type="submit">{{$.Layout.T "admin.plugin_enable"}}</button>
               </form>
-               <form method="post" action="/dashboard/admin/plugins/{{.ID}}/delete" data-confirm="{{if .AssociationSummary}}{{$.Layout.T "admin.plugin_delete_confirm_associations" .Name .AssociationSummary}}{{else}}{{$.Layout.T "admin.plugin_delete_confirm" .Name}}{{end}}">
+              {{end}}
+              <form method="post" action="/dashboard/admin/plugins/{{.ID}}/delete" data-confirm="{{$.Layout.T "admin.plugin_delete_confirm" .Name}}">
                 <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
                 <button class="text-button text-button--danger" type="submit">{{$.Layout.T "common.delete"}}</button>
               </form>
@@ -99,6 +101,35 @@
     </div>
   </article>
 </div>
+
+{{if .Data.EditID}}
+<section class="ledger-panel plugin-editor">
+  <header>
+    <div>
+      <span class="eyebrow">Plugin resources</span>
+      <h2>{{.Layout.T "admin.plugin_edit_title" .Data.EditID}}</h2>
+      <p class="panel-note">{{.Layout.T "admin.plugin_edit_hint"}}</p>
+    </div>
+    <a class="quiet-link" href="/dashboard/admin/plugins">{{.Layout.T "common.close"}}</a>
+  </header>
+  {{range .Data.EditFiles}}
+  <details class="theme-file-editor" {{if eq .Path "manifest.json"}}open{{end}}>
+    <summary>{{.Path}}</summary>
+    <form method="post" action="/dashboard/admin/plugins/{{$.Data.EditID}}/files/save" class="stack-form">
+      <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
+      <input type="hidden" name="path" value="{{.Path}}">
+      <label>
+        <span class="sr-only">{{$.Layout.T "admin.file_path_content" .Path}}</span>
+        <textarea name="content" rows="18" class="code-textarea">{{.Content}}</textarea>
+      </label>
+      <button class="button button--primary" type="submit">{{$.Layout.T "admin.save_file" .Path}}</button>
+    </form>
+  </details>
+  {{else}}
+  <p class="panel-empty">{{.Layout.T "admin.no_editable_text_files"}}</p>
+  {{end}}
+</section>
+{{end}}
 
 <div class="modal theme-guide-modal" id="plugin-guide" role="dialog" aria-modal="true" aria-labelledby="plugin-guide-title">
   <div class="modal__backdrop" data-modal-close></div>

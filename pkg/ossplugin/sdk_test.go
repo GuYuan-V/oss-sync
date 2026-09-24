@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"strings"
@@ -96,4 +97,26 @@ func TestClientHostCallRoundTrip(t *testing.T) {
 	}
 	_ = hostInput.Close()
 	_ = hostOutput.Close()
+}
+
+func TestWriteJSONResponse(t *testing.T) {
+	client := &Client{}
+	response, err := client.WriteJSONResponse(201, map[string]any{"ok": true, "name": "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Status != 201 || response.Headers["Content-Type"] != "application/json; charset=utf-8" {
+		t.Fatalf("response = %#v", response)
+	}
+	raw, err := base64.StdEncoding.DecodeString(response.BodyBase64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["ok"] != true || decoded["name"] != "demo" {
+		t.Fatalf("body = %#v", decoded)
+	}
 }

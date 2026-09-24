@@ -109,8 +109,6 @@
            <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-users"}} is-active{{end}}" href="/dashboard/admin">{{.Layout.T "common.user_management"}}</a></li>
           <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-vaults"}} is-active{{end}}" href="/dashboard/admin/vaults">{{.Layout.T "common.all_vaults"}}</a></li>
           <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-devices"}} is-active{{end}}" href="/dashboard/admin/devices">{{.Layout.T "common.all_devices"}}</a></li>
-          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-themes"}} is-active{{end}}" href="/dashboard/admin/themes">{{.Layout.T "common.template_management"}}</a></li>
-           <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-console-themes"}} is-active{{end}}" href="/dashboard/admin/console-themes">{{.Layout.T "common.server_themes"}}</a></li>
             <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "admin-plugins"}} is-active{{end}}" href="/dashboard/admin/plugins">{{.Layout.T "common.plugin_management"}}</a></li>
             {{range .Layout.PluginAdminPages}}
             <li><a class="side-nav__sublink{{if and (eq $.Layout.ActivePage "admin-plugin-page") (eq $.Layout.ActivePluginID .PluginID)}} is-active{{end}}" href="/dashboard/admin/plugins/{{.PluginID}}/page/{{.Slug}}">{{.Label}}</a></li>

@@ -34,19 +34,6 @@ func SupportsPublicBlog(dataDir, themeName string) bool {
 	return json.Unmarshal(raw, &metadata) == nil && metadata.SupportsPublicBlog
 }
 
-// ThemeHasBundledPlugin 判断自定义主题是否携带服务端插件包
-func ThemeHasBundledPlugin(dataDir, themeName string) bool {
-	if IsBuiltinTheme(themeName) {
-		return false
-	}
-	dir, err := themeDirectory(dataDir, themeName)
-	if err != nil {
-		return false
-	}
-	info, err := os.Stat(filepath.Join(dir, "plugin.zip"))
-	return err == nil && info.Mode().IsRegular()
-}
-
 const (
 	customTemplateFile = "template.html"
 	maxTemplateSize    = 1 << 20 // 页面布局模板上限为 1 MiB
@@ -157,5 +144,7 @@ func (h *Handler) customThemeTemplate(themeName string) (*template.Template, err
 	if err != nil {
 		return nil, err
 	}
-	return template.New("custom-theme").Option("missingkey=error").Parse(string(raw))
+	// missingkey=zero 让缺失的 map 键（ThemeConfig、PluginData 子键）退化为零值而非整页失败；
+	// 结构体字段缺失仍会报错，保留字段契约校验能力
+	return template.New("custom-theme").Funcs(customThemeFuncs()).Option("missingkey=zero").Parse(string(raw))
 }

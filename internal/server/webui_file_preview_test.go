@@ -20,7 +20,7 @@ func TestWebConsoleAttachmentPreview(t *testing.T) {
 
 	session, csrf := webLogin(t, router, "preview-owner", "password123")
 
-	// 文件列表：图片可点击预览，SVG 不提供预览链接
+	// 文件列表：图片与 SVG 均可点击预览（SVG 走隔离沙箱）
 	list := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID, nil, session, csrf)
 	if list.Code != http.StatusOK {
 		t.Fatalf("file list: %d", list.Code)
@@ -28,8 +28,8 @@ func TestWebConsoleAttachmentPreview(t *testing.T) {
 	if !strings.Contains(list.Body.String(), "/dashboard/vaults/"+vaultID+"/files/preview?path=pic.png") {
 		t.Fatalf("image should link to preview: %s", list.Body)
 	}
-	if strings.Contains(list.Body.String(), "files/preview?path=vector.svg") {
-		t.Fatalf("svg must not offer a preview link: %s", list.Body)
+	if !strings.Contains(list.Body.String(), "files/preview?path=vector.svg") {
+		t.Fatalf("svg should link to sandboxed preview: %s", list.Body)
 	}
 
 	// 图片预览页内联 <img>
@@ -49,10 +49,21 @@ func TestWebConsoleAttachmentPreview(t *testing.T) {
 		t.Fatalf("pdf preview page: %d body=%s", pdf.Code, pdf.Body)
 	}
 
-	// SVG 不可预览
+	// SVG 以隔离沙箱 iframe 预览：预览页返回 200 并引用沙箱端点
 	svgPreview := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/files/preview?path=vector.svg", nil, session, csrf)
-	if svgPreview.Code != http.StatusBadRequest {
-		t.Fatalf("svg preview must be rejected: %d", svgPreview.Code)
+	if svgPreview.Code != http.StatusOK ||
+		!strings.Contains(svgPreview.Body.String(), "file-preview--sandbox") ||
+		!strings.Contains(svgPreview.Body.String(), "files/sandbox?path=vector.svg") {
+		t.Fatalf("svg preview must render sandboxed: %d body=%s", svgPreview.Code, svgPreview.Body)
+	}
+	// 沙箱端点：正确 MIME + CSP sandbox + nosniff（隔离源、禁用脚本）
+	svgRaw := doForm(t, router, http.MethodGet, "/dashboard/vaults/"+vaultID+"/files/sandbox?path=vector.svg", nil, session, csrf)
+	if svgRaw.Code != http.StatusOK ||
+		!strings.Contains(svgRaw.Header().Get("Content-Type"), "image/svg+xml") ||
+		!strings.Contains(svgRaw.Header().Get("Content-Security-Policy"), "sandbox") ||
+		svgRaw.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("svg sandbox endpoint: %d ct=%q csp=%q", svgRaw.Code,
+			svgRaw.Header().Get("Content-Type"), svgRaw.Header().Get("Content-Security-Policy"))
 	}
 
 	// 图片内联下载：正确 MIME + inline + nosniff

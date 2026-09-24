@@ -2,6 +2,7 @@
 package consoletheme
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -26,10 +27,11 @@ var (
 )
 
 type Info struct {
-	Name      string `json:"name"`
-	Source    string `json:"source"`
-	FileCount int    `json:"file_count"`
-	Size      int64  `json:"size"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"`
+	Source      string `json:"source"`
+	FileCount   int    `json:"file_count"`
+	Size        int64  `json:"size"`
 }
 
 func ValidateName(name string) error {
@@ -92,14 +94,38 @@ func List(dataDir string) ([]Info, error) {
 		if statErr != nil {
 			continue
 		}
-		themes = append(themes, Info{
-			Name: entry.Name(), Source: "custom", FileCount: fileCount, Size: totalSize,
-		})
+		marker, markerErr := readPluginThemeMarker(filepath.Join(root, entry.Name()))
+		displayName, source := entry.Name(), "custom"
+		if markerErr == nil {
+			displayName, source = marker.Name, "plugin"
+		}
+		themes = append(themes, Info{Name: entry.Name(), DisplayName: displayName, Source: source, FileCount: fileCount, Size: totalSize})
 	}
 	sort.Slice(themes[1:], func(i, j int) bool {
 		return themes[i+1].Name < themes[j+1].Name
 	})
 	return themes, nil
+}
+
+type pluginThemeMarker struct {
+	PluginID   string `json:"plugin_id"`
+	ResourceID string `json:"resource_id"`
+	Name       string `json:"name"`
+}
+
+func readPluginThemeMarker(dir string) (pluginThemeMarker, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, ".oss-plugin-resource.json"))
+	if err != nil {
+		return pluginThemeMarker{}, err
+	}
+	var marker pluginThemeMarker
+	if err := json.Unmarshal(raw, &marker); err != nil {
+		return pluginThemeMarker{}, err
+	}
+	if marker.PluginID == "" || marker.ResourceID == "" || marker.Name == "" {
+		return pluginThemeMarker{}, errors.New("插件主题标记不完整")
+	}
+	return marker, nil
 }
 
 func Scaffold(dataDir, base, newName string) (string, error) {

@@ -156,8 +156,7 @@ func (h *Handler) pluginSettingVaults(u *models.User, pluginID string) []pluginS
 		}
 		out := make([]pluginSettingVaultOption, 0, len(vaults))
 		for _, vault := range vaults {
-			// 内置博客设置对任何支持公开博客的主题生效，不限于 papertrail
-			if blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, themeByVault[vault.ID]) {
+			if themeByVault[vault.ID] == "papertrail" {
 				out = append(out, pluginSettingVaultOption{ID: vault.ID, Name: vault.Name})
 			}
 		}

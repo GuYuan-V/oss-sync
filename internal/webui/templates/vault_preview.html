@@ -53,6 +53,9 @@
       <div class="file-preview file-preview--image"><img src="/dashboard/vaults/{{.Data.VaultID}}/files/download?path={{.Data.Path}}&inline=1" alt="{{.Data.Name}}"></div>
     {{else if eq .Data.Kind "pdf"}}
       <div class="file-preview file-preview--pdf"><iframe src="/dashboard/vaults/{{.Data.VaultID}}/files/download?path={{.Data.Path}}&inline=1" title="{{.Data.Name}}"></iframe></div>
+    {{else if eq .Data.Kind "sandboxed"}}
+      <p class="file-preview-note">{{$.Layout.T "vault.preview_sandbox_note"}}</p>
+      <div class="file-preview file-preview--sandbox"><iframe sandbox referrerpolicy="no-referrer" src="/dashboard/vaults/{{.Data.VaultID}}/files/sandbox?path={{.Data.Path}}" title="{{.Data.Name}}"></iframe></div>
     {{end}}
   </article>
 </div>

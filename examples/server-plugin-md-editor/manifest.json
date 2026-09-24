@@ -1,0 +1,26 @@
+{
+  "id": "md-editor",
+  "name": "Markdown Editor",
+  "version": "1.0.0",
+  "description": "在控制台内编辑并保存 vault 内的 Markdown 文件",
+  "api_version": 1,
+  "runtime": "executable",
+  "entrypoints": {
+    "linux-amd64": "plugin",
+    "windows-amd64": "plugin.exe"
+  },
+  "routes": [],
+  "registration": {
+    "routes": [
+      { "method": "GET", "path": "/md-editor", "callback": "editor.page", "auth": "user" },
+      { "method": "GET", "path": "/md-editor/content", "callback": "editor.content", "auth": "user" },
+      { "method": "POST", "path": "/md-editor/save", "callback": "editor.save", "auth": "user" }
+    ],
+    "assets": [
+      { "path": "easymde.min.js" },
+      { "path": "easymde.min.css" },
+      { "path": "fontawesome.min.css" },
+      { "path": "fonts/fontawesome-webfont.woff2" }
+    ]
+  }
+}

@@ -79,7 +79,7 @@ func (m *Manager) enable(ctx context.Context, id string) (resultErr error) {
 	if err := m.checkDependencies(registration.Dependencies); err != nil {
 		return m.enableError(id, err)
 	}
-	if err := m.applyMigrations(ctx, id, registration.Migrations); err != nil {
+	if err := m.syncThemeResources(id, packageData); err != nil {
 		return m.enableError(id, err)
 	}
 	if err := m.db.Model(&models.ServerPlugin{}).Where("id = ?", id).
@@ -126,13 +126,14 @@ func (m *Manager) disable(ctx context.Context, id string) error {
 	if instance != nil {
 		lifecycleErr = invokeInstanceLifecycle(ctx, instance, instance.Registration().Lifecycle.Deactivate, "deactivate")
 	}
+	resourceErr := m.removeOwnedThemeResources(id)
 	dbErr := m.db.Model(&models.ServerPlugin{}).Where("id = ?", id).
 		Updates(map[string]any{"enabled": false, "last_error": ""}).Error
 	var closeErr error
 	if instance != nil {
 		closeErr = instance.Close(ctx)
 	}
-	return errors.Join(lifecycleErr, dbErr, closeErr)
+	return errors.Join(lifecycleErr, resourceErr, dbErr, closeErr)
 }
 
 func (m *Manager) Delete(id string) error {
@@ -166,6 +167,9 @@ func (m *Manager) Delete(id string) error {
 	}
 	if err := instance.Close(deleteCtx); err != nil {
 		return fmt.Errorf("close plugin after uninstall: %w", err)
+	}
+	if err := m.removeOwnedThemeResources(id); err != nil {
+		return err
 	}
 	pluginDir := filepath.Join(m.root, id)
 	tombstone, err := stagePluginDeletion(m.root, pluginDir)
@@ -219,6 +223,9 @@ func (m *Manager) loadRecord(ctx context.Context, record models.ServerPlugin) er
 		return errors.Join(err, instance.Close(ctx))
 	}
 	if err := m.applyMigrations(ctx, record.ID, registration.Migrations); err != nil {
+		return errors.Join(err, instance.Close(ctx))
+	}
+	if err := m.syncThemeResources(record.ID, packageData); err != nil {
 		return errors.Join(err, instance.Close(ctx))
 	}
 	m.mu.Lock()

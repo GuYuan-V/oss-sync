@@ -87,7 +87,9 @@ func Build(deps Dependencies) (*gin.Engine, error) {
 		return nil, fmt.Errorf("blog.New: %w", err)
 	}
 	if deps.PluginManager != nil {
+		deps.PluginManager.SetFileWriter(syncH)
 		blogH.SetPluginHooks(deps.PluginManager)
+		blogH.SetPluginDataHooks(deps.PluginManager)
 	}
 	blogH.Register(r)
 

@@ -86,6 +86,45 @@ func (m *Manager) ApplyHook(ctx context.Context, hook string, payload blog.Plugi
 	return content, nil
 }
 
+// ApplyHookData 收集 blog.data 钩子的展示数据，以插件 ID 为键返回。
+// 只要插件注册了该钩子就写入对应键（失败或空则为空对象），保证模板对已装插件的字段访问不触发整页回退
+func (m *Manager) ApplyHookData(ctx context.Context, hook string, payload blog.PluginDataPayload) (map[string]any, error) {
+	out := map[string]any{}
+	for _, registration := range m.matchingHooks(hook) {
+		entry := map[string]any{}
+		response, err := m.invokeCallback(ctx, registration.PluginID, hookCallback(registration.Value.Hooks, hook), PluginRequest{
+			Method: "HOOK",
+			Path:   "/hooks/" + hook,
+			Hook:   hook,
+			Payload: map[string]any{
+				"vault_id":    payload.VaultID,
+				"theme":       payload.Theme,
+				"share_id":    payload.ShareID,
+				"path":        payload.Path,
+				"is_home":     payload.IsHome,
+				"is_folder":   payload.IsFolder,
+				"method":      payload.Method,
+				"request_url": payload.RequestURL,
+				"query":       payload.Query,
+				"headers":     payload.Headers,
+				"cookies":     payload.Cookies,
+				"client_ip":   payload.ClientIP,
+			},
+			Settings: pluginSettings(m.db, payload.VaultID, registration.PluginID),
+		})
+		if err == nil {
+			if body, decodeErr := decodePluginBody(response); decodeErr == nil && len(body) > 0 {
+				parsed := map[string]any{}
+				if json.Unmarshal(body, &parsed) == nil {
+					entry = parsed
+				}
+			}
+		}
+		out[registration.PluginID] = entry
+	}
+	return out, nil
+}
+
 // RenderAdminPage 调用指定插件管理页注册的回调
 func (m *Manager) RenderAdminPage(ctx context.Context, pluginID, slug string) (string, error) {
 	registration, ok := m.RegistrationFor(pluginID)

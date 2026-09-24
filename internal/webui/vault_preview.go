@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -103,6 +104,47 @@ func (h *Handler) previewFile(c *gin.Context) {
 	ld := layoutData{}
 	h.setVaultLayout(&ld, vault)
 	h.renderVault(c, ld, "vault-preview", h.t(c, "page.vault_preview", vault.Name, filepath.Base(filePath)), data)
+}
+
+// sandboxPreviewFile 以隔离源、禁用脚本的方式提供 HTML/SVG 原始内容，仅供沙箱 iframe 预览
+// CSP sandbox 指令不含 allow-scripts，响应处于不透明源且不执行脚本，无法读取控制台会话
+func (h *Handler) sandboxPreviewFile(c *gin.Context) {
+	vault, _, ok := h.resolveVaultPage(c)
+	if !ok {
+		return
+	}
+	path, valid := normalizeWebPath(c.Query("path"))
+	if !valid {
+		c.String(http.StatusBadRequest, "invalid path")
+		return
+	}
+	ctype, ok := sandboxContentType(path)
+	if !ok {
+		c.String(http.StatusBadRequest, "not a sandboxed previewable type")
+		return
+	}
+	var file models.File
+	if err := h.DB.Where("user_id = ? AND vault_id = ? AND path = ? AND is_deleted = ?",
+		vault.OwnerID, vault.ID, path, false).First(&file).Error; err != nil {
+		c.String(http.StatusNotFound, "file not found")
+		return
+	}
+	fh, err := os.Open(filestore.DiskPath(h.Cfg.Storage.DataDir, file))
+	if err != nil {
+		c.String(http.StatusNotFound, "file content missing")
+		return
+	}
+	defer fh.Close()
+	c.Header("Content-Security-Policy", "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Type", ctype)
+	c.Header("Content-Disposition", "inline; filename="+strconv.Quote(filepath.Base(path)))
+	c.Header("Cache-Control", "no-store")
+	if info, statErr := fh.Stat(); statErr == nil {
+		c.Header("Content-Length", strconv.FormatInt(info.Size(), 10))
+	}
+	c.Status(http.StatusOK)
+	_, _ = io.Copy(c.Writer, fh)
 }
 
 func isMarkdownFile(path string) bool {

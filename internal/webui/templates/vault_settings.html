@@ -23,7 +23,7 @@
         <span>{{.Layout.T "vault.blog_template"}}</span>
         <select name="theme_name">
           {{range .Data.Themes}}
-           <option value="{{.Name}}" data-supports-public-blog="{{.SupportsPublicBlog}}" {{if not .SupportsPublicBlog}}title="{{$.Layout.T "vault.public_blog_unsupported"}}"{{end}} {{if eq .Name $.Data.ThemeName}}selected{{end}}>{{.Name}}{{if eq .Source "builtin"}}{{$.Layout.T "vault.builtin_label"}}{{else}}{{$.Layout.T "vault.custom_label"}}{{end}}</option>
+          <option value="{{.Name}}" data-supports-public-blog="{{.SupportsPublicBlog}}" {{if not .SupportsPublicBlog}}title="{{$.Layout.T "vault.public_blog_unsupported"}}"{{end}} {{if eq .Name $.Data.ThemeName}}selected{{end}}>{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Name}}{{end}}{{if eq .Source "builtin"}}{{$.Layout.T "vault.builtin_label"}}{{else}}{{$.Layout.T "vault.custom_label"}}{{end}}</option>
           {{end}}
         </select>
         <small>{{.Layout.T "vault.template_note"}}</small>

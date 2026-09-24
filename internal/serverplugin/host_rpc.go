@@ -41,6 +41,8 @@ func (m *Manager) hostCall(
 		return m.hostVaultDelete(ctx, params)
 	case "host.file.get":
 		return m.hostFileGet(ctx, params)
+	case "host.file.put":
+		return m.hostFilePut(ctx, params)
 	case "host.share.create":
 		return modelWireResult(m.hostShareCreate(ctx, params))
 	case "host.share.update":

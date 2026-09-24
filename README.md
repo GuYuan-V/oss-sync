@@ -191,19 +191,16 @@ The plugin maintains `.oss-sync-state.json` (v3) at the Vault root for baselines
 
 ## Plugins, blog templates, and console themes
 
-The extension model has one rule:
+Plugins are the only installable extension package. They own functionality, settings, routes, hooks, data, admin pages, tasks, and integrations. A plugin may also declare blog templates and console themes in `manifest.json`.
 
-- **Plugins own functionality**: settings, routes, hooks, data, admin pages, tasks, and integrations.
-- **Blog templates own public-page structure and style**: `template.html`, `style.css`, optional `theme.js`, and `theme.json` capabilities.
-- **Console themes own console appearance**: `theme.css`, images, and fonts.
-
-Templates and themes do not store functional settings; do not add `settings.json` to a blog template. Declare settings in a plugin and the server renders them in the top-level **Plugin settings** menu, stored per Vault.
+Built-in blog templates `default` and `papertrail`, plus the built-in console theme `default`, remain visible in their selectors and cannot be deleted. When an enabled plugin declares resources, its display names are appended to the corresponding selectors. Templates and console themes are not shown as a separate plugin list and no longer have independent upload or management pages.
 
 ### Create a plugin
 
 1. Copy [`examples/server-plugin-echo`](examples/server-plugin-echo) and change the plugin ID and handlers.
 2. Build the executable next to `manifest.json`.
-3. Package it as a ZIP and upload it from **Admin settings → Plugins**.
+3. Add optional `blog_themes` and `console_themes` entries, with package directories containing `template.html` or `theme.css`.
+4. Package the plugin and upload it from **Admin settings → Plugins**.
 
 ```powershell
 cd examples/server-plugin-echo
@@ -211,32 +208,16 @@ go build -o plugin.exe .
 Compress-Archive manifest.json,plugin.exe my-plugin.zip
 ```
 
-Plugins use the public Go SDK at `github.com/helantianshen/oss-sync/pkg/ossplugin`, so no JSON Lines protocol code is needed. Executable plugins run on the server, and one ZIP may contain `plugin.exe`, `plugin`, and `plugin-arm64` with `windows-amd64`, `linux-amd64`, and `linux-arm64` entries in `manifest.json`; the server selects the matching one. Build only the platform you deploy to for the simplest setup.
+Resource example:
 
-### Create a template or theme
-
-Blog template:
-
-```text
-my-template.zip
-├── template.html
-├── style.css
-├── theme.js
-├── theme.json
-└── plugin.zip   # optional functionality
+```json
+{
+  "blog_themes": [{"id":"clean","name":"Clean reading","path":"blog/clean"}],
+  "console_themes": [{"id":"clean","name":"Clean console","path":"console/clean"}]
+}
 ```
 
-Console theme:
-
-```text
-my-console-theme.zip
-├── theme.css
-├── images/
-├── fonts/
-└── plugin.zip   # optional functionality
-```
-
-To associate functionality, place the built plugin ZIP at the package root as `plugin.zip`. Uploading the template or theme installs, enables, and associates it automatically, with no extra association form. The web console ships concise template, console theme, and plugin guides with copyable minimal examples.
+The server runs precompiled WASM or executable plugin payloads directly. Online editing in the plugin page is limited to validated text resources; binary entrypoints are read-only. See the embedded plugin guide for the resource contract, selectors, lifecycle, request context, and safety boundary.
 
 ---
 

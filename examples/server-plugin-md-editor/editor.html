@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Markdown 编辑器 · OSS Sync</title>
+<link rel="stylesheet" href="/plugins/md-editor/assets/fontawesome.min.css">
+<link rel="stylesheet" href="/plugins/md-editor/assets/easymde.min.css">
+<style>
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #0f1420; color: #e6e9ef; }
+  .bar { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid #263041; background: #141b2b; position: sticky; top: 0; }
+  .bar strong { color: #7aa2f7; }
+  .bar .path { font-size: 13px; color: #9fb0c8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .status { font-size: 13px; color: #9fb0c8; min-width: 96px; text-align: right; }
+  button { background: #3b5bdb; color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font-size: 14px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .wrap { padding: 16px; }
+  .EasyMDEContainer .CodeMirror { min-height: 60vh; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <strong>MD</strong>
+  <span class="path" id="path">…</span>
+  <span class="status" id="status"></span>
+  <button id="save" disabled>保存</button>
+</div>
+<div class="wrap"><textarea id="editor"></textarea></div>
+<script src="/plugins/md-editor/assets/easymde.min.js"></script>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var vaultID = q.get("vault_id") || "";
+  var path = q.get("path") || "";
+  var pathEl = document.getElementById("path");
+  var statusEl = document.getElementById("status");
+  var saveBtn = document.getElementById("save");
+  pathEl.textContent = path || "(未指定文件)";
+  function cookie(name) {
+    var hit = document.cookie.split("; ").find(function (row) { return row.indexOf(name + "=") === 0; });
+    return hit ? decodeURIComponent(hit.split("=")[1]) : "";
+  }
+  function setStatus(text) { statusEl.textContent = text; }
+  var easy = new EasyMDE({ element: document.getElementById("editor"), autoDownloadFontAwesome: false, spellChecker: false, status: false });
+  if (!vaultID || !path) { setStatus("缺少 vault_id/path"); return; }
+  setStatus("加载中…");
+  fetch("/md-editor/content?vault_id=" + encodeURIComponent(vaultID) + "&path=" + encodeURIComponent(path), { credentials: "same-origin" })
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function (d) { easy.value(d.content || ""); setStatus("已加载 rev " + d.revision); saveBtn.disabled = false; })
+    .catch(function (e) { setStatus("加载失败: " + e.message); });
+  saveBtn.addEventListener("click", function () {
+    saveBtn.disabled = true;
+    setStatus("保存中…");
+    fetch("/md-editor/save", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": cookie("oss_csrf") },
+      body: JSON.stringify({ vault_id: vaultID, path: path, content: easy.value() })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (x) { if (!x.ok) throw new Error(x.d.error || ("HTTP " + x.d)); setStatus("已保存 rev " + x.d.revision); saveBtn.disabled = false; })
+      .catch(function (e) { setStatus("保存失败: " + e.message); saveBtn.disabled = false; });
+  });
+})();
+</script>
+</body>
+</html>

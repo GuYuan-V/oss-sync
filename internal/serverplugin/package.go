@@ -42,18 +42,30 @@ var routePathPattern = regexp.MustCompile(`^/(?:[A-Za-z0-9._~-]+(?:/[A-Za-z0-9._
 
 // Manifest 是单个服务端插件包受信的解析后元数据
 type Manifest struct {
-	ID           string                   `json:"id"`
-	Name         string                   `json:"name"`
-	Version      string                   `json:"version"`
-	Description  string                   `json:"description,omitempty"`
-	APIVersion   int                      `json:"api_version"`
-	Routes       []RouteSpec              `json:"routes"`
-	Settings     []blog.ThemeSettingField `json:"settings,omitempty"`
-	Hooks        []HookSpec               `json:"hooks,omitempty"`
-	Registration *ExtensionRegistration   `json:"registration,omitempty"`
-	Runtime      string                   `json:"runtime,omitempty"`
-	Entrypoints  map[string]string        `json:"entrypoints,omitempty"`
-	Args         []string                 `json:"args,omitempty"`
+	ID            string                   `json:"id"`
+	Name          string                   `json:"name"`
+	Version       string                   `json:"version"`
+	Description   string                   `json:"description,omitempty"`
+	APIVersion    int                      `json:"api_version"`
+	Routes        []RouteSpec              `json:"routes"`
+	Settings      []blog.ThemeSettingField `json:"settings,omitempty"`
+	Hooks         []HookSpec               `json:"hooks,omitempty"`
+	Registration  *ExtensionRegistration   `json:"registration,omitempty"`
+	Runtime       string                   `json:"runtime,omitempty"`
+	Entrypoints   map[string]string        `json:"entrypoints,omitempty"`
+	Args          []string                 `json:"args,omitempty"`
+	BlogThemes    []ThemeResource          `json:"blog_themes,omitempty"`
+	ConsoleThemes []ThemeResource          `json:"console_themes,omitempty"`
+}
+
+type ThemeResource struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+func (resource ThemeResource) Key(pluginID string) string {
+	return pluginID + "--" + resource.ID
 }
 
 // HookSpec 声明受信插件处理的宿主集成点
@@ -153,6 +165,12 @@ func ValidateManifest(manifest Manifest) error {
 	if err := validateHooks(manifest.Hooks, manifestRuntime(manifest) == RuntimeExecutable); err != nil {
 		return fmt.Errorf("%w: plugin hooks: %v", ErrInvalidManifest, err)
 	}
+	if err := validateThemeResources(manifest.BlogThemes); err != nil {
+		return fmt.Errorf("%w: blog themes: %v", ErrInvalidManifest, err)
+	}
+	if err := validateThemeResources(manifest.ConsoleThemes); err != nil {
+		return fmt.Errorf("%w: console themes: %v", ErrInvalidManifest, err)
+	}
 	seen := make(map[string]struct{}, len(manifest.Routes))
 	for _, route := range manifest.Routes {
 		if !validMethod(route.Method) {
@@ -168,6 +186,42 @@ func ValidateManifest(manifest Manifest) error {
 		seen[key] = struct{}{}
 	}
 	return nil
+}
+
+var themeResourceIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+
+func validateThemeResources(resources []ThemeResource) error {
+	if len(resources) > 32 {
+		return errors.New("theme count is invalid")
+	}
+	seenIDs := make(map[string]struct{}, len(resources))
+	seenPaths := make(map[string]struct{}, len(resources))
+	for _, resource := range resources {
+		if !themeResourceIDPattern.MatchString(resource.ID) || !boundedText(resource.Name, 1, 128) || !validResourceDirectory(resource.Path) {
+			return fmt.Errorf("invalid theme resource %q", resource.ID)
+		}
+		if _, exists := seenIDs[resource.ID]; exists {
+			return fmt.Errorf("duplicate theme resource id %q", resource.ID)
+		}
+		if _, exists := seenPaths[resource.Path]; exists {
+			return fmt.Errorf("duplicate theme resource path %q", resource.Path)
+		}
+		seenIDs[resource.ID] = struct{}{}
+		seenPaths[resource.Path] = struct{}{}
+	}
+	return nil
+}
+
+func validResourceDirectory(value string) bool {
+	if value == "" || strings.Contains(value, "\\") || strings.ContainsRune(value, '\x00') || strings.HasPrefix(value, "/") {
+		return false
+	}
+	for _, part := range strings.Split(value, "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 func manifestRuntime(manifest Manifest) string {
@@ -214,7 +268,7 @@ func validateHooks(hooks []HookSpec, dynamic bool) error {
 
 func validHookName(name string) bool {
 	switch name {
-	case "blog.content", "markdown.content", "theme.render", "admin.page", "editor.command", "comment.content":
+	case "blog.content", "markdown.content", "theme.render", "blog.data", "admin.page", "editor.command", "comment.content":
 		return true
 	default:
 		return false

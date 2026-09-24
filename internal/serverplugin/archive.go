@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 )
 
 // Package 持有已校验的插件包及其解包后的文件
@@ -73,10 +74,18 @@ func ParsePackage(reader io.ReaderAt, size int64) (Package, error) {
 	if _, exists := packageData.Files[entrypoint]; !exists {
 		return Package{}, fmt.Errorf("%w: entrypoint %q is missing", ErrInvalidPackage, entrypoint)
 	}
-	if manifestRuntime(manifest) == RuntimeWASM && len(packageData.Files) != 2 {
-		return Package{}, fmt.Errorf("%w: WASM archive must contain exactly manifest.json and plugin.wasm", ErrInvalidPackage)
+	if manifestRuntime(manifest) == RuntimeWASM {
+		for name := range packageData.Files {
+			if name == "manifest.json" || name == "plugin.wasm" || declaredResourceFile(manifest, name) {
+				continue
+			}
+			return Package{}, fmt.Errorf("%w: WASM archive entry %q is not declared as a resource", ErrInvalidPackage, name)
+		}
 	}
 	packageData.Manifest = manifest
+	if err := validateResourceFiles(manifest, packageData.Files); err != nil {
+		return Package{}, err
+	}
 	packageData.PayloadSize = total - int64(len(packageData.ManifestBytes))
 	packageData.Wasm = packageData.Files["plugin.wasm"]
 	manifestDigest := sha256.Sum256(packageData.ManifestBytes)
@@ -91,6 +100,28 @@ func ParsePackage(reader io.ReaderAt, size int64) (Package, error) {
 	return packageData, nil
 }
 
+func validateResourceFiles(manifest Manifest, files map[string][]byte) error {
+	for _, resource := range manifest.BlogThemes {
+		if _, ok := files[resource.Path+"/template.html"]; !ok {
+			return fmt.Errorf("%w: blog theme resource %q is missing template.html", ErrInvalidPackage, resource.ID)
+		}
+	}
+	for _, resource := range manifest.ConsoleThemes {
+		if _, ok := files[resource.Path+"/theme.css"]; !ok {
+			return fmt.Errorf("%w: console theme resource %q is missing theme.css", ErrInvalidPackage, resource.ID)
+		}
+	}
+	return nil
+}
+
+func declaredResourceFile(manifest Manifest, name string) bool {
+	for _, resource := range append(append([]ThemeResource{}, manifest.BlogThemes...), manifest.ConsoleThemes...) {
+		if strings.HasPrefix(name, resource.Path+"/") {
+			return true
+		}
+	}
+	return false
+}
 func readArchiveEntry(file *zip.File, maxBytes int64) ([]byte, error) {
 	if file.UncompressedSize64 > uint64(maxBytes) {
 		return nil, fmt.Errorf("%w: archive entry %q is too large", ErrInvalidPackage, file.Name)
