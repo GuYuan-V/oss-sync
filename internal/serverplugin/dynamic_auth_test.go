@@ -12,7 +12,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-func editorAuthCfg(t *testing.T, m *Manager) *config.Config {
+func pluginAuthCfg(t *testing.T, m *Manager) *config.Config {
 	t.Helper()
 	if err := m.db.AutoMigrate(&models.SystemSetting{}); err != nil {
 		t.Fatalf("migrate system settings: %v", err)
@@ -39,8 +39,8 @@ func webSessionCtx(method, path string, cookies, headers map[string]string) *gin
 
 func TestAuthenticatePluginRequest_webSessionCookieAndCSRF(t *testing.T) {
 	m := reviewManager(t)
-	cfg := editorAuthCfg(t, m)
-	user, err := auth.CreateAccount(m.db, "editor-user", "pass12345", "user")
+	cfg := pluginAuthCfg(t, m)
+	user, err := auth.CreateAccount(m.db, "plugin-user", "pass12345", "user")
 	if err != nil {
 		t.Fatalf("create account: %v", err)
 	}
@@ -49,27 +49,27 @@ func TestAuthenticatePluginRequest_webSessionCookieAndCSRF(t *testing.T) {
 		t.Fatalf("issue web token: %v", err)
 	}
 
-	get := webSessionCtx("GET", "/md-editor", map[string]string{webSessionCookie: token}, nil)
+	get := webSessionCtx("GET", "/sample-plugin", map[string]string{webSessionCookie: token}, nil)
 	if !m.authenticatePluginRequest(get, cfg) {
 		t.Fatal("GET with web session cookie should authenticate")
 	}
-	if u := auth.CurrentUser(get); u == nil || u.Username != "editor-user" {
+	if u := auth.CurrentUser(get); u == nil || u.Username != "plugin-user" {
 		t.Fatalf("current user not set from cookie: %+v", u)
 	}
 
-	postNoCSRF := webSessionCtx("POST", "/md-editor/save", map[string]string{webSessionCookie: token}, nil)
+	postNoCSRF := webSessionCtx("POST", "/sample-plugin/action", map[string]string{webSessionCookie: token}, nil)
 	if m.authenticatePluginRequest(postNoCSRF, cfg) {
 		t.Fatal("POST via cookie without CSRF must be rejected")
 	}
 
-	postCSRF := webSessionCtx("POST", "/md-editor/save",
+	postCSRF := webSessionCtx("POST", "/sample-plugin/action",
 		map[string]string{webSessionCookie: token, webCSRFCookie: "csrf-abc"},
 		map[string]string{"X-CSRF-Token": "csrf-abc"})
 	if !m.authenticatePluginRequest(postCSRF, cfg) {
 		t.Fatal("POST via cookie with matching CSRF must pass")
 	}
 
-	postBadCSRF := webSessionCtx("POST", "/md-editor/save",
+	postBadCSRF := webSessionCtx("POST", "/sample-plugin/action",
 		map[string]string{webSessionCookie: token, webCSRFCookie: "csrf-abc"},
 		map[string]string{"X-CSRF-Token": "wrong"})
 	if m.authenticatePluginRequest(postBadCSRF, cfg) {
@@ -79,8 +79,8 @@ func TestAuthenticatePluginRequest_webSessionCookieAndCSRF(t *testing.T) {
 
 func TestAuthenticatePluginRequest_rejectsMissingCredentials(t *testing.T) {
 	m := reviewManager(t)
-	cfg := editorAuthCfg(t, m)
-	c := webSessionCtx("GET", "/md-editor", nil, nil)
+	cfg := pluginAuthCfg(t, m)
+	c := webSessionCtx("GET", "/sample-plugin", nil, nil)
 	if m.authenticatePluginRequest(c, cfg) {
 		t.Fatal("request without credentials must be rejected")
 	}
