@@ -20,6 +20,7 @@ var themeAssetsFS embed.FS
 
 type blogAssetResolver struct{ shareID string }
 
+// NewAssetResolver 将 Markdown 资源路径映射为分享资源地址
 func NewAssetResolver(shareID string) markdown.AssetResolver {
 	return blogAssetResolver{shareID: shareID}
 }
@@ -90,6 +91,10 @@ func (h *Handler) markdownReferencesAsset(userID uint, vaultID, markdownPath, re
 	references, err := markdown.ReferencedAssets(string(raw))
 	if err != nil {
 		return false
+	}
+	// 仅出现在 frontmatter image 中的封面也属于该文章的引用
+	if fm, _ := splitFrontmatter(string(raw)); fm.image != "" && fm.image == reference {
+		return true
 	}
 	return slices.Contains(references, reference)
 }

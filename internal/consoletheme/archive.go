@@ -15,6 +15,7 @@ const (
 	maxEntryBytes   = 8 << 20
 )
 
+// Upload 校验主题归档并写入独立目录
 func Upload(dataDir, name string, reader io.ReaderAt, size int64) error {
 	if err := ValidateName(name); err != nil {
 		return err
@@ -85,6 +86,7 @@ func Upload(dataDir, name string, reader io.ReaderAt, size int64) error {
 	return nil
 }
 
+// CreateZip 将自定义主题目录写入 ZIP
 func CreateZip(dataDir, name string, writer *zip.Writer) error {
 	if IsBuiltin(name) {
 		return ErrReadOnly

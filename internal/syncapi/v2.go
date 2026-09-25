@@ -43,6 +43,7 @@ var (
 	errVaultStorageQuotaExceeded = errors.New("vault storage quota exceeded")
 )
 
+// V2FileMeta 是 Vault revision 协议中的文件元数据
 type V2FileMeta struct {
 	Path       string `json:"path"`
 	Type       string `json:"type"`

@@ -42,6 +42,7 @@ export function conflictCopyPath(path: string, now: number = Date.now()): string
   return `${directory}${base}_conflict_${timestamp}${extension}`;
 }
 
+/** 本地文件写入前校验预期状态，避免同步结果覆盖已变化的文件 */
 export class OrdinarySyncFileAccess {
   private readonly now: () => number;
 

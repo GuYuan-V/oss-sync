@@ -794,6 +794,7 @@ const EN: Record<TranslationKey, string> = {
 
 export const TRANSLATIONS = { zh: ZH, en: EN } as const;
 
+/** 自动模式按宿主语言选择中文或英文，显式选择优先 */
 export function resolveLanguage(preference: LanguagePreference, hostLanguage: string): PluginLanguage {
   if (preference !== "auto") return preference;
   return hostLanguage.toLowerCase().startsWith("zh") ? "zh" : "en";

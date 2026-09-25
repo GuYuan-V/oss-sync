@@ -11,6 +11,11 @@ import (
 	"github.com/helantianshen/oss-sync/internal/config"
 )
 
+const (
+	webSessionCookie = "oss_web_session"
+	webCSRFCookie    = "oss_csrf"
+)
+
 func (m *Manager) registerDynamicRoutes(router *gin.Engine, cfg *config.Config) {
 	router.NoRoute(func(c *gin.Context) {
 		registered, ok := m.matchingRoute(c.Request.Method, c.Request.URL.Path)
@@ -81,7 +86,7 @@ func (m *Manager) authorizeDynamicRoute(c *gin.Context, cfg *config.Config, auth
 	if authMode == "public" {
 		return true
 	}
-	if !auth.Authenticate(c, m.db, cfg) {
+	if !m.authenticatePluginRequest(c, cfg) {
 		return false
 	}
 	if authMode == "admin" {
@@ -89,4 +94,46 @@ func (m *Manager) authorizeDynamicRoute(c *gin.Context, cfg *config.Config, auth
 		return ok
 	}
 	return true
+}
+
+// authenticatePluginRequest 先用 Bearer 令牌认证，无令牌时回退到控制台会话 cookie
+// cookie 会话对写方法强制双提交 CSRF；Bearer 请求天然免疫 CSRF 不做校验
+func (m *Manager) authenticatePluginRequest(c *gin.Context, cfg *config.Config) bool {
+	if c.GetHeader("Authorization") != "" {
+		return auth.Authenticate(c, m.db, cfg)
+	}
+	token, err := c.Cookie(webSessionCookie)
+	if err != nil || token == "" {
+		return auth.Authenticate(c, m.db, cfg)
+	}
+	user, err := auth.AuthenticateToken(m.db, cfg, token)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return false
+	}
+	if isStateChangingMethod(c.Request.Method) && !validWebCSRF(c) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "csrf token invalid"})
+		return false
+	}
+	c.Set(auth.ContextKeyCurrentUser, user)
+	return true
+}
+
+func isStateChangingMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+// validWebCSRF 校验控制台会话的双提交 CSRF：oss_csrf cookie 需与 X-CSRF-Token 请求头一致
+func validWebCSRF(c *gin.Context) bool {
+	expected, err := c.Cookie(webCSRFCookie)
+	if err != nil || expected == "" {
+		return false
+	}
+	got := c.GetHeader("X-CSRF-Token")
+	return got != "" && got == expected
 }

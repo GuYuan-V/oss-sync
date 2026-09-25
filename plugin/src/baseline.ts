@@ -68,6 +68,7 @@ function emptyState(): SyncStateFile {
   };
 }
 
+/** 持久化同步基线、待传输队列与冲突，写入按顺序串行完成 */
 export class BaselineStore {
   private data: SyncStateFile = emptyState();
   private loaded = false;

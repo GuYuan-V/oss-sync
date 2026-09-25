@@ -2,6 +2,7 @@
 package consoletheme
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -25,13 +26,16 @@ var (
 	ErrNotFound = errors.New("服务器主题不存在")
 )
 
+// Info 描述可选控制台主题的来源与文件占用
 type Info struct {
-	Name      string `json:"name"`
-	Source    string `json:"source"`
-	FileCount int    `json:"file_count"`
-	Size      int64  `json:"size"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"`
+	Source      string `json:"source"`
+	FileCount   int    `json:"file_count"`
+	Size        int64  `json:"size"`
 }
 
+// ValidateName 校验主题名称长度和允许字符
 func ValidateName(name string) error {
 	if !validName(name) {
 		return errors.New("服务器主题名称只能使用字母、数字、连字符和下划线，且长度为 1–64")
@@ -57,10 +61,12 @@ func validName(name string) bool {
 	return true
 }
 
+// IsBuiltin 判断主题是否属于内置资源
 func IsBuiltin(name string) bool {
 	return name == BuiltinDefault
 }
 
+// Exists 判断主题是否包含有效的 theme.css
 func Exists(dataDir, name string) bool {
 	if IsBuiltin(name) {
 		return true
@@ -73,6 +79,7 @@ func Exists(dataDir, name string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
+// List 列出内置与磁盘上的控制台主题
 func List(dataDir string) ([]Info, error) {
 	count, size := builtinStats()
 	themes := []Info{{Name: BuiltinDefault, Source: "builtin", FileCount: count, Size: size}}
@@ -92,9 +99,12 @@ func List(dataDir string) ([]Info, error) {
 		if statErr != nil {
 			continue
 		}
-		themes = append(themes, Info{
-			Name: entry.Name(), Source: "custom", FileCount: fileCount, Size: totalSize,
-		})
+		marker, markerErr := readPluginThemeMarker(filepath.Join(root, entry.Name()))
+		displayName, source := entry.Name(), "custom"
+		if markerErr == nil {
+			displayName, source = marker.Name, "plugin"
+		}
+		themes = append(themes, Info{Name: entry.Name(), DisplayName: displayName, Source: source, FileCount: fileCount, Size: totalSize})
 	}
 	sort.Slice(themes[1:], func(i, j int) bool {
 		return themes[i+1].Name < themes[j+1].Name
@@ -102,6 +112,28 @@ func List(dataDir string) ([]Info, error) {
 	return themes, nil
 }
 
+type pluginThemeMarker struct {
+	PluginID   string `json:"plugin_id"`
+	ResourceID string `json:"resource_id"`
+	Name       string `json:"name"`
+}
+
+func readPluginThemeMarker(dir string) (pluginThemeMarker, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, ".oss-plugin-resource.json"))
+	if err != nil {
+		return pluginThemeMarker{}, err
+	}
+	var marker pluginThemeMarker
+	if err := json.Unmarshal(raw, &marker); err != nil {
+		return pluginThemeMarker{}, err
+	}
+	if marker.PluginID == "" || marker.ResourceID == "" || marker.Name == "" {
+		return pluginThemeMarker{}, errors.New("插件主题标记不完整")
+	}
+	return marker, nil
+}
+
+// Scaffold 从现有主题复制独立的编辑目录
 func Scaffold(dataDir, base, newName string) (string, error) {
 	if err := ValidateName(newName); err != nil {
 		return "", err
@@ -138,6 +170,7 @@ func Scaffold(dataDir, base, newName string) (string, error) {
 	return target, nil
 }
 
+// Delete 删除自定义主题，内置主题保持只读
 func Delete(dataDir, name string) error {
 	if IsBuiltin(name) {
 		return ErrReadOnly

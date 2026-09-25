@@ -61,6 +61,26 @@ func TestParsePackageAcceptsExecutableAssets(t *testing.T) {
 	}
 }
 
+func TestParsePackageAcceptsDeclaredThemeResources(t *testing.T) {
+	manifest, err := json.Marshal(Manifest{
+		ID: "resource-world", Name: "Resource world", Version: "1.0.0", APIVersion: CurrentAPIVersion,
+		Runtime: RuntimeExecutable, Entrypoints: map[string]string{"any": "bin/plugin.exe"},
+		Routes:        []RouteSpec{{Method: "GET", Path: "/hello", Public: true}},
+		BlogThemes:    []ThemeResource{{ID: "clean", Name: "Clean", Path: "blog/clean"}},
+		ConsoleThemes: []ThemeResource{{ID: "clean", Name: "Console", Path: "console/clean"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	archiveBytes := makePackageArchive(t, map[string][]byte{
+		"manifest.json": manifest, "bin/plugin.exe": []byte("trusted executable"),
+		"blog/clean/template.html": []byte("{{.Title}}"), "console/clean/theme.css": []byte(":root{}"),
+	})
+	if _, err := ParsePackage(bytes.NewReader(archiveBytes), int64(len(archiveBytes))); err != nil {
+		t.Fatalf("ParsePackage() error = %v", err)
+	}
+}
+
 const validManifestJSON = `{"id":"hello-world","name":"Hello world","version":"1.0.0","api_version":1,"routes":[{"method":"GET","path":"/hello","public":true}]}`
 
 func makePackageArchive(t *testing.T, files map[string][]byte) []byte {

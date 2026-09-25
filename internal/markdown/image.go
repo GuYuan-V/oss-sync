@@ -12,15 +12,18 @@ import (
 	"github.com/yuin/goldmark/util"
 )
 
+// AssetResolver 将 Markdown 资源引用转换为可访问地址
 type AssetResolver interface {
 	ResolveAsset(reference string) string
 }
 
+// ImageEmbed 表示 Obsidian 图片嵌入节点
 type ImageEmbed struct {
 	gast.BaseInline
 	Reference string
 }
 
+// KindImageEmbed 是图片嵌入节点的类型标识
 var KindImageEmbed = gast.NewNodeKind("ImageEmbed")
 
 func (n *ImageEmbed) Kind() gast.NodeKind       { return KindImageEmbed }
@@ -98,6 +101,7 @@ func (c assetCollector) ResolveAsset(reference string) string {
 	return reference
 }
 
+// ReferencedAssets 提取 Markdown 中引用的资源路径
 func ReferencedAssets(source string) ([]string, error) {
 	assets := assetCollector{}
 	if _, err := RenderMarkdownWithAssets(nil, assets, source); err != nil {

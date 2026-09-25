@@ -23,6 +23,7 @@ const (
 	maxExecution     = 2 * time.Second
 )
 
+// ErrInvalidModule 表示 WASM 模块不满足宿主 ABI 或大小限制
 var ErrInvalidModule = errors.New("invalid server plugin wasm module")
 
 // Runtime 编译并调用服务端插件，不向其开放宿主导入
@@ -58,6 +59,7 @@ func parseExecutablePluginResponse(raw []byte) (PluginResponse, error) {
 	return response, nil
 }
 
+// NewRuntime 创建无宿主导入的 WASM 运行时
 func NewRuntime(ctx context.Context) (*Runtime, error) {
 	if ctx == nil {
 		return nil, errors.New("plugin runtime context is nil")

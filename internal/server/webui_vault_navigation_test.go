@@ -20,7 +20,7 @@ func TestWebConsoleVaultSidebar_whenVaultOpen_identifiesVaultAndLinksSections(t 
 		t.Fatalf("vault page status = %d, want %d", page.Code, http.StatusOK)
 	}
 	body := page.Body.String()
-	if !strings.Contains(body, `<span class="side-nav__current-name">Test Vault</span>`) {
+	if !strings.Contains(body, `<span class="side-nav__vault-name">Test Vault</span>`) {
 		t.Fatalf("current vault name missing from sidebar: %s", body)
 	}
 	for _, suffix := range []string{"", "/shares", "/recycle", "/history", "/members", "/settings"} {

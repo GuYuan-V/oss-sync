@@ -51,6 +51,7 @@ func (s *Scheduler) RemovePluginTasks(pluginID string) {
 	}
 }
 
+// NewScheduler 创建周期任务调度器
 func NewScheduler(db *gorm.DB, cfg *config.Config) *Scheduler {
 	logger := log.New(os.Stdout, "[OSS cron] ", log.LstdFlags)
 	c := cron.New(cron.WithLogger(cron.PrintfLogger(logger)))

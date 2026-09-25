@@ -5,9 +5,9 @@
 - `template.html`：页面布局，使用 Go `html/template` 语法。
 - `style.css`：主题样式，使用 CSS custom properties 定义颜色。
 - `theme.js`：页面脚本，提供主题切换与交互。
-- 不要添加 `settings.json`：模板只负责样式，功能设置必须由 `plugin.zip` 提供。
+- 不要添加 `settings.json`：功能设置必须在插件 manifest 的 `settings` 中声明。
 
-可用模板字段：
+可用模板字段（自定义模板以 `missingkey=error` 渲染，引用下表以外的字段会让整页失败并回退到内置 `default` 主题；完整说明见网页内置「插件指南」）：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -16,13 +16,22 @@
 | `.ThemeBaseURL` | 主题静态资源基础 URL |
 | `.ThemeConfigJS` | 主题配置 JSON（安全序列化） |
 | `.ContentHTML` | 渲染后的文章 HTML |
+| `.IsHome` | 是否为博客首页 |
 | `.IsFolder` | 是否为文件夹目录视图 |
 | `.FolderTitle` | 文件夹标题 |
-| `.CustomHeader` | 自定义页头 HTML |
-| `.CustomFooter` | 自定义页脚 HTML |
+| `.ArticleTitle` | 文章标题（文章页） |
+| `.AllowCopy` | 是否允许一键复制 |
+| `.ShareID` | 当前分享 ID |
+| `.BlogHomeURL` | 公开博客地址 `/b/<vault-id>`，否则为空 |
+| `.CustomHeader` / `.CustomFooter` | 自定义页头/页脚 HTML |
 | `.FooterNotice` | 页脚提示 |
-| `.LogoURL` / `.BlogName` / `.Description` / `.Buttons` | papertrail 博客设置 |
+| `.BlogName` / `.Description` | 博客名称与介绍 |
+| `.LogoURL` / `.LogoSize` / `.LogoShape` | Logo 地址、尺寸、形状 |
+| `.BannerURL` / `.MobileBannerURL` | 桌面端与移动端横幅地址 |
+| `.Buttons` | 自定义链接，元素含 `.Label` / `.URL` / `.IconURL` |
+| `.HomePosts` | 首页文章列表；元素含 `.Title` / `.Summary` / `.URL` / `.Date` / `.Category` / `.Tags` / `.CoverURL` / `.WordCount` |
+| `.ArticlePost` | 文章元数据（文章页）；含 `.Summary` / `.Date` / `.Category` / `.Tags` / `.CoverURL` / `.WordCount` / `.ReadingMinutes` |
 
-主题名仅允许字母、数字、连字符和下划线。修改文件后刷新公开页面即可生效。
+文章 Markdown 顶部完整闭合的 `---` frontmatter（`title` / `description` / `published` / `category` / `tags` / `image`）作为上表元数据并从正文隐藏；未闭合或损坏的块保留原文。
 
-如果需要设置项，请创建服务端插件，在插件的 `registration.Settings` 中声明字段，再把插件包放到模板根目录并命名为 `plugin.zip`。
+主题资源目录由插件 manifest 的 `blog_themes[].path` 声明；管理员上传并启用插件后，资源才会出现在选择框。功能设置在插件的 `settings` 中声明，不把插件 ZIP 嵌套进模板目录。

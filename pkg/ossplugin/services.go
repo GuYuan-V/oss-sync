@@ -2,6 +2,7 @@ package ossplugin
 
 import "context"
 
+// Vault 是宿主返回的 Vault 摘要
 type Vault struct {
 	ID           string `json:"id"`
 	OwnerID      uint   `json:"owner_id"`
@@ -11,6 +12,7 @@ type Vault struct {
 	StorageUsed  int64  `json:"storage_used"`
 }
 
+// File 是宿主返回的文件摘要
 type File struct {
 	ID        uint   `json:"id"`
 	UserID    uint   `json:"user_id"`
@@ -24,6 +26,7 @@ type File struct {
 	Content   string `json:"content,omitempty"`
 }
 
+// Share 是宿主返回的分享摘要
 type Share struct {
 	ShareID    string `json:"share_id"`
 	UserID     uint   `json:"user_id"`
@@ -34,6 +37,7 @@ type Share struct {
 	Views      int    `json:"views"`
 }
 
+// Device 是宿主返回的设备摘要
 type Device struct {
 	ID       uint   `json:"id"`
 	UserID   uint   `json:"user_id"`
@@ -42,6 +46,7 @@ type Device struct {
 	Status   string `json:"status"`
 }
 
+// Collaboration 是宿主返回的协作关系摘要
 type Collaboration struct {
 	ID             uint   `json:"id"`
 	VaultID        string `json:"vault_id"`
@@ -51,11 +56,22 @@ type Collaboration struct {
 	Status         string `json:"status"`
 }
 
+// UserService 提供用户模型查询
 type UserService struct{ client *Client }
+
+// VaultService 提供 Vault 模型操作
 type VaultService struct{ client *Client }
+
+// FileService 提供文件模型查询与文件读取
 type FileService struct{ client *Client }
+
+// ShareService 提供分享模型操作
 type ShareService struct{ client *Client }
+
+// DeviceService 提供设备模型查询
 type DeviceService struct{ client *Client }
+
+// CollaborationService 提供协作关系查询
 type CollaborationService struct{ client *Client }
 
 func (s ServiceClient) Users() UserService     { return UserService{client: s.client} }

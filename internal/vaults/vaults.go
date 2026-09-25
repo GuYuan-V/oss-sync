@@ -20,11 +20,13 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultbackup"
 )
 
+// Handler 提供 Vault、成员与授权路由
 type Handler struct {
 	DB  *gorm.DB
 	Cfg *config.Config
 }
 
+// New 创建 Vault 路由处理器
 func New(db *gorm.DB, cfg *config.Config) *Handler { return &Handler{DB: db, Cfg: cfg} }
 
 func (h *Handler) Register(r *gin.Engine) {

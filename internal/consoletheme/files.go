@@ -33,6 +33,7 @@ var servedExtensions = map[string]bool{
 	".woff2": true,
 }
 
+// ListFiles 列出自定义控制台主题中的文件
 func ListFiles(dataDir, name string) ([]string, error) {
 	if IsBuiltin(name) {
 		return nil, ErrReadOnly
@@ -65,6 +66,7 @@ func ListFiles(dataDir, name string) ([]string, error) {
 	return files, err
 }
 
+// ReadFile 只读取可在线编辑的常规文本文件，大小上限为 1 MiB
 func ReadFile(dataDir, name, rel string) ([]byte, error) {
 	if IsBuiltin(name) {
 		return nil, ErrReadOnly
@@ -89,6 +91,7 @@ func ReadFile(dataDir, name, rel string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
+// SaveFile 保存已存在的主题文本文件，拒绝符号链接和大于 1 MiB 的内容
 func SaveFile(dataDir, name, rel string, content []byte) error {
 	if IsBuiltin(name) {
 		return ErrReadOnly
@@ -116,6 +119,7 @@ func SaveFile(dataDir, name, rel string, content []byte) error {
 	return nil
 }
 
+// AssetPath 校验可公开访问的主题资源路径
 func AssetPath(dataDir, name, rel string) (string, error) {
 	if IsBuiltin(name) {
 		return "", ErrNotFound

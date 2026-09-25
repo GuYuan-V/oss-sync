@@ -35,10 +35,20 @@ type PluginInfo struct {
 	Builtin            bool
 }
 
+// PluginAssociation 表示插件与资源的关联
 type PluginAssociation struct {
 	Kind       string
 	TargetID   string
 	TargetName string
+}
+
+// ThemeOption 表示可选的主题资源
+type ThemeOption struct {
+	Name               string
+	Label              string
+	PluginID           string
+	Builtin            bool
+	SupportsPublicBlog bool
 }
 
 // Manager 持有已安装插件文件与已启用的编译模块
@@ -52,6 +62,18 @@ type Manager struct {
 	modules       map[string]pluginInstance
 	registrations map[string]ExtensionRegistration
 	scheduler     pluginTaskScheduler
+	fileWriter    FileWriter
+}
+
+// FileWriter 由同步层实现，供插件通过 host.file.put 复用真实的文件写入管线
+// 写入在服务器进程内完成，从而与客户端同步共享同一套并发锁与修订通知
+type FileWriter interface {
+	WriteFileContent(userID uint, vaultID, path string, content []byte, mtime int64) (models.File, error)
+}
+
+// SetFileWriter 注入文件写入实现，未注入时 host.file.put 返回不可用错误
+func (m *Manager) SetFileWriter(writer FileWriter) {
+	m.fileWriter = writer
 }
 
 type pluginInstance interface {
@@ -83,6 +105,7 @@ func (p *wasmPluginInstance) Registration() ExtensionRegistration {
 	return p.registration
 }
 
+// NewManager 加载插件目录与已安装插件状态
 func NewManager(ctx context.Context, db *gorm.DB, dataDir string) (*Manager, error) {
 	if ctx == nil {
 		return nil, errors.New("plugin manager context is nil")
@@ -275,6 +298,28 @@ func (m *Manager) Install(ctx context.Context, reader io.ReaderAt, size int64) (
 		return PluginInfo{}, errors.Join(fmt.Errorf("save plugin record: %w", err), cleanupError(cleanupErr))
 	}
 	return infoFromRecord(record)
+}
+
+func (m *Manager) EnabledThemeOptions() ([]ThemeOption, []ThemeOption) {
+	blogThemes := []ThemeOption{{Name: "default", Label: "default", Builtin: true}, {Name: "papertrail", Label: "papertrail", Builtin: true, SupportsPublicBlog: true}}
+	consoleThemes := []ThemeOption{{Name: "default", Label: "default", Builtin: true}}
+	var records []models.ServerPlugin
+	if err := m.db.Where("enabled = ?", true).Order("id asc").Find(&records).Error; err != nil {
+		return blogThemes, consoleThemes
+	}
+	for _, record := range records {
+		manifest, err := ParseManifest([]byte(record.ManifestJSON))
+		if err != nil {
+			continue
+		}
+		for _, resource := range manifest.BlogThemes {
+			blogThemes = append(blogThemes, ThemeOption{Name: resource.Key(manifest.ID), Label: resource.Name, PluginID: manifest.ID, SupportsPublicBlog: true})
+		}
+		for _, resource := range manifest.ConsoleThemes {
+			consoleThemes = append(consoleThemes, ThemeOption{Name: resource.Key(manifest.ID), Label: resource.Name, PluginID: manifest.ID})
+		}
+	}
+	return blogThemes, consoleThemes
 }
 
 // InstallOrReuse 安装插件包，已安装相同包时直接复用

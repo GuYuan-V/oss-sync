@@ -43,7 +43,7 @@ func readProcStatSample() (cpuSample, bool) {
 		var idle uint64
 		for i, field := range fields[1:] {
 			if i >= 8 {
-				// guest 与 guest_nice 已计入 user 与 nice，此处不再重复累计
+				// guest 与 guest_nice 已包含在 user 与 nice 中
 				break
 			}
 			val, err := strconv.ParseUint(field, 10, 64)

@@ -2,6 +2,7 @@ package blog
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -37,11 +38,13 @@ const (
 	SourceUploaded ThemeSource = "uploaded"
 	SourceScaffold ThemeSource = "scaffolded"
 	SourceLegacy   ThemeSource = "legacy"
+	SourcePlugin   ThemeSource = "plugin"
 )
 
-// ThemeInfo 模板目录条目
+// ThemeInfo 描述可供 Vault 选择的博客模板
 type ThemeInfo struct {
 	Name               string      `json:"name"`
+	DisplayName        string      `json:"display_name,omitempty"`
 	Source             ThemeSource `json:"source"`
 	Creator            string      `json:"creator,omitempty"`
 	CreatedAt          string      `json:"created_at,omitempty"`
@@ -69,7 +72,7 @@ func ListThemes(db *gorm.DB, dataDir string) ([]ThemeInfo, error) {
 		fileCount, size := builtinThemeStats(name)
 		used := themesUsedByVaults(db, name)
 		out = append(out, ThemeInfo{
-			Name: name, Source: SourceBuiltin, SupportsPublicBlog: SupportsPublicBlog(dataDir, name),
+			Name: name, DisplayName: name, Source: SourceBuiltin, SupportsPublicBlog: SupportsPublicBlog(dataDir, name),
 			FileCount: fileCount, Size: size, UsedByVaults: used,
 		})
 	}
@@ -87,21 +90,21 @@ func ListThemes(db *gorm.DB, dataDir string) ([]ThemeInfo, error) {
 			continue
 		}
 		name := entry.Name()
-		if IsBuiltinTheme(name) {
-			continue
-		}
-		if ValidateThemeName(name) != nil {
+		if IsBuiltinTheme(name) || ValidateThemeName(name) != nil {
 			continue
 		}
 		dir := filepath.Join(root, name)
+		marker, markerErr := readPluginThemeMarker(dir)
+		if markerErr != nil {
+			continue
+		}
 		fileCount, size, err := dirStats(dir)
 		if err != nil {
 			continue
 		}
 		used := themesUsedByVaults(db, name)
-		source := themeSourceOf(dataDir, name)
 		out = append(out, ThemeInfo{
-			Name: name, Source: source,
+			Name: name, DisplayName: marker.Name, Source: SourcePlugin,
 			FileCount: fileCount, Size: size, UsedByVaults: used, SupportsPublicBlog: SupportsPublicBlog(dataDir, name),
 		})
 	}
@@ -112,6 +115,27 @@ func ListThemes(db *gorm.DB, dataDir string) ([]ThemeInfo, error) {
 		return out[i].Name < out[j].Name
 	})
 	return out, nil
+}
+
+type pluginThemeMarker struct {
+	PluginID   string `json:"plugin_id"`
+	ResourceID string `json:"resource_id"`
+	Name       string `json:"name"`
+}
+
+func readPluginThemeMarker(dir string) (pluginThemeMarker, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, ".oss-plugin-resource.json"))
+	if err != nil {
+		return pluginThemeMarker{}, err
+	}
+	var marker pluginThemeMarker
+	if err := json.Unmarshal(raw, &marker); err != nil {
+		return pluginThemeMarker{}, err
+	}
+	if marker.PluginID == "" || marker.ResourceID == "" || marker.Name == "" {
+		return pluginThemeMarker{}, errors.New("插件模板标记不完整")
+	}
+	return marker, nil
 }
 
 func builtinThemeStats(name string) (int, int64) {
@@ -132,7 +156,10 @@ func themeSourceOf(dataDir, name string) ThemeSource {
 	if IsBuiltinTheme(name) {
 		return SourceBuiltin
 	}
-	return SourceLegacy // 目录存在即视为 legacy；上传/脚手架写入来源标记文件
+	if _, err := readPluginThemeMarker(filepath.Join(dataDir, "themes", name)); err == nil {
+		return SourcePlugin
+	}
+	return SourceLegacy
 }
 
 func themesUsedByVaults(db *gorm.DB, themeName string) []string {
@@ -231,7 +258,7 @@ func UploadTheme(dataDir, themeName string, r io.ReaderAt, size int64) error {
 	if err := os.Mkdir(dir, 0o750); err != nil {
 		return fmt.Errorf("创建主题目录: %w", err)
 	}
-	// 边写入边清理：失败时移除半成品
+	// 写入失败时删除未完成的主题目录
 	ok := false
 	defer func() {
 		if !ok {
@@ -458,11 +485,17 @@ var (
 	ErrThemeExists          = errThemeExists
 )
 
-// IsThemeReadOnly 等函数提供主题错误码判断
-func IsThemeReadOnly(err error) bool        { return errors.Is(err, errThemeReadOnly) }
+// IsThemeReadOnly 判断主题是否只读
+func IsThemeReadOnly(err error) bool { return errors.Is(err, errThemeReadOnly) }
+
+// IsThemeNotDownloadable 判断主题是否禁止下载
 func IsThemeNotDownloadable(err error) bool { return errors.Is(err, errThemeNotDownloadable) }
-func IsThemeNotDeletable(err error) bool    { return errors.Is(err, errThemeNotDeletable) }
-func IsThemeInUse(err error) bool           { return errors.Is(err, errThemeInUse) }
+
+// IsThemeNotDeletable 判断主题是否禁止删除
+func IsThemeNotDeletable(err error) bool { return errors.Is(err, errThemeNotDeletable) }
+
+// IsThemeInUse 判断主题是否正被仓库使用
+func IsThemeInUse(err error) bool { return errors.Is(err, errThemeInUse) }
 
 func dirStats(dir string) (int, int64, error) {
 	var count int

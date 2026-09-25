@@ -23,6 +23,7 @@ type Config struct {
 	Update   UpdateConfig   `yaml:"update"`
 }
 
+// ServerConfig 定义 HTTP 服务监听与请求限制
 type ServerConfig struct {
 	Host                 string `yaml:"host"`
 	Port                 int    `yaml:"port"`
@@ -31,16 +32,19 @@ type ServerConfig struct {
 	MaxFileSizeMB        int64  `yaml:"max_file_size_mb"`
 }
 
+// DatabaseConfig 定义数据库驱动与连接字符串
 type DatabaseConfig struct {
 	Driver string `yaml:"driver"`
 	DSN    string `yaml:"dsn"`
 }
 
+// StorageConfig 定义正文目录与总存储上限
 type StorageConfig struct {
 	DataDir        string `yaml:"data_dir"`
 	MaxTotalSizeMB int64  `yaml:"max_total_size_mb"`
 }
 
+// AuthConfig 定义令牌有效期与注册策略
 type AuthConfig struct {
 	JWTSecret          string `yaml:"jwt_secret"`
 	JWTTTLHours        int    `yaml:"jwt_ttl_hours"`
@@ -50,6 +54,7 @@ type AuthConfig struct {
 	AllowAnonymousRegistration bool `yaml:"allow_anonymous_registration"`
 }
 
+// SyncConfig 定义同步并发、设备清理和存储对账周期
 type SyncConfig struct {
 	MaxConcurrency         int `yaml:"max_concurrency"`
 	DeviceStaleDays        int `yaml:"device_stale_days"`

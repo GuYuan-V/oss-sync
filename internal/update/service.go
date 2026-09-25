@@ -67,7 +67,7 @@ func (s *Service) StartHelperUpdate(ctx context.Context, checkID, downloadSource
 	if err := cand.Validate(); err != nil {
 		return nil, err
 	}
-	// 变更前先做能力检查
+	// 能力检查须先于资产下载与替换
 	if err := CheckHandoffCapability(s.up.exe); err != nil {
 		return nil, err
 	}

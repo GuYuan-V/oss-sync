@@ -23,12 +23,14 @@ import (
 	"github.com/helantianshen/oss-sync/internal/synclock"
 )
 
+// Cleanup 执行墓碑、回收站与孤立文件清理
 type Cleanup struct {
 	DB  *gorm.DB
 	Cfg *config.Config
 	now func() time.Time
 }
 
+// NewCleanup 创建依赖数据库与数据目录的清理器
 func NewCleanup(db *gorm.DB, cfg *config.Config) *Cleanup {
 	return &Cleanup{DB: db, Cfg: cfg, now: time.Now}
 }

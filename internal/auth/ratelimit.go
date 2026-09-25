@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// AttemptLimiter 为凭据端点的进程内小守卫；服务为单实例部署，该守卫足以拦截针对高成本 bcrypt 计算的重复调用
+// AttemptLimiter 限制进程内同一凭据键在时间窗口中的尝试次数
 type AttemptLimiter struct {
 	mu      sync.Mutex
 	limit   int
@@ -13,6 +13,7 @@ type AttemptLimiter struct {
 	entries map[string][]time.Time
 }
 
+// NewAttemptLimiter 创建凭据端点的限流器
 func NewAttemptLimiter(limit int, window time.Duration) *AttemptLimiter {
 	return &AttemptLimiter{limit: limit, window: window, entries: map[string][]time.Time{}}
 }

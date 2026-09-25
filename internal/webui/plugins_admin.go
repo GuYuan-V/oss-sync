@@ -23,6 +23,8 @@ type adminPluginsData struct {
 	GuideHTML template.HTML
 	Error     string
 	Saved     bool
+	EditID    string
+	EditFiles []serverplugin.EditablePluginFile
 }
 
 func (h *Handler) adminPluginPage(c *gin.Context) {
@@ -35,7 +37,57 @@ func (h *Handler) adminPluginPage(c *gin.Context) {
 		c.Status(http.StatusBadGateway)
 		return
 	}
-	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(content))
+	h.renderPluginAdminContent(c, c.Param("id"), c.Param("slug"), content)
+}
+
+func (h *Handler) renderPluginAdminContent(c *gin.Context, pluginID, slug, content string) {
+	if pluginReturnsDocument(content) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(content))
+		return
+	}
+	u := h.webUser(c)
+	pages := h.pluginManager.AdminPages()
+	ld := layoutData{
+		Page:             "admin-plugin-page",
+		Title:            pluginAdminPageTitle(pages, pluginID, slug),
+		Username:         u.Username,
+		IsAdmin:          u.Role == "admin",
+		ShowSidebar:      true,
+		ActiveGroup:      "admin",
+		ActivePage:       "admin-plugin-page",
+		ActivePluginID:   pluginID,
+		ConsoleThemeName: h.selectedConsoleTheme(u.ID),
+		Language:         h.userLang(c),
+		NavVaults:        h.accessibleVaults(u),
+		PluginAdminPages: pages,
+		ContentHTML:      template.HTML(content),
+	}
+	if selected, disabledTheme := h.selectedConsoleThemeState(u.ID); disabledTheme != "" {
+		ld.ConsoleThemeName = selected
+		ld.Flash = h.t(c, "admin.plugin_theme_disabled", disabledTheme)
+		ld.FlashKind = "error"
+	}
+	h.setPluginNavigationForUser(&ld, u)
+	if token, err := c.Cookie(csrfCookie); err == nil {
+		ld.CSRF = token
+	}
+	h.renderWithLayout(c, http.StatusOK, ld, nil)
+}
+
+// pluginReturnsDocument 判断插件是否接管完整 HTML 文档
+func pluginReturnsDocument(content string) bool {
+	trimmed := strings.TrimPrefix(strings.TrimSpace(content), "\ufeff")
+	trimmed = strings.ToLower(trimmed)
+	return strings.HasPrefix(trimmed, "<!doctype html") || strings.HasPrefix(trimmed, "<html")
+}
+
+func pluginAdminPageTitle(pages []serverplugin.PluginAdminPage, pluginID, slug string) string {
+	for _, page := range pages {
+		if page.PluginID == pluginID && page.Slug == slug && page.Label != "" {
+			return page.Label
+		}
+	}
+	return slug
 }
 
 func (h *Handler) adminPluginsPage(c *gin.Context) {
@@ -61,6 +113,14 @@ func (h *Handler) adminPluginsPage(c *gin.Context) {
 		return
 	}
 	d.Plugins = plugins
+	d.EditID = strings.TrimSpace(c.Query("edit"))
+	if d.EditID != "" {
+		d.EditFiles, err = h.pluginManager.EditableFiles(d.EditID)
+		if err != nil {
+			d.Error = err.Error()
+			d.EditID = ""
+		}
+	}
 	h.render(c, http.StatusOK, "admin-plugins", h.t(c, "page.admin_plugins"), "admin", "admin-plugins", d)
 }
 
@@ -111,6 +171,18 @@ func (h *Handler) adminPluginUpload(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/plugins?saved=1")
+}
+
+func (h *Handler) adminPluginFileSave(c *gin.Context) {
+	if h.pluginManager == nil {
+		h.redirectPluginError(c, "admin.plugins_unavailable")
+		return
+	}
+	if err := h.pluginManager.SaveTextFile(c.Request.Context(), c.Param("id"), c.PostForm("path"), c.PostForm("content")); err != nil {
+		c.Redirect(http.StatusSeeOther, "/dashboard/admin/plugins?edit="+url.QueryEscape(c.Param("id"))+"&error="+url.QueryEscape(err.Error()))
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/dashboard/admin/plugins?edit="+url.QueryEscape(c.Param("id"))+"&saved=1")
 }
 
 func (h *Handler) adminPluginEnable(c *gin.Context) {

@@ -44,6 +44,7 @@ type Handler struct {
 	updater       *update.Updater
 	updateSvc     *update.Service
 	pluginManager *serverplugin.Manager
+	fileWriter    fileContentWriter
 }
 
 // SetUpdateService 注入共享更新服务（直接注入，不代理 Bearer token）
@@ -55,6 +56,11 @@ func (h *Handler) SetUpdateService(svc *update.Service, up *update.Updater) {
 // SetPluginManager 注入服务插件管理器
 func (h *Handler) SetPluginManager(manager *serverplugin.Manager) {
 	h.pluginManager = manager
+}
+
+// SetFileWriter 注入文件写入实现，供控制台内置编辑器复用真实同步写入管线
+func (h *Handler) SetFileWriter(writer fileContentWriter) {
+	h.fileWriter = writer
 }
 
 // layoutData 是所有控制台页面共用的外壳数据
@@ -70,7 +76,8 @@ type layoutData struct {
 	ActivePluginID   string
 	PluginSettings   []pluginNav
 	PluginAdminPages []serverplugin.PluginAdminPage
-	CurrentVault     *vaultNav // 进入仓库页后为当前仓库导航
+	CurrentVault     *vaultNav  // 当前仓库页的上下文
+	NavVaults        []vaultNav // 侧边栏仓库导航，所有控制台页面可见
 	Flash            string
 	FlashKind        string // success 或 error
 	ConsoleThemeName string
@@ -93,6 +100,7 @@ type pluginNav struct {
 	Name string
 }
 
+// New 解析控制台模板并创建网页处理器
 func New(db *gorm.DB, cfg *config.Config) (*Handler, error) {
 	funcs := template.FuncMap{
 		"formatBytes": formatBytes,
@@ -145,8 +153,11 @@ func (h *Handler) Register(r *gin.Engine) {
 		console.GET("/vaults/new", h.newVaultPage)
 		console.GET("/vaults/:vault_id", h.vaultFilesPage)
 		console.POST("/vaults/:vault_id/files/delete", h.deleteFile)
-		console.GET("/vaults/:vault_id/files/preview", h.previewMarkdownFile)
+		console.GET("/vaults/:vault_id/files/preview", h.previewFile)
 		console.GET("/vaults/:vault_id/files/download", h.downloadFile)
+		console.GET("/vaults/:vault_id/files/sandbox", h.sandboxPreviewFile)
+		console.GET("/vaults/:vault_id/files/edit", h.editFilePage)
+		console.POST("/vaults/:vault_id/files/edit", h.saveFileEdit)
 		console.GET("/vaults/:vault_id/shares", h.sharesPage)
 		console.POST("/vaults/:vault_id/shares", h.createShare)
 		console.POST("/vaults/:vault_id/shares/:share_id/allow_copy", h.toggleShareCopy)
@@ -204,23 +215,12 @@ func (h *Handler) Register(r *gin.Engine) {
 		adminGroup.GET("/system/update/status", h.adminUpdateStatusJSON)
 		adminGroup.POST("/system/update/check", h.adminUpdateCheck)
 		adminGroup.POST("/system/update", h.adminUpdateTrigger)
-		adminGroup.GET("/themes", h.adminThemesPage)
-		adminGroup.POST("/themes/upload", h.adminThemeUpload)
-		adminGroup.POST("/themes/scaffold", h.adminThemeScaffold)
-		adminGroup.GET("/themes/:name/download", h.adminThemeDownload)
-		adminGroup.POST("/themes/:name/delete", h.adminThemeDelete)
-		adminGroup.POST("/themes/:name/files/save", h.adminThemeFileSave)
-		adminGroup.GET("/console-themes", h.adminConsoleThemesPage)
-		adminGroup.POST("/console-themes/upload", h.adminConsoleThemeUpload)
-		adminGroup.POST("/console-themes/scaffold", h.adminConsoleThemeScaffold)
-		adminGroup.GET("/console-themes/:name/download", h.adminConsoleThemeDownload)
-		adminGroup.POST("/console-themes/:name/files/save", h.adminConsoleThemeFileSave)
-		adminGroup.POST("/console-themes/:name/delete", h.adminConsoleThemeDelete)
 		adminGroup.GET("/plugins", h.adminPluginsPage)
 		adminGroup.POST("/plugins/upload", h.adminPluginUpload)
 		adminGroup.POST("/plugins/:id/enable", h.adminPluginEnable)
 		adminGroup.POST("/plugins/:id/disable", h.adminPluginDisable)
 		adminGroup.POST("/plugins/:id/delete", h.adminPluginDelete)
+		adminGroup.POST("/plugins/:id/files/save", h.adminPluginFileSave)
 		adminGroup.GET("/plugins/:id/page/:slug", h.adminPluginPage)
 		adminGroup.GET("/backups/:id/download", h.downloadBackup)
 		adminGroup.POST("/backups/:id/delete", h.deleteBackup)
@@ -242,8 +242,7 @@ func (h *Handler) Register(r *gin.Engine) {
 	r.POST("/admin/logout", h.logout)
 }
 
-// 会话
-
+// sessionUser 从网页会话 Cookie 解析已登录用户
 func (h *Handler) sessionUser(c *gin.Context) *models.User {
 	token, err := c.Cookie(sessionCookie)
 	if err != nil || token == "" {
@@ -402,22 +401,20 @@ func (h *Handler) t(c *gin.Context, key string, args ...any) string {
 // 渲染
 
 // render 使用统一布局渲染控制台页面；page 为页面模板名
-func (h *Handler) render(c *gin.Context, status int, page, title string, activeGroup, activePage string, data any) {
+func (h *Handler) render(c *gin.Context, status int, page, title, activeGroup, activePage string, data any) {
 	u := h.webUser(c)
-	ld := layoutData{
-		Page:        page,
-		Title:       title,
-		Username:    "",
-		IsAdmin:     false,
-		ShowSidebar: u != nil,
-		ActiveGroup: activeGroup,
-		ActivePage:  activePage,
-	}
+	ld := layoutData{Page: page, Title: title, Username: "", IsAdmin: false, ShowSidebar: u != nil, ActiveGroup: activeGroup, ActivePage: activePage}
 	if u != nil {
 		ld.Username = u.Username
 		ld.IsAdmin = u.Role == "admin"
 		ld.ConsoleThemeName = h.selectedConsoleTheme(u.ID)
+		if selected, disabledTheme := h.selectedConsoleThemeState(u.ID); disabledTheme != "" {
+			ld.ConsoleThemeName = selected
+			ld.Flash = h.t(c, "admin.plugin_theme_disabled", disabledTheme)
+			ld.FlashKind = "error"
+		}
 		ld.Language = h.userLang(c)
+		ld.NavVaults = h.accessibleVaults(u)
 		h.setPluginNavigationForUser(&ld, u)
 		if ld.IsAdmin && h.pluginManager != nil {
 			ld.PluginAdminPages = h.pluginManager.AdminPages()
@@ -429,18 +426,12 @@ func (h *Handler) render(c *gin.Context, status int, page, title string, activeG
 	h.renderWithLayout(c, status, ld, data)
 }
 
+// setPluginNavigationForUser 构造插件设置导航
 func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
-	if h.hasAccessibleTheme(u, "papertrail") {
-		papertrailAdded := false
-		for _, manifest := range serverplugin.BuiltinManifests() {
-			if manifest.ID == "papertrail-settings" {
-				ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
-				papertrailAdded = true
-				break
-			}
-		}
-		if !papertrailAdded {
-			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: "papertrail-settings", Name: "Papertrail"})
+	for _, manifest := range serverplugin.BuiltinManifests() {
+		if manifest.ID == "papertrail-settings" && len(manifest.Settings) > 0 && len(h.pluginSettingVaults(u, manifest.ID)) > 0 {
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
+			break
 		}
 	}
 	var plugins []models.ServerPlugin
@@ -454,69 +445,47 @@ func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 				manifest.Settings = registration.Settings
 			}
 		}
-		if err == nil && len(manifest.Settings) > 0 && pluginHasNoAssociations(h.DB, manifest.ID) {
-			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
+		if err == nil && len(manifest.Settings) > 0 {
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: plugin.ID, Name: plugin.Name})
 		}
 	}
 }
 
-// hasAccessibleTheme 判断当前用户是否可访问至少一个使用目标博客主题的仓库；内置主题设置为全局导航入口，不依赖当前仓库页面
-func (h *Handler) hasAccessibleTheme(u *models.User, themeName string) bool {
-	var count int64
-	query := h.DB.Model(&models.VaultSetting{}).
-		Where("theme_name = ?", themeName)
-	if u.Role == "admin" {
-		return query.Count(&count).Error == nil && count > 0
+// accessibleVaults 返回当前用户可访问的仓库，默认仓库排在前面
+func (h *Handler) accessibleVaults(u *models.User) []vaultNav {
+	if u == nil {
+		return nil
 	}
-	var vaultIDs []string
-	if err := h.DB.Model(&models.Vault{}).Where("owner_id = ?", u.ID).Pluck("id", &vaultIDs).Error; err != nil {
-		return false
+	var owned []models.Vault
+	if err := h.DB.Where("owner_id = ?", u.ID).
+		Order("is_default desc, created_at asc").Find(&owned).Error; err != nil {
+		return nil
+	}
+	seen := make(map[string]bool, len(owned))
+	out := make([]vaultNav, 0, len(owned))
+	for _, vault := range owned {
+		seen[vault.ID] = true
+		out = append(out, vaultNav{ID: vault.ID, Name: vault.Name})
 	}
 	var memberIDs []string
-	if err := h.DB.Model(&models.VaultMember{}).Where("user_id = ? AND role IN ?", u.ID, []string{vaultaccess.RoleManager, vaultaccess.RoleParticipant}).Pluck("vault_id", &memberIDs).Error; err == nil {
-		vaultIDs = append(vaultIDs, memberIDs...)
+	if err := h.DB.Model(&models.VaultMember{}).
+		Where("user_id = ? AND role IN ?", u.ID, []string{vaultaccess.RoleManager, vaultaccess.RoleParticipant}).
+		Pluck("vault_id", &memberIDs).Error; err != nil || len(memberIDs) == 0 {
+		return out
 	}
-	if len(vaultIDs) == 0 {
-		return false
+	var shared []models.Vault
+	if err := h.DB.Where("id IN ?", memberIDs).
+		Order("is_default desc, created_at asc").Find(&shared).Error; err != nil {
+		return out
 	}
-	return query.Where("vault_id IN ?", vaultIDs).Count(&count).Error == nil && count > 0
-}
-
-func (h *Handler) setPluginNavigationForVault(ld *layoutData, vaultID string, u *models.User) {
-	var setting models.VaultSetting
-	_ = h.DB.Where("vault_id = ?", vaultID).First(&setting).Error
-	if setting.ThemeName == "" {
-		setting.ThemeName = "default"
-	}
-	h.setPluginNavigationForUser(ld, u)
-	var plugins []models.ServerPlugin
-	if err := h.DB.Where("enabled = ?", true).Order("id asc").Find(&plugins).Error; err != nil {
-		return
-	}
-	for _, plugin := range plugins {
-		manifest, err := serverplugin.ParseManifest([]byte(plugin.ManifestJSON))
-		if err != nil {
+	for _, vault := range shared {
+		if seen[vault.ID] {
 			continue
 		}
-		if h.pluginManager != nil {
-			if registration, ok := h.pluginManager.RegistrationFor(plugin.ID); ok && len(registration.Settings) > 0 {
-				manifest.Settings = registration.Settings
-			}
-		}
-		if len(manifest.Settings) == 0 || pluginHasNoAssociations(h.DB, manifest.ID) {
-			continue
-		}
-		var links []models.ServerPluginAssociation
-		if err := h.DB.Where("plugin_id = ?", manifest.ID).Find(&links).Error; err != nil {
-			continue
-		}
-		for _, link := range links {
-			if link.Kind == "blog_theme" && link.TargetID == setting.ThemeName {
-				ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
-				break
-			}
-		}
+		seen[vault.ID] = true
+		out = append(out, vaultNav{ID: vault.ID, Name: vault.Name})
 	}
+	return out
 }
 
 func pluginHasNoAssociations(db *gorm.DB, pluginID string) bool {
@@ -556,7 +525,7 @@ func setPageHeaders(c *gin.Context) {
 	c.Header(
 		"Content-Security-Policy",
 		"default-src 'none'; connect-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; "+
-			"form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+			"frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 	)
 }
 
@@ -565,8 +534,7 @@ func requestIsHTTPS(c *gin.Context) bool {
 		strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")), "https")
 }
 
-// 静态资源
-
+// styles 返回控制台基础样式
 func (h *Handler) styles(c *gin.Context) {
 	raw, err := webFS.ReadFile("assets/console.css")
 	if err != nil {
@@ -589,8 +557,7 @@ func (h *Handler) script(name, contentType string) gin.HandlerFunc {
 	}
 }
 
-// 登录与注册
-
+// loginView 是登录页的显示数据
 type loginView struct {
 	Error string
 }
@@ -635,8 +602,7 @@ func (h *Handler) renderAuth(c *gin.Context, status int, page string, data any) 
 	h.renderWithLayout(c, status, ld, data)
 }
 
-// 网页文件操作
-
+// formatBytes 将字节数格式化为控制台容量文案
 func formatBytes(size int64) string {
 	const gib = 1024 * 1024 * 1024
 	const mib = 1024 * 1024

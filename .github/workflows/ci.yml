@@ -93,12 +93,12 @@ jobs:
           sudo env OSS_INSTALL_DIR=/opt/oss-sync-ci OSS_GLOBAL_BIN_DIR=/opt/oss-sync-ci-commands OSS_PORT=18081 OSS_STORAGE_LIMIT_GB=1 OSS_RELEASE_PROXY=official OSS_VERSION=0.0.0 OSS_RELEASE_BASE_URL="file://$release" bash oss.sh install
           sudo systemd-analyze verify /etc/systemd/system/oss-sync.service
           curl -fsS http://127.0.0.1:18081/readyz
-          sudo /opt/oss-sync-ci/oss.sh 7 2
-          sudo /opt/oss-sync-ci/oss.sh 8 18082
+          sudo /opt/oss-sync-ci/oss.sh 4 1 2
+          sudo /opt/oss-sync-ci/oss.sh 4 2 18082
           curl -fsS http://127.0.0.1:18082/readyz
           sudo env OSS_RELEASE_PROXY=official OSS_VERSION=0.0.0 OSS_RELEASE_BASE_URL="file://$release" /opt/oss-sync-ci/oss.sh 1
           curl -fsS http://127.0.0.1:18082/readyz
-          sudo /opt/oss-sync-ci/oss.sh 2 yes
+          sudo /opt/oss-sync-ci/oss.sh 6 2 yes
           sudo test -f /opt/oss-sync-ci/data/oss.db
       - if: failure()
         run: sudo journalctl -u oss-sync --no-pager -n 100

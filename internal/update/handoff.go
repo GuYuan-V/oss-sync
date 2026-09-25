@@ -235,8 +235,7 @@ func ResumePendingHandoffs(execPath string) (int, error) {
 	return resumed, nil
 }
 
-// CheckHandoffCapability 校验当前平台与可执行文件位置是否支持基于 helper 的自更新
-// 在发生任何变更前返回带 CodeUnsupportedPlatform 等编码的类型化 UpdateError
+// CheckHandoffCapability 校验 helper 自更新的平台与文件条件
 func CheckHandoffCapability(execPath string) error {
 	// 仅支持 linux、darwin 与 windows，其余 GOOS 视为不支持
 	switch runtime.GOOS {
@@ -419,13 +418,10 @@ func recoverActiveMarker(markerPath string) (*HandoffMarker, *Operation, error) 
 	return &m, op, nil
 }
 
-// InitiateHelperHandoff 暂存候选文件、创建持久化标记并启动 helper
-// 在任何变更前先做能力检查，交接前校验 digest、魔数与 --version
-// mgr 为持久化的 Manager；checkID 为已校验的候选；candidatePath 为从已验证发布资产中解出的本地新二进制文件
-// binaryDigest 为下载解包后重新计算的可执行文件摘要，而非 Candidate.Digest 中的资产摘要
-// readyURL 为待探测的 /readyz 地址
-// origArgs 与 workDir 记录重启所需的运行时上下文
-// 成功返回活跃的 Operation，能力不足时返回类型化错误
+// InitiateHelperHandoff 暂存候选文件并启动 helper
+// 交接前校验 digest、魔数与 --version，成功返回活跃的 Operation
+// mgr 为持久化 Manager，checkID 标识候选，candidatePath 为候选二进制路径
+// binaryDigest 是二进制摘要；readyURL、origArgs 和 workDir 用于启动与就绪检查
 func (u *Updater) InitiateHelperHandoff(mgr *Manager, checkID string, candidatePath string, binaryDigest string, readyURL string, origArgs []string, workDir string) (*Operation, error) {
 	if mgr == nil {
 		return nil, errors.New("manager is nil")
@@ -695,6 +691,8 @@ func SetLaunchHelperFn(fn func(string, string) error) {
 		launchHelperFn = fn
 	}
 }
+
+// SetVerifyStagedFileFn 仅供测试替换候选文件校验器；nil 恢复默认实现
 func SetVerifyStagedFileFn(fn func(string, string, string) error) {
 	if fn == nil {
 		verifyStagedFileFn = verifyStagedFile
@@ -702,6 +700,8 @@ func SetVerifyStagedFileFn(fn func(string, string, string) error) {
 		verifyStagedFileFn = fn
 	}
 }
+
+// SetWaitForParentFn 仅供测试替换父进程等待函数；nil 恢复默认实现
 func SetWaitForParentFn(fn func(int, time.Duration) error) {
 	if fn == nil {
 		waitForParentFn = waitForParent
@@ -709,6 +709,8 @@ func SetWaitForParentFn(fn func(int, time.Duration) error) {
 		waitForParentFn = fn
 	}
 }
+
+// SetAtomicReplaceFn 仅供测试替换原子替换函数；nil 恢复默认实现
 func SetAtomicReplaceFn(fn func(string, string) error) {
 	if fn == nil {
 		atomicReplaceFn = atomicReplace
@@ -716,6 +718,8 @@ func SetAtomicReplaceFn(fn func(string, string) error) {
 		atomicReplaceFn = fn
 	}
 }
+
+// SetOpenFileForSyncFn 仅供测试替换文件打开函数；nil 恢复默认实现
 func SetOpenFileForSyncFn(fn func(string) (*os.File, error)) {
 	if fn == nil {
 		openFileForSyncFn = func(name string) (*os.File, error) { return os.OpenFile(name, os.O_RDWR, 0) }
@@ -723,6 +727,8 @@ func SetOpenFileForSyncFn(fn func(string) (*os.File, error)) {
 		openFileForSyncFn = fn
 	}
 }
+
+// SetSyncFileFn 仅供测试替换文件同步函数；nil 恢复默认实现
 func SetSyncFileFn(fn func(*os.File) error) {
 	if fn == nil {
 		syncFileFn = func(f *os.File) error { return f.Sync() }
@@ -730,6 +736,8 @@ func SetSyncFileFn(fn func(*os.File) error) {
 		syncFileFn = fn
 	}
 }
+
+// SetOpenDirFn 仅供测试替换目录打开函数；nil 恢复默认实现
 func SetOpenDirFn(fn func(string) (*os.File, error)) {
 	if fn == nil {
 		openDirFn = func(name string) (*os.File, error) { return os.Open(name) }
@@ -737,6 +745,8 @@ func SetOpenDirFn(fn func(string) (*os.File, error)) {
 		openDirFn = fn
 	}
 }
+
+// SetSyncDirFn 仅供测试替换目录同步函数；nil 恢复默认实现
 func SetSyncDirFn(fn func(*os.File) error) {
 	if fn == nil {
 		syncDirFn = func(f *os.File) error { return f.Sync() }
@@ -744,6 +754,8 @@ func SetSyncDirFn(fn func(*os.File) error) {
 		syncDirFn = fn
 	}
 }
+
+// SetRelaunchOldServerFn 仅供测试替换回滚重启函数；nil 恢复默认实现
 func SetRelaunchOldServerFn(fn func(*HandoffMarker)) {
 	if fn == nil {
 		relaunchOldServerFn = relaunchOldServer
@@ -751,6 +763,8 @@ func SetRelaunchOldServerFn(fn func(*HandoffMarker)) {
 		relaunchOldServerFn = fn
 	}
 }
+
+// SetRemoveFileFn 仅供测试替换删除函数；nil 恢复默认实现
 func SetRemoveFileFn(fn func(string) error) {
 	if fn == nil {
 		removeFileFn = os.Remove

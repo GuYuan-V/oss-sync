@@ -52,12 +52,13 @@
       </label>
       <label>
          <span>{{.Layout.T "account.new_vault_capacity"}}</span>
-        <input type="number" name="vault_storage_mb" min="0" {{if gt .Data.MaxVaultStorageMB 0}}max="{{.Data.MaxVaultStorageMB}}"{{end}} value="{{.Data.VaultStorageMB}}" required>
-         <small>{{.Layout.T "account.capacity_zero_note"}}</small>
+        <input type="number" name="vault_storage_mb" min="0" {{if gt .Data.MaxVaultStorageMB 0}}max="{{.Data.MaxVaultStorageMB}}"{{end}} value="{{if gt .Data.VaultStorageMB 0}}{{.Data.VaultStorageMB}}{{end}}" placeholder="0">
+         <small>{{.Layout.T "account.capacity_zero_note"}} {{if gt .Data.MaxVaultStorageMB 0}}{{.Layout.T "account.capacity_limit" .Data.MaxVaultStorageMB}}{{else}}{{.Layout.T "account.capacity_unlimited"}}{{end}}</small>
       </label>
       <label>
          <span>{{.Layout.T "account.upload_limit"}}</span>
         <input type="number" name="upload_size_mb" min="1" max="{{.Data.MaxUploadSizeMB}}" value="{{.Data.UploadSizeMB}}" required>
+        <small>{{.Layout.T "account.upload_limit_note" .Data.MaxUploadSizeMB}}</small>
       </label>
        <button class="button button--primary" type="submit">{{.Layout.T "account.save_preferences"}}</button>
     </form>
@@ -88,7 +89,7 @@
         <span>{{.Layout.T "account.theme_label"}}</span>
         <select name="console_theme_name">
           {{range .Data.ConsoleThemes}}
-          <option value="{{.Name}}" {{if eq .Name $.Data.ConsoleThemeName}}selected{{end}}>{{.Name}}{{if eq .Source "builtin"}}{{$.Layout.T "account.builtin_suffix"}}{{end}}</option>
+          <option value="{{.Name}}" {{if eq .Name $.Data.ConsoleThemeName}}selected{{end}}>{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Name}}{{end}}{{if eq .Source "builtin"}}{{$.Layout.T "account.builtin_suffix"}}{{else}}{{$.Layout.T "account.custom_suffix"}}{{end}}</option>
           {{end}}
         </select>
       </label>

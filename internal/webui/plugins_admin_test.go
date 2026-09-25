@@ -42,26 +42,28 @@ func TestAdminPluginsTemplateContainsLifecycleControls(t *testing.T) {
 	}
 }
 
-func TestBundledPluginFromThemeExtractsOnlyRootPluginZip(t *testing.T) {
-	var theme bytes.Buffer
-	writer := zip.NewWriter(&theme)
-	entry, err := writer.Create("plugin.zip")
-	if err != nil {
-		t.Fatal(err)
+func TestPluginReturnsDocument_onlyFullDocumentsOptOutOfWrapper(t *testing.T) {
+	t.Parallel()
+	cases := map[string]bool{
+		`<section><input></section>`:                        false,
+		`  <!doctype html><html><body>custom</body></html>`: true,
+		`<html><head></head><body>custom</body></html>`:     true,
 	}
-	want := []byte("plugin archive")
-	if _, err := entry.Write(want); err != nil {
-		t.Fatal(err)
+	for content, want := range cases {
+		if got := pluginReturnsDocument(content); got != want {
+			t.Errorf("pluginReturnsDocument(%q) = %v, want %v", content, got, want)
+		}
 	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
+}
+
+func TestPluginAdminPageTitle_UsesRegisteredLabel(t *testing.T) {
+	t.Parallel()
+	pages := []serverplugin.PluginAdminPage{{PluginID: "demo", Slug: "settings", Label: "Demo settings"}}
+	if got := pluginAdminPageTitle(pages, "demo", "settings"); got != "Demo settings" {
+		t.Fatalf("plugin admin title = %q, want Demo settings", got)
 	}
-	got, err := bundledPluginFromTheme(theme.Bytes())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != string(want) {
-		t.Fatalf("bundled plugin = %q, want %q", got, want)
+	if got := pluginAdminPageTitle(pages, "other", "settings"); got != "settings" {
+		t.Fatalf("fallback plugin admin title = %q, want settings", got)
 	}
 }
 
@@ -138,6 +140,20 @@ func TestGlobalNavigationShowsPapertrailForAccessibleVault(t *testing.T) {
 	get := doWebRequest(t, h, http.MethodGet, "/dashboard/plugins/papertrail-settings/settings", nil, session, csrf, false)
 	if get.Code != http.StatusOK || !strings.Contains(get.Body.String(), vault.Name) {
 		t.Fatalf("global Papertrail settings page = %d %s", get.Code, get.Body.String())
+	}
+}
+
+func TestGlobalNavigationHidesPapertrailWithoutSelectedVault(t *testing.T) {
+	db, cfg, _ := newWebUITestDB(t)
+	user := createTestUserWithHash(t, db, "papertrail-no-vault", "user")
+	h, err := New(db, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ld := layoutData{}
+	h.setPluginNavigationForUser(&ld, user)
+	if len(ld.PluginSettings) != 0 {
+		t.Fatalf("navigation without a Vault = %#v, want no Papertrail entry", ld.PluginSettings)
 	}
 }
 

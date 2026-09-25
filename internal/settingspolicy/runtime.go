@@ -9,6 +9,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
+// EffectiveForUser 加载系统与用户策略并计算生效值
 func EffectiveForUser(db *gorm.DB, userID uint, configUploadBytes int64) (Effective, error) {
 	var system models.SystemSetting
 	if err := db.First(&system, 1).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -23,6 +24,7 @@ func EffectiveForUser(db *gorm.DB, userID uint, configUploadBytes int64) (Effect
 	return Resolve(system, user, configUploadBytes), nil
 }
 
+// EffectiveForVault 使用 Vault 所有者的策略计算生效值
 func EffectiveForVault(db *gorm.DB, vaultID string, configUploadBytes int64) (Effective, error) {
 	var vault models.Vault
 	if err := db.Select("owner_id").Where("id = ?", vaultID).First(&vault).Error; err != nil {
@@ -31,6 +33,7 @@ func EffectiveForVault(db *gorm.DB, vaultID string, configUploadBytes int64) (Ef
 	return EffectiveForUser(db, vault.OwnerID, configUploadBytes)
 }
 
+// CustomFragmentsEnabled 返回系统级自定义片段开关状态
 func CustomFragmentsEnabled(db *gorm.DB) bool {
 	var system models.SystemSetting
 	if err := db.First(&system, 1).Error; err != nil {

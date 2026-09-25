@@ -34,19 +34,6 @@ func SupportsPublicBlog(dataDir, themeName string) bool {
 	return json.Unmarshal(raw, &metadata) == nil && metadata.SupportsPublicBlog
 }
 
-// ThemeHasBundledPlugin 判断自定义主题是否携带服务端插件包
-func ThemeHasBundledPlugin(dataDir, themeName string) bool {
-	if IsBuiltinTheme(themeName) {
-		return false
-	}
-	dir, err := themeDirectory(dataDir, themeName)
-	if err != nil {
-		return false
-	}
-	info, err := os.Stat(filepath.Join(dir, "plugin.zip"))
-	return err == nil && info.Mode().IsRegular()
-}
-
 const (
 	customTemplateFile = "template.html"
 	maxTemplateSize    = 1 << 20 // 页面布局模板上限为 1 MiB
@@ -98,7 +85,7 @@ func CustomThemeExists(dataDir, themeName string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-// CreateDevelopmentTheme 把内置起始模板复制到 data/themes/<name>；已存在目录一律拒绝覆盖，管理员正在编辑的模板不会被控制台改写
+// CreateDevelopmentTheme 复制内置模板；目标目录已存在时拒绝覆盖
 func CreateDevelopmentTheme(dataDir, themeName string) (string, error) {
 	if themeName == "default" {
 		return "", errors.New("default 是内置主题，不能覆盖")
@@ -157,5 +144,7 @@ func (h *Handler) customThemeTemplate(themeName string) (*template.Template, err
 	if err != nil {
 		return nil, err
 	}
-	return template.New("custom-theme").Option("missingkey=error").Parse(string(raw))
+	// missingkey=zero 让缺失的 map 键（ThemeConfig、PluginData 子键）退化为零值而非整页失败；
+	// 结构体字段缺失仍会报错，保留字段契约校验能力
+	return template.New("custom-theme").Funcs(customThemeFuncs()).Option("missingkey=zero").Parse(string(raw))
 }

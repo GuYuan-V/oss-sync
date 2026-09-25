@@ -2,7 +2,6 @@ package server
 
 import (
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -53,8 +52,6 @@ func TestConsoleHeadingHierarchy(t *testing.T) {
 		{"/dashboard/admin/devices", adminSession, adminCSRF},
 		{"/dashboard/admin/data", adminSession, adminCSRF},
 		{"/dashboard/admin/system", adminSession, adminCSRF},
-		{"/dashboard/admin/themes", adminSession, adminCSRF},
-		{"/dashboard/admin/console-themes", adminSession, adminCSRF},
 	}
 	for _, pg := range pages {
 		t.Run(pg.path, func(t *testing.T) {
@@ -198,17 +195,6 @@ func TestConsoleModalHeadingsRemainH2(t *testing.T) {
 		t.Error("admin users reset modal must keep its h2 title")
 	}
 
-	// 脚手架自定义模板 → 渲染编辑模态框
-	scaffold := doForm(t, router, http.MethodPost, "/dashboard/admin/themes/scaffold", url.Values{
-		"base": {"default"}, "name": {"test-theme"},
-	}, adminSession, adminCSRF)
-	if scaffold.Code != http.StatusSeeOther {
-		t.Fatalf("theme scaffold: %d body=%s", scaffold.Code, scaffold.Body)
-	}
-	themes := doForm(t, router, http.MethodGet, "/dashboard/admin/themes", nil, adminSession, adminCSRF)
-	if !strings.Contains(themes.Body.String(), `<h2 id="theme-edit-title-test-theme">`) {
-		t.Error("admin themes edit modal must keep its h2 title")
-	}
 }
 
 // assertPanelEmptyCount 断言页面中 .panel-empty 的出现次数

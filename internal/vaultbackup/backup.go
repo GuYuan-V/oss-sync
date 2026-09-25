@@ -30,8 +30,10 @@ type manifest struct {
 	Files    []models.File        `json:"files"`
 }
 
+// Root 返回 Vault 归档在数据目录中的位置
 func Root(dataDir string) string { return filepath.Join(dataDir, filepath.FromSlash(rootDirName)) }
 
+// Path 解析并校验归档文件名
 func Path(dataDir, fileName string) (string, error) {
 	if fileName == "" || filepath.Base(fileName) != fileName || !strings.HasSuffix(fileName, ".zip") {
 		return "", fmt.Errorf("invalid backup file name")
@@ -55,6 +57,7 @@ func ExistingPath(dataDir, fileName string) (string, error) {
 	return legacy, nil
 }
 
+// Create 为 Vault 写入包含元数据和正文的归档
 func Create(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup, error) {
 	var setting models.VaultSetting
 	if err := db.Where("vault_id = ?", vault.ID).First(&setting).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -129,6 +132,7 @@ func Create(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup
 	return backup, nil
 }
 
+// Purge 归档并永久删除指定 Vault
 func Purge(db *gorm.DB, dataDir string, vault models.Vault) (models.VaultBackup, error) {
 	return purge(db, dataDir, vault, false)
 }

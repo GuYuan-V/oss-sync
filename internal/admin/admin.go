@@ -1,4 +1,4 @@
-// Package admin 提供管理员账号与主题管理接口
+// Package admin 提供管理员账号管理接口
 package admin
 
 import (
@@ -33,7 +33,6 @@ func (h *Handler) Register(r *gin.Engine) {
 		g.PATCH("/users/:id", h.UpdateUser)
 		g.PUT("/users/:id/password", h.ResetPassword)
 		g.DELETE("/users/:id", h.DeleteUser)
-		h.themesRouter(g)
 	}
 }
 

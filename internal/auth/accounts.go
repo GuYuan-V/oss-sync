@@ -187,7 +187,7 @@ func issueToken(cfg *config.Config, claims jwt.Claims, ttl time.Duration) (strin
 	return token, int64(ttl / time.Second), nil
 }
 
-// ChangePassword 校验旧密码后写入新密码，并递增 token 版本使此前签发的 JWT 全部失效
+// ChangePassword 校验原密码并递增 token 版本，已有 JWT 随即失效
 func ChangePassword(db *gorm.DB, userID uint, oldPassword, newPassword string) error {
 	var user models.User
 	if err := db.First(&user, userID).Error; err != nil {

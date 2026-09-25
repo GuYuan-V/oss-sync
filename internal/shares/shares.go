@@ -17,11 +17,13 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
+// Handler 管理 Vault 文件分享
 type Handler struct {
 	DB  *gorm.DB
 	Cfg *config.Config
 }
 
+// New 创建分享路由处理器
 func New(db *gorm.DB, cfg *config.Config) *Handler {
 	return &Handler{DB: db, Cfg: cfg}
 }

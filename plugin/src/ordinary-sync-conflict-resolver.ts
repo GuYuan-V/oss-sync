@@ -82,6 +82,7 @@ type Conflict = {
   readonly remote: SyncFileMeta;
 };
 
+/** 本地状态与下载快照不匹配时进入冲突决策，避免覆盖后续本地编辑 */
 export class OrdinarySyncConflictResolver {
   constructor(private readonly deps: OrdinarySyncResolverDeps) {}
 

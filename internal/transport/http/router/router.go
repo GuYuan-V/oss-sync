@@ -51,7 +51,7 @@ func Build(deps Dependencies) (*gin.Engine, error) {
 		r.Use(deps.PluginManager.Middleware(deps.Cfg))
 	}
 
-	// 超过该阈值的 multipart 请求体由 Gin 写入临时文件，不再常驻内存
+	// Gin 将大于此值的 multipart 请求体写入临时文件
 	r.MaxMultipartMemory = deps.Cfg.Server.MaxMultipartMemoryMB << 20
 	registerHealthRoutes(r, deps.DB)
 
@@ -81,13 +81,16 @@ func Build(deps Dependencies) (*gin.Engine, error) {
 
 	syncH := syncapi.New(deps.DB, deps.Cfg)
 	syncH.Register(r)
+	webH.SetFileWriter(syncH)
 
 	blogH, err := blog.New(deps.DB, deps.Cfg)
 	if err != nil {
 		return nil, fmt.Errorf("blog.New: %w", err)
 	}
 	if deps.PluginManager != nil {
+		deps.PluginManager.SetFileWriter(syncH)
 		blogH.SetPluginHooks(deps.PluginManager)
+		blogH.SetPluginDataHooks(deps.PluginManager)
 	}
 	blogH.Register(r)
 

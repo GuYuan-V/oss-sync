@@ -131,6 +131,9 @@ func readInstalledPackage(root, id string) (Package, error) {
 	if _, exists := files[entrypoint]; !exists {
 		return Package{}, fmt.Errorf("%w: entrypoint is missing", ErrInvalidPackage)
 	}
+	if err := validateResourceFiles(manifest, files); err != nil {
+		return Package{}, err
+	}
 	manifestDigest := sha256.Sum256(manifestBytes)
 	wasm := files["plugin.wasm"]
 	wasmDigest := sha256.Sum256(wasm)

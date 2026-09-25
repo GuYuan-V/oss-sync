@@ -37,12 +37,12 @@ func RunHelper(markerPath string) int {
 		// 无有效标记时不回滚，直接退出
 		return 0
 	}
-	// 变更前先校验路径安全性、digest 与目标版本
+	// helper 仅接收路径、摘要和版本均有效的标记
 	if err := validateMarkerSafe(&m); err != nil {
 		fmt.Fprintf(os.Stderr, "helper: unsafe marker: %v\n", err)
 		return 2
 	}
-	// 变更前先等待父进程退出
+	// 父进程退出后才允许替换当前可执行文件
 	parentPID := m.ParentPID
 	if parentPID > 0 {
 		if err := waitForParentFn(parentPID, 10*time.Second); err != nil {
@@ -109,6 +109,7 @@ func RunHelper(markerPath string) int {
 
 var startNewServerFn = startNewServer
 
+// SetStartNewServerFn 仅供测试替换服务启动函数；nil 恢复默认实现
 func SetStartNewServerFn(fn func(*HandoffMarker) (*exec.Cmd, error)) {
 	if fn == nil {
 		startNewServerFn = startNewServer
@@ -116,6 +117,8 @@ func SetStartNewServerFn(fn func(*HandoffMarker) (*exec.Cmd, error)) {
 		startNewServerFn = fn
 	}
 }
+
+// SetProbeReadyzWithVersionFn 仅供测试替换就绪探测函数；nil 恢复默认实现
 func SetProbeReadyzWithVersionFn(fn func(string, string, time.Duration, time.Duration) error) {
 	if fn == nil {
 		probeReadyzWithVersionFn = probeReadyzWithVersion

@@ -1,7 +1,7 @@
 {{define "vault-preview"}}
 <section class="dashboard-heading">
   <div>
-    <span class="eyebrow">Markdown preview</span>
+    <span class="eyebrow">File preview</span>
     <h1>{{.Data.Name}}</h1>
     <p class="lead">{{.Layout.T "vault.preview_desc"}}</p>
   </div>
@@ -22,6 +22,7 @@
           <span aria-hidden="true">/</span>
           <span aria-current="page">{{$.Data.Name}}</span>
         </nav>
+        {{if eq .Data.Kind "markdown"}}
         <div class="preview-mode-switch" role="tablist" aria-label="{{$.Layout.T "vault.preview_mode"}}">
           <a class="quiet-link {{if eq .Data.Mode "rendered"}}is-active{{end}}"
              href="/dashboard/vaults/{{$.Data.VaultID}}/files/preview?path={{$.Data.Path}}&mode=rendered"
@@ -34,6 +35,7 @@
             {{$.Layout.T "vault.preview_mode_source"}}
           </a>
         </div>
+        {{end}}
       </div>
       <div class="action-cell">
         <a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}?dir={{.Data.Directory}}">{{.Layout.T "vault.back_to_files"}}</a>
@@ -41,10 +43,19 @@
         <a class="quiet-link" href="/dashboard/vaults/{{.Data.VaultID}}/files/download?path={{.Data.Path}}">{{.Layout.T "vault.download_original"}}</a>
       </div>
     </header>
-    {{if eq .Data.Mode "source"}}
-    <article class="markdown-preview"><pre><code>{{.Data.ContentText}}</code></pre></article>
-    {{else}}
-    <article class="markdown-preview">{{.Data.ContentHTML}}</article>
+    {{if eq .Data.Kind "markdown"}}
+      {{if eq .Data.Mode "source"}}
+      <article class="markdown-preview"><pre><code>{{.Data.ContentText}}</code></pre></article>
+      {{else}}
+      <article class="markdown-preview">{{.Data.ContentHTML}}</article>
+      {{end}}
+    {{else if eq .Data.Kind "image"}}
+      <div class="file-preview file-preview--image"><img src="/dashboard/vaults/{{.Data.VaultID}}/files/download?path={{.Data.Path}}&inline=1" alt="{{.Data.Name}}"></div>
+    {{else if eq .Data.Kind "pdf"}}
+      <div class="file-preview file-preview--pdf"><iframe src="/dashboard/vaults/{{.Data.VaultID}}/files/download?path={{.Data.Path}}&inline=1" title="{{.Data.Name}}"></iframe></div>
+    {{else if eq .Data.Kind "sandboxed"}}
+      <p class="file-preview-note">{{$.Layout.T "vault.preview_sandbox_note"}}</p>
+      <div class="file-preview file-preview--sandbox"><iframe sandbox referrerpolicy="no-referrer" src="/dashboard/vaults/{{.Data.VaultID}}/files/sandbox?path={{.Data.Path}}" title="{{.Data.Name}}"></iframe></div>
     {{end}}
   </article>
 </div>

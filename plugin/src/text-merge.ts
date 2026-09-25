@@ -1,5 +1,6 @@
 import { diff3Merge } from "node-diff3";
 
+/** 三方文本合并允许的正文大小，单位为字节 */
 export const MAX_MERGE_BYTES = 2 * 1024 * 1024;
 
 export type TextMergeResult =
@@ -138,6 +139,7 @@ export function resolveOrderedMerge(
   return merged.join("\n");
 }
 
+/** 按祖先、本地与远端版本合并文本；无法自动处理时保留冲突 */
 export function mergeText(
   baseText: string,
   localText: string,
@@ -151,6 +153,7 @@ export function mergeText(
   return { kind: "merged", content };
 }
 
+/** 只接纳受支持扩展名且不超过大小上限的 UTF-8 正文 */
 export function decodeMergeableText(
   path: string,
   bytes: Uint8Array,

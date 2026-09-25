@@ -387,7 +387,7 @@ func TestWebConsoleVaultFilesDeleteAndRecycleRestore(t *testing.T) {
 		!strings.Contains(page.Body.String(), ">Notes</a>") ||
 		!strings.Contains(page.Body.String(), "?dir=Notes") ||
 		!strings.Contains(page.Body.String(), "pic.png") ||
-		!strings.Contains(page.Body.String(), "当前仓库") {
+		!strings.Contains(page.Body.String(), `side-nav__vault-name`) {
 		t.Fatalf("vault files page: %d body=%s", page.Code, page.Body)
 	}
 

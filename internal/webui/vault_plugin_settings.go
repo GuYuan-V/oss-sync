@@ -20,6 +20,11 @@ type pluginSettingFieldView struct {
 	Rows   []themeSettingRowView
 }
 
+type pluginSettingVaultOption struct {
+	ID   string
+	Name string
+}
+
 type pluginSettingsData struct {
 	VaultID       string
 	VaultName     string
@@ -27,8 +32,12 @@ type pluginSettingsData struct {
 	PluginName    string
 	PluginVersion string
 	Fields        []pluginSettingFieldView
-	Error         string
-	Saved         bool
+	// Vaults 是插件设置生效的仓库选择项
+	Vaults []pluginSettingVaultOption
+	// NoVault 表示当前无满足插件生效条件的仓库
+	NoVault bool
+	Error   string
+	Saved   bool
 }
 
 func (h *Handler) pluginSettingsPage(c *gin.Context) {
@@ -36,11 +45,19 @@ func (h *Handler) pluginSettingsPage(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/dashboard/plugins/"+url.PathEscape(c.Param("plugin_id"))+"/settings?vault_id="+url.QueryEscape(c.Param("vault_id")))
 		return
 	}
-	vault, _, ok := h.resolveVaultPage(c)
+	u := h.webUser(c)
+	pluginID := c.Param("plugin_id")
+	vaultID, ok := h.pickPluginSettingVault(c, h.pluginSettingVaults(u, pluginID))
 	if !ok {
+		h.renderPluginSettingsNoVault(c, u, pluginID)
 		return
 	}
-	manifest, config, err := h.loadPluginSettings(c.Param("plugin_id"), vault.ID)
+	setVaultParam(c, vaultID)
+	vault, _, resolved := h.resolveVaultPage(c)
+	if !resolved {
+		return
+	}
+	manifest, config, err := h.loadPluginSettings(pluginID, vault.ID)
 	if err != nil {
 		c.Status(http.StatusNotFound)
 		return
@@ -52,6 +69,7 @@ func (h *Handler) pluginSettingsPage(c *gin.Context) {
 		PluginName:    manifest.Name,
 		PluginVersion: manifest.Version,
 		Fields:        buildPluginSettingViews(manifest.Settings, config),
+		Vaults:        h.pluginSettingVaults(u, pluginID),
 		Error:         c.Query("error"),
 		Saved:         c.Query("saved") == "1",
 	}
@@ -62,77 +80,151 @@ func (h *Handler) pluginSettingsPage(c *gin.Context) {
 }
 
 func (h *Handler) pluginSettingsGlobalPage(c *gin.Context) {
-	if !h.setPluginSettingsVaultParam(c, c.Query("vault_id")) {
-		c.Status(http.StatusNotFound)
-		return
-	}
 	h.pluginSettingsPage(c)
 }
 
 func (h *Handler) savePluginSettingsGlobal(c *gin.Context) {
-	if !h.setPluginSettingsVaultParam(c, c.PostForm("vault_id")) {
-		c.Status(http.StatusNotFound)
-		return
-	}
 	h.savePluginSettings(c)
 }
 
-func (h *Handler) setPluginSettingsVaultParam(c *gin.Context, requested string) bool {
-	u := h.webUser(c)
-	if requested != "" {
-		if _, _, err := vaultaccess.Resolve(h.DB, u.ID, requested); err == nil {
-			c.Params = append(c.Params, gin.Param{Key: "vault_id", Value: requested})
-			return true
-		}
-		if u.Role == "admin" {
-			var vault models.Vault
-			if err := h.DB.Where("id = ?", requested).First(&vault).Error; err == nil {
-				c.Params = append(c.Params, gin.Param{Key: "vault_id", Value: requested})
-				return true
-			}
-		}
-	}
-	if c.Param("plugin_id") == "papertrail-settings" {
-		var vaultIDs []string
-		if u.Role == "admin" {
-			if err := h.DB.Model(&models.Vault{}).Pluck("id", &vaultIDs).Error; err != nil {
-				return false
-			}
-		} else {
-			if err := h.DB.Model(&models.Vault{}).Where("owner_id = ?", u.ID).Pluck("id", &vaultIDs).Error; err != nil {
-				return false
-			}
-			var memberIDs []string
-			if err := h.DB.Model(&models.VaultMember{}).
-				Where("user_id = ? AND role IN ?", u.ID, []string{vaultaccess.RoleManager, vaultaccess.RoleParticipant}).
-				Pluck("vault_id", &memberIDs).Error; err != nil {
-				return false
-			}
-			vaultIDs = append(vaultIDs, memberIDs...)
-		}
-		if len(vaultIDs) > 0 {
-			var vault models.Vault
-			if err := h.DB.Joins("JOIN vault_settings ON vault_settings.vault_id = vaults.id").
-				Where("vaults.id IN ? AND vault_settings.theme_name = ?", vaultIDs, "papertrail").
-				Order("vaults.is_default desc, vaults.created_at asc").First(&vault).Error; err == nil {
-				c.Params = append(c.Params, gin.Param{Key: "vault_id", Value: vault.ID})
-				return true
-			}
+// renderPluginSettingsNoVault 渲染无生效仓库时的引导页
+func (h *Handler) renderPluginSettingsNoVault(c *gin.Context, u *models.User, pluginID string) {
+	name := h.pluginDisplayName(pluginID)
+	h.render(c, http.StatusOK, "vault-plugin-settings",
+		h.t(c, "page.plugin_settings", "", name),
+		"plugins", "vault-plugin-settings",
+		pluginSettingsData{
+			PluginID:   pluginID,
+			PluginName: name,
+			NoVault:    true,
+			Error:      h.t(c, "vault.plugin_settings_no_vault"),
+		})
+}
+
+func (h *Handler) pluginDisplayName(pluginID string) string {
+	for _, manifest := range serverplugin.BuiltinManifests() {
+		if manifest.ID == pluginID {
+			return manifest.Name
 		}
 	}
-	var vault models.Vault
-	if _, _, err := vaultaccess.Resolve(h.DB, u.ID, requested); requested != "" && err == nil {
-		vault, _, _ = vaultaccess.Resolve(h.DB, u.ID, requested)
-	} else if err := h.DB.Where("owner_id = ?", u.ID).Order("is_default desc, created_at asc").First(&vault).Error; err != nil {
-		return false
+	var record models.ServerPlugin
+	if err := h.DB.Where("id = ?", pluginID).First(&record).Error; err == nil && record.Name != "" {
+		return record.Name
 	}
-	c.Params = append(c.Params, gin.Param{Key: "vault_id", Value: vault.ID})
-	return true
+	return pluginID
+}
+
+// pluginSettingVaults 返回插件设置生效的仓库；关联插件按主题筛选
+// 未关联插件对全部可访问仓库生效
+func (h *Handler) pluginSettingVaults(u *models.User, pluginID string) []pluginSettingVaultOption {
+	var vaults []vaultNav
+	if u.Role == "admin" {
+		var all []models.Vault
+		if err := h.DB.Order("is_default desc, created_at asc").Find(&all).Error; err != nil {
+			return nil
+		}
+		for _, vault := range all {
+			vaults = append(vaults, vaultNav{ID: vault.ID, Name: vault.Name})
+		}
+	} else {
+		vaults = h.accessibleVaults(u)
+	}
+	if len(vaults) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(vaults))
+	for _, vault := range vaults {
+		ids = append(ids, vault.ID)
+	}
+	var settings []models.VaultSetting
+	if err := h.DB.Where("vault_id IN ?", ids).Find(&settings).Error; err != nil {
+		return nil
+	}
+	themeByVault := make(map[string]string, len(settings))
+	for _, setting := range settings {
+		theme := setting.ThemeName
+		if theme == "" {
+			theme = "default"
+		}
+		themeByVault[setting.VaultID] = theme
+	}
+
+	for _, manifest := range serverplugin.BuiltinManifests() {
+		if manifest.ID != pluginID {
+			continue
+		}
+		out := make([]pluginSettingVaultOption, 0, len(vaults))
+		for _, vault := range vaults {
+			if themeByVault[vault.ID] == "papertrail" {
+				out = append(out, pluginSettingVaultOption{ID: vault.ID, Name: vault.Name})
+			}
+		}
+		return out
+	}
+
+	var links []models.ServerPluginAssociation
+	if err := h.DB.Where("plugin_id = ?", pluginID).Find(&links).Error; err != nil {
+		return nil
+	}
+	allowed := make(map[string]bool, len(links))
+	for _, link := range links {
+		if link.Kind == "blog_theme" {
+			allowed[link.TargetID] = true
+		}
+	}
+	out := make([]pluginSettingVaultOption, 0, len(vaults))
+	for _, vault := range vaults {
+		if len(allowed) == 0 || allowed[themeByVault[vault.ID]] {
+			out = append(out, pluginSettingVaultOption{ID: vault.ID, Name: vault.Name})
+		}
+	}
+	return out
+}
+
+// pickPluginSettingVault 优先选择请求指定的仓库，否则选择第一个
+func (h *Handler) pickPluginSettingVault(c *gin.Context, options []pluginSettingVaultOption) (string, bool) {
+	if len(options) == 0 {
+		return "", false
+	}
+	requested := c.Query("vault_id")
+	if requested == "" {
+		requested = c.PostForm("vault_id")
+	}
+	if requested == "" {
+		requested = c.Param("vault_id")
+	}
+	for _, option := range options {
+		if option.ID == requested {
+			return option.ID, true
+		}
+	}
+	return options[0].ID, true
+}
+
+// setVaultParam 使后续处理器使用指定 Vault ID
+func setVaultParam(c *gin.Context, vaultID string) {
+	for i, param := range c.Params {
+		if param.Key == "vault_id" {
+			c.Params[i].Value = vaultID
+			return
+		}
+	}
+	c.Params = append(c.Params, gin.Param{Key: "vault_id", Value: vaultID})
 }
 
 func (h *Handler) savePluginSettings(c *gin.Context) {
-	vault, role, ok := h.resolveVaultPage(c)
+	u := h.webUser(c)
+	pluginID := c.Param("plugin_id")
+	vaultID, ok := h.pickPluginSettingVault(c, h.pluginSettingVaults(u, pluginID))
 	if !ok {
+		c.Redirect(http.StatusSeeOther, "/dashboard/plugins/"+url.PathEscape(pluginID)+
+			"/settings?error="+url.QueryEscape(h.t(c, "vault.plugin_settings_no_vault")))
+		return
+	}
+	setVaultParam(c, vaultID)
+	vault, role, resolved := h.resolveVaultPage(c)
+	if !resolved {
 		return
 	}
 	redirect := "/dashboard/plugins/" + url.PathEscape(c.Param("plugin_id")) + "/settings?vault_id=" + url.QueryEscape(vault.ID)
@@ -209,7 +301,8 @@ func (h *Handler) pluginSettingsLinkedToVault(pluginID, vaultID string) bool {
 	for _, builtin := range serverplugin.BuiltinManifests() {
 		if builtin.ID == pluginID {
 			var theme models.VaultSetting
-			return h.DB.Where("vault_id = ?", vaultID).First(&theme).Error == nil && theme.ThemeName == "papertrail"
+			return h.DB.Where("vault_id = ?", vaultID).First(&theme).Error == nil &&
+				blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, theme.ThemeName)
 		}
 	}
 	var count int64

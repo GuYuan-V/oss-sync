@@ -1,3 +1,4 @@
+/** 同一路径只允许一个冲突对话框进入打开流程 */
 export class ConflictOpeningGuard {
   private readonly paths = new Set<string>();
 

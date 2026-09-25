@@ -86,6 +86,7 @@ export type DiagnosticEvent =
       readonly resolvedCount?: number;
     };
 
+/** 仅保留脱敏后的有限事件记录，避免长期持有正文和令牌 */
 export class Diagnostics {
   private readonly events: DiagnosticEvent[] = [];
 

@@ -24,6 +24,7 @@ export interface CollaborationTransportDeps {
   readonly onStatusChange: () => void;
 }
 
+/** 协作事件优先使用 SSE，不可用时通过长轮询接收 */
 export class CollaborationTransport {
   private started = false;
   private status: CollaborationTransportStatus = "disconnected";

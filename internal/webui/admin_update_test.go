@@ -533,8 +533,6 @@ func TestAdminUpdateStatus_ContainerUsesInProcessUpdater(t *testing.T) {
 	}
 }
 
-// 辅助函数
-
 func newCheckedForWebUITest(t *testing.T, mgr *update.Manager, ver string) string {
 	t.Helper()
 	assetName, _ := update.AssetName(ver, runtime.GOOS, runtime.GOARCH)

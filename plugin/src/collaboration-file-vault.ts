@@ -30,6 +30,7 @@ export interface ExactVaultReadResult {
   readonly hash: string;
 }
 
+/** 管理协作文件的本地读写与短时事件抑制，防止自身写入重复触发同步 */
 export class CollaborationFileVault {
   private readonly suppressed = new Set<string>();
   private readonly suppressionTimers = new Map<string, number>();

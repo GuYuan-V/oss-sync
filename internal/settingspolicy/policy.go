@@ -17,6 +17,7 @@ const (
 	hardMaxHistoryDays     = 3650
 )
 
+// Limits 是系统允许的用户设置上限
 type Limits struct {
 	LongPollWaitSec      int
 	SyncDebounceSec      int
@@ -26,6 +27,7 @@ type Limits struct {
 	UploadSizeBytes      int64
 }
 
+// Preferences 是用户保存的同步与存储偏好
 type Preferences struct {
 	LongPollWaitSec   int
 	SyncDebounceSec   int
@@ -34,6 +36,7 @@ type Preferences struct {
 	UploadSizeBytes   int64
 }
 
+// Effective 是应用系统与用户设置后得到的生效值
 type Effective struct {
 	LongPollWaitSec   int
 	SyncDebounceSec   int
@@ -42,6 +45,7 @@ type Effective struct {
 	UploadSizeBytes   int64
 }
 
+// PreferenceError 描述超出范围的用户设置
 type PreferenceError struct {
 	Field   string
 	Value   int64
@@ -53,6 +57,7 @@ func (e *PreferenceError) Error() string {
 	return fmt.Sprintf("%s must be between %d and %d, got %d", e.Field, e.Minimum, e.Maximum, e.Value)
 }
 
+// LimitsFor 根据系统设置和服务端上传上限计算允许范围
 func LimitsFor(system models.SystemSetting, configUploadBytes int64) Limits {
 	uploadLimit := configUploadBytes
 	if uploadLimit <= 0 {
@@ -71,6 +76,7 @@ func LimitsFor(system models.SystemSetting, configUploadBytes int64) Limits {
 	}
 }
 
+// Resolve 合并系统默认值与用户偏好并返回生效值
 func Resolve(system models.SystemSetting, user models.UserSetting, configUploadBytes int64) Effective {
 	limits := LimitsFor(system, configUploadBytes)
 	recycleDefault := bounded(system.DefaultRecycleBinDays, defaultRecycleBinDays, 1, limits.RecycleBinDays)
@@ -86,6 +92,7 @@ func Resolve(system models.SystemSetting, user models.UserSetting, configUploadB
 	}
 }
 
+// ValidatePreferences 校验用户偏好是否落在允许范围内
 func ValidatePreferences(preferences Preferences, limits Limits) error {
 	checks := []struct {
 		field   string

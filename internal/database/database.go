@@ -125,7 +125,7 @@ func backfillServerPluginMetadata(db *gorm.DB) error {
 	return nil
 }
 
-// backfillLegacyVaults 仅为存在无 Vault 归属旧内容的账号创建默认 Vault，无内容的空账号保持无 Vault
+// backfillLegacyVaults 只为已有无 Vault 文件的账号创建默认 Vault
 func backfillLegacyVaults(db *gorm.DB) error {
 	var users []models.User
 	if err := db.Find(&users).Error; err != nil {
@@ -278,8 +278,7 @@ func backfillVaultRevisions(db *gorm.DB) error {
 	return nil
 }
 
-// backfillDeviceStates 为旧版设备补齐状态，并为已有同步绑定补齐仓库授权
-// 未吊销的旧设备回填为 approved，避免升级后把现有设备锁在外面
+// backfillDeviceStates 补齐设备状态与已有同步绑定的 Vault 授权
 func backfillDeviceStates(db *gorm.DB) error {
 	if err := db.Model(&models.ClientDevice{}).
 		Where("status = '' AND revoked_at IS NULL").

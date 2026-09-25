@@ -24,8 +24,7 @@ import (
 // maxDownloadSize 限制单个资产下载上限，防止异常数据撑爆磁盘
 const maxDownloadSize = 512 << 20 // 512 MiB
 
-// downloadAsset 下载资产；压缩包会解包并返回其中匹配当前平台的可执行文件
-// 在解包/魔数校验之前必须先通过 SHA-256 完整性校验
+// downloadAsset 下载并校验发布资产，压缩包返回当前平台的可执行文件
 func (u *Updater) downloadAsset(ctx context.Context, asset Asset, dir string) (string, error) {
 	if asset.BrowserDownloadURL == "" && asset.URL == "" {
 		return "", fmt.Errorf("资产 %q 没有下载地址", asset.Name)

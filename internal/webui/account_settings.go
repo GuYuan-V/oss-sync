@@ -115,9 +115,22 @@ func (h *Handler) loadAccountData(user *models.User) (accountData, error) {
 	configUploadBytes := h.configuredMaxUploadBytes()
 	limits := settingspolicy.LimitsFor(system, configUploadBytes)
 	effective := settingspolicy.Resolve(system, setting, configUploadBytes)
-	themes, err := consoletheme.List(h.Cfg.Storage.DataDir)
-	if err != nil {
-		return data, fmt.Errorf("load console themes: %w", err)
+	var themes []consoletheme.Info
+	if h.pluginManager != nil {
+		_, consoleOptions := h.pluginManager.EnabledThemeOptions()
+		for _, option := range consoleOptions {
+			source := "plugin"
+			if option.Builtin {
+				source = "builtin"
+			}
+			themes = append(themes, consoletheme.Info{Name: option.Name, DisplayName: option.Label, Source: source})
+		}
+	} else {
+		var err error
+		themes, err = consoletheme.List(h.Cfg.Storage.DataDir)
+		if err != nil {
+			return data, fmt.Errorf("load console themes: %w", err)
+		}
 	}
 	data.ConsoleThemes = themes
 	data.ConsoleThemeName = setting.ConsoleThemeName
@@ -190,7 +203,11 @@ func parseUserPreferences(form url.Values, limits settingspolicy.Limits) (settin
 }
 
 func parsePreferenceInteger(form url.Values, field string) (int64, error) {
-	value, err := strconv.ParseInt(strings.TrimSpace(form.Get(field)), 10, 64)
+	raw := strings.TrimSpace(form.Get(field))
+	if raw == "" && field == "vault_storage_mb" {
+		return 0, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || value < 0 || value > (int64(^uint64(0)>>1)/bytesPerMegabyte) {
 		return 0, &userPreferencesInputError{Message: field + " 必须为有效非负整数"}
 	}

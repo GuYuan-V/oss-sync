@@ -168,6 +168,7 @@ func newMarkdown(resolver LinkResolver, assets AssetResolver) goldmark.Markdown 
 	)
 }
 
+// RenderMarkdownWithAssets 渲染 Markdown，并通过 resolver 解析 wikilink 与资源地址
 func RenderMarkdownWithAssets(resolver LinkResolver, assets AssetResolver, source string) (string, error) {
 	md := newMarkdown(resolver, assets)
 	var buf strings.Builder

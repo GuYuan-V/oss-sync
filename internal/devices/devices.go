@@ -19,6 +19,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
+// ErrRevoked 表示设备已吊销
 var ErrRevoked = deviceauth.ErrRevoked
 
 const (
@@ -26,12 +27,14 @@ const (
 	DeviceNameHeader = deviceauth.DeviceNameHeader
 )
 
+// Handler 管理设备状态与 Vault 授权
 type Handler struct {
 	DB  *gorm.DB
 	Cfg *config.Config
 	now func() time.Time
 }
 
+// New 创建设备路由处理器
 func New(db *gorm.DB, cfg *config.Config) *Handler {
 	return &Handler{DB: db, Cfg: cfg, now: time.Now}
 }
@@ -46,6 +49,7 @@ func (h *Handler) Register(r *gin.Engine) {
 	}
 }
 
+// VaultCursorOut 表示设备在 Vault 中的同步游标
 type VaultCursorOut struct {
 	VaultID        string `json:"vault_id"`
 	VaultName      string `json:"vault_name"`
@@ -62,6 +66,7 @@ type AccessOut struct {
 	GrantedAt string `json:"granted_at,omitempty"`
 }
 
+// DeviceOut 是设备状态及授权仓库的响应数据
 type DeviceOut struct {
 	ClientID   string           `json:"client_id"`
 	Name       string           `json:"name"`

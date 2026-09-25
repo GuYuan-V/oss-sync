@@ -24,6 +24,7 @@ function expected(local: OrdinarySyncLocalMeta | null): ExpectedLocalState {
   return { kind: "hash", hash: local.hash };
 }
 
+/** 忽略冲突与重命名路径，完整同步时纳入本地和基线路径 */
 export function ordinarySyncCandidatePaths(
   input: OrdinarySyncCandidatePathsInput,
 ): readonly string[] {
@@ -49,6 +50,7 @@ export function ordinarySyncCandidatePaths(
   );
 }
 
+/** 根据远端、基线和待处理操作生成普通同步动作 */
 export function planOrdinarySyncActions(input: OrdinarySyncPlannerInput): OrdinarySyncPlanResult {
   const { forceFull, recoverySnapshot, remote, baseline, pending, localByPath, conflicts, vaultPaths, createOperationId } = input;
   const pendingByPath = new Map<string, PendingOperation>();

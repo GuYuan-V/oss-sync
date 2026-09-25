@@ -118,6 +118,48 @@ func (m *Manager) hostFileGet(ctx context.Context, params map[string]json.RawMes
 	return result, nil
 }
 
+func (m *Manager) hostFilePut(ctx context.Context, params map[string]json.RawMessage) (map[string]any, error) {
+	if m.fileWriter == nil {
+		return nil, errors.New("file write is not available")
+	}
+	vaultID, err := requiredStringParam(params, "vault_id")
+	if err != nil {
+		return nil, err
+	}
+	path, err := requiredStringParam(params, "path")
+	if err != nil {
+		return nil, err
+	}
+	var content string
+	if raw := params["content"]; len(raw) > 0 {
+		if err := json.Unmarshal(raw, &content); err != nil {
+			return nil, fmt.Errorf("decode file content: %w", err)
+		}
+	}
+	var mtime int64
+	if raw := params["mtime"]; len(raw) > 0 {
+		if err := json.Unmarshal(raw, &mtime); err != nil {
+			return nil, fmt.Errorf("decode file mtime: %w", err)
+		}
+	}
+	var vault models.Vault
+	if err := m.db.WithContext(ctx).Where("id = ?", vaultID).First(&vault).Error; err != nil {
+		return nil, err
+	}
+	saved, err := m.fileWriter.WriteFileContent(vault.OwnerID, vaultID, path, []byte(content), mtime)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"id":       saved.ID,
+		"vault_id": saved.VaultID,
+		"path":     saved.Path,
+		"hash":     saved.Hash,
+		"size":     saved.Size,
+		"revision": saved.Revision,
+	}, nil
+}
+
 func (m *Manager) hostShareCreate(ctx context.Context, params map[string]json.RawMessage) (models.Share, error) {
 	var input struct {
 		VaultID    string `json:"vault_id"`
