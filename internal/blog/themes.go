@@ -85,7 +85,7 @@ func CustomThemeExists(dataDir, themeName string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-// CreateDevelopmentTheme 把内置起始模板复制到 data/themes/<name>；已存在目录一律拒绝覆盖，管理员正在编辑的模板不会被控制台改写
+// CreateDevelopmentTheme 复制内置模板；目标目录已存在时拒绝覆盖
 func CreateDevelopmentTheme(dataDir, themeName string) (string, error) {
 	if themeName == "default" {
 		return "", errors.New("default 是内置主题，不能覆盖")

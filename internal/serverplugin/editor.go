@@ -15,6 +15,7 @@ import (
 
 const maxEditablePluginFileBytes = 1 << 20
 
+// EditablePluginFile 是插件包中可在线编辑的文本文件
 type EditablePluginFile struct {
 	Path    string
 	Content string

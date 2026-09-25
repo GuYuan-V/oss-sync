@@ -12,8 +12,7 @@ import (
 	"time"
 )
 
-// ErrRollbackRestart 表示健康检查未通过、已回滚到备份二进制，
-// 需要重启进程（用回滚后的旧版本二进制）完成闭环
+// ErrRollbackRestart 表示回滚后需要重启服务
 var ErrRollbackRestart = errors.New("健康检查未通过，已回滚到备份二进制，需要重启服务")
 
 // CheckReady 轮询 /readyz 直到返回 ready:true 或超过 timeout

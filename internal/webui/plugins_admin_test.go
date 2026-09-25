@@ -42,6 +42,31 @@ func TestAdminPluginsTemplateContainsLifecycleControls(t *testing.T) {
 	}
 }
 
+func TestPluginReturnsDocument_onlyFullDocumentsOptOutOfWrapper(t *testing.T) {
+	t.Parallel()
+	cases := map[string]bool{
+		`<section><input></section>`:                        false,
+		`  <!doctype html><html><body>custom</body></html>`: true,
+		`<html><head></head><body>custom</body></html>`:     true,
+	}
+	for content, want := range cases {
+		if got := pluginReturnsDocument(content); got != want {
+			t.Errorf("pluginReturnsDocument(%q) = %v, want %v", content, got, want)
+		}
+	}
+}
+
+func TestPluginAdminPageTitle_UsesRegisteredLabel(t *testing.T) {
+	t.Parallel()
+	pages := []serverplugin.PluginAdminPage{{PluginID: "demo", Slug: "settings", Label: "Demo settings"}}
+	if got := pluginAdminPageTitle(pages, "demo", "settings"); got != "Demo settings" {
+		t.Fatalf("plugin admin title = %q, want Demo settings", got)
+	}
+	if got := pluginAdminPageTitle(pages, "other", "settings"); got != "settings" {
+		t.Fatalf("fallback plugin admin title = %q, want settings", got)
+	}
+}
+
 func TestVaultPluginSettingsHTTPPersistsPerVaultValues(t *testing.T) {
 	db, cfg, _ := newWebUITestDB(t)
 	if err := db.AutoMigrate(&models.ServerPlugin{}, &models.ServerPluginAssociation{}, &models.VaultPluginSetting{}); err != nil {

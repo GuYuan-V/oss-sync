@@ -127,7 +127,7 @@ func TestWriteFileContent_identicalContentIsNoOp(t *testing.T) {
 	if second.Revision != first.Revision {
 		t.Fatalf("identical content bumped revision: %d -> %d", first.Revision, second.Revision)
 	}
-	// 内容未变化不应新增历史：创建记 1 条，重复保存不再新增
+	// 重复保存不产生新的历史记录
 	var historyCount int64
 	if err := h.DB.Model(&models.FileHistory{}).Where("vault_id = ? AND file_path = ?", "v1", "note.md").Count(&historyCount).Error; err != nil {
 		t.Fatalf("count history: %v", err)

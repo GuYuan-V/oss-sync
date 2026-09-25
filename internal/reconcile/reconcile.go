@@ -1,4 +1,4 @@
-// Package reconcile 对比数据库元数据与磁盘内容并记录修复问题
+// Package reconcile 检查 Vault 文件元数据与磁盘内容的一致性
 package reconcile
 
 import (
@@ -21,6 +21,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/synclock"
 )
 
+// Report 汇总一次存储对账的检查与处理结果
 type Report struct {
 	VaultsScanned    int `json:"vaults_scanned"`
 	FilesChecked     int `json:"files_checked"`
@@ -44,12 +45,14 @@ func (r Report) String() string {
 	)
 }
 
+// Reconciler 处理 Vault 文件对账
 type Reconciler struct {
 	DB  *gorm.DB
 	Cfg *config.Config
 	now func() time.Time
 }
 
+// New 创建存储对账处理器
 func New(db *gorm.DB, cfg *config.Config) *Reconciler {
 	return &Reconciler{DB: db, Cfg: cfg, now: time.Now}
 }

@@ -1,3 +1,5 @@
+// Package main 提供服务端插件 SDK 示例
+
 package main
 
 import (

@@ -35,12 +35,14 @@ type PluginInfo struct {
 	Builtin            bool
 }
 
+// PluginAssociation 表示插件与资源的关联
 type PluginAssociation struct {
 	Kind       string
 	TargetID   string
 	TargetName string
 }
 
+// ThemeOption 表示可选的主题资源
 type ThemeOption struct {
 	Name               string
 	Label              string
@@ -103,6 +105,7 @@ func (p *wasmPluginInstance) Registration() ExtensionRegistration {
 	return p.registration
 }
 
+// NewManager 加载插件目录与已安装插件状态
 func NewManager(ctx context.Context, db *gorm.DB, dataDir string) (*Manager, error) {
 	if ctx == nil {
 		return nil, errors.New("plugin manager context is nil")

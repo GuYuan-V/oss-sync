@@ -1,3 +1,5 @@
+// Package main 生成服务端插件示例包
+
 package main
 
 import (

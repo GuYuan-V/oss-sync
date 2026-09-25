@@ -9,9 +9,8 @@ import (
 	"github.com/helantianshen/oss-sync/internal/version"
 )
 
-// CheckCapability 校验当前进程是否具备执行自更新的前置条件
-// 依次检查：开发版本、受支持平台、可执行文件形态（常规文件、非软链）、
-// 可执行文件所在目录可写；任一不满足即返回带稳定 Code 的 UpdateError
+// CheckCapability 校验自更新的平台、版本与可执行文件条件
+// 不满足时返回带稳定 Code 的 UpdateError
 func CheckCapability(execPath string, goos, goarch string) error {
 	if version.IsDevelopmentVersion(version.Version) {
 		return newUpdateError(

@@ -19,8 +19,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultbackup"
 )
 
-// 备份管理
-
+// adminBackupRow 是管理员归档列表的显示数据
 type adminBackupRow struct {
 	ID        string
 	VaultName string
@@ -100,8 +99,7 @@ func (h *Handler) deleteBackup(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/system?saved=1")
 }
 
-// 用户管理
-
+// adminUserRow 是用户管理表格的显示数据
 type adminUserRow struct {
 	UserID      uint
 	Username    string
@@ -258,8 +256,7 @@ func (h *Handler) adminDeleteUser(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin?saved=1")
 }
 
-// 全部仓库
-
+// adminVaultRow 是全部仓库列表的显示数据
 type adminVaultRow struct {
 	ID          string
 	Name        string
@@ -327,8 +324,7 @@ func (h *Handler) adminVaultsPage(c *gin.Context) {
 	h.render(c, http.StatusOK, "admin-vaults", h.t(c, "page.admin_vaults"), "admin", "admin-vaults", d)
 }
 
-// 仓库详情
-
+// adminVaultDetailData 包含仓库详情和成员数据
 type adminVaultDetailData struct {
 	VaultID     string
 	VaultName   string
@@ -446,8 +442,7 @@ func (h *Handler) adminVaultDetailPage(c *gin.Context) {
 	h.render(c, http.StatusOK, "admin-vault-detail", h.t(c, "page.admin_vault_detail", vault.Name), "admin", "admin-vaults", d)
 }
 
-// 全部设备
-
+// adminDevicesData 是管理员设备列表的页面数据
 type adminDevicesData struct {
 	Devices []adminDeviceRow
 	Error   string

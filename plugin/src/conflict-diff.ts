@@ -120,7 +120,7 @@ export function buildConflictDiff(local: string, remote: string): ConflictDiffRo
   const diffs = dmp.diff_main(encodedLocal, encodedRemote, false);
   dmp.diff_cleanupMerge(diffs);
 
-  // 按替换块缓存变更行，使同一块内 removed 始终排在 added 之前，避免 diff_main 交错输出打乱顺序
+  // 同一替换块内先显示 removed，再显示 added
   const rows: ConflictDiffRow[] = [];
   const removed: string[] = [];
   const added: string[] = [];

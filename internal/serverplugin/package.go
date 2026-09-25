@@ -1,3 +1,5 @@
+// Package serverplugin 管理服务端插件包、进程、路由和宿主服务调用
+
 package serverplugin
 
 import (
@@ -58,6 +60,7 @@ type Manifest struct {
 	ConsoleThemes []ThemeResource          `json:"console_themes,omitempty"`
 }
 
+// ThemeResource 声明插件包中的主题资源
 type ThemeResource struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -98,6 +101,7 @@ type PluginRequest struct {
 	BodyBase64 string              `json:"body_base64,omitempty"`
 }
 
+// PluginUser 是插件请求中的已认证用户
 type PluginUser struct {
 	ID       uint   `json:"id"`
 	Username string `json:"username"`
@@ -111,6 +115,7 @@ type PluginResponse struct {
 	BodyBase64 string            `json:"body_base64,omitempty"`
 }
 
+// ParseManifest 解析并校验插件包清单
 func ParseManifest(raw []byte) (Manifest, error) {
 	if len(raw) == 0 || len(raw) > MaxManifestBytes {
 		return Manifest{}, fmt.Errorf("%w: manifest size is invalid", ErrInvalidManifest)
@@ -134,6 +139,7 @@ func ParseManifest(raw []byte) (Manifest, error) {
 	return manifest, nil
 }
 
+// ValidateManifest 校验插件清单的字段与资源约束
 func ValidateManifest(manifest Manifest) error {
 	if !pluginIDPattern.MatchString(manifest.ID) {
 		return fmt.Errorf("%w: id must be 2-64 lowercase letters, digits, or hyphens", ErrInvalidManifest)

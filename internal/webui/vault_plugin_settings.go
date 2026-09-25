@@ -32,9 +32,9 @@ type pluginSettingsData struct {
 	PluginName    string
 	PluginVersion string
 	Fields        []pluginSettingFieldView
-	// Vaults 是该插件设置真正生效的仓库，用于页面上的仓库选择器。
+	// Vaults 是插件设置生效的仓库选择项
 	Vaults []pluginSettingVaultOption
-	// NoVault 表示当前没有任何仓库满足该插件的生效条件。
+	// NoVault 表示当前无满足插件生效条件的仓库
 	NoVault bool
 	Error   string
 	Saved   bool
@@ -87,7 +87,7 @@ func (h *Handler) savePluginSettingsGlobal(c *gin.Context) {
 	h.savePluginSettings(c)
 }
 
-// renderPluginSettingsNoVault 在没有生效仓库时渲染引导页，避免出现无法使用的死链接。
+// renderPluginSettingsNoVault 渲染无生效仓库时的引导页
 func (h *Handler) renderPluginSettingsNoVault(c *gin.Context, u *models.User, pluginID string) {
 	name := h.pluginDisplayName(pluginID)
 	h.render(c, http.StatusOK, "vault-plugin-settings",
@@ -114,8 +114,8 @@ func (h *Handler) pluginDisplayName(pluginID string) string {
 	return pluginID
 }
 
-// pluginSettingVaults 返回该插件设置真正生效的仓库：内置插件要求仓库使用对应博客主题，
-// 关联插件要求仓库主题命中关联目标；未关联插件对所有可访问仓库生效。
+// pluginSettingVaults 返回插件设置生效的仓库；关联插件按主题筛选
+// 未关联插件对全部可访问仓库生效
 func (h *Handler) pluginSettingVaults(u *models.User, pluginID string) []pluginSettingVaultOption {
 	var vaults []vaultNav
 	if u.Role == "admin" {
@@ -182,7 +182,7 @@ func (h *Handler) pluginSettingVaults(u *models.User, pluginID string) []pluginS
 	return out
 }
 
-// pickPluginSettingVault 选择请求指定的生效仓库；未指定或不在生效列表时取第一个。
+// pickPluginSettingVault 优先选择请求指定的仓库，否则选择第一个
 func (h *Handler) pickPluginSettingVault(c *gin.Context, options []pluginSettingVaultOption) (string, bool) {
 	if len(options) == 0 {
 		return "", false
@@ -202,7 +202,7 @@ func (h *Handler) pickPluginSettingVault(c *gin.Context, options []pluginSetting
 	return options[0].ID, true
 }
 
-// setVaultParam 覆盖请求中的 vault_id，保证后续解析使用指定仓库。
+// setVaultParam 使后续处理器使用指定 Vault ID
 func setVaultParam(c *gin.Context, vaultID string) {
 	for i, param := range c.Params {
 		if param.Key == "vault_id" {

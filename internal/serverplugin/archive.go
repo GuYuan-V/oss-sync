@@ -23,6 +23,7 @@ type Package struct {
 	WasmHash      string
 }
 
+// ParsePackage 校验 ZIP 约束、manifest 与平台入口并返回解包内容
 func ParsePackage(reader io.ReaderAt, size int64) (Package, error) {
 	if reader == nil || size <= 0 || size > MaxArchiveBytes {
 		return Package{}, fmt.Errorf("%w: archive size is invalid", ErrInvalidPackage)

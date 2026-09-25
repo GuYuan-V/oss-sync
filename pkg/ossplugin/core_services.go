@@ -2,16 +2,19 @@ package ossplugin
 
 import "context"
 
+// VaultInput 是 Vault 创建和更新参数
 type VaultInput struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 }
 
+// FileQuery 是文件查询参数
 type FileQuery struct {
 	VaultID string `json:"vault_id"`
 	Path    string `json:"path,omitempty"`
 }
 
+// ShareInput 是分享创建参数
 type ShareInput struct {
 	VaultID    string `json:"vault_id"`
 	TargetPath string `json:"target_path"`
@@ -19,6 +22,7 @@ type ShareInput struct {
 	AllowCopy  bool   `json:"allow_copy,omitempty"`
 }
 
+// BlogContent 是博客正文数据
 type BlogContent struct {
 	VaultID string `json:"vault_id"`
 	Path    string `json:"path"`
@@ -77,6 +81,7 @@ func (s ShareService) Delete(ctx context.Context, shareID string) error {
 
 func (s ServiceClient) Blog() BlogService { return BlogService{client: s.client} }
 
+// BlogService 提供博客正文读取与过滤
 type BlogService struct{ client *Client }
 
 func (s BlogService) GetMarkdown(ctx context.Context, vaultID, path string) (BlogContent, error) {

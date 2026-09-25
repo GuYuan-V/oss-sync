@@ -204,8 +204,7 @@ func (h *Handler) upsertFile(
 	return saved, err
 }
 
-// commitFileWrite 在持有 vault 与路径锁的前提下把已写入临时文件的内容原子落盘并登记同步修订
-// 复用同一进程内的锁、修订通知与协作事件，保证宿主侧写入与客户端上传共享同一套并发与通知机制
+// commitFileWrite 在 Vault 和路径锁内提交文件并通知同步客户端
 func (h *Handler) commitFileWrite(userID uint, vaultID, path, storageKey, targetPath, tmpPath, hash string, size, mtime int64) (models.File, error) {
 	vaultLock := h.vaultLock(vaultID)
 	vaultLock.Lock()
@@ -251,9 +250,8 @@ func (h *Handler) commitFileWrite(userID uint, vaultID, path, storageKey, target
 	return saved, nil
 }
 
-// WriteFileContent 供受信宿主（如服务端插件）以内存内容写入 vault 文件
-// 语义与 V2 同步写入一致：内容未变化时既不推进修订也不记历史；真实变更时快照旧内容、推进修订并唤醒同步与协作
-// userID 通常取 vault 拥有者，mtime 非正数时取当前时间
+// WriteFileContent 写入 Vault 文件；相同内容不产生修订和历史记录
+// userID 为文件所有者，mtime 非正数时使用当前时间
 func (h *Handler) WriteFileContent(userID uint, vaultID, path string, content []byte, mtime int64) (models.File, error) {
 	normalized, valid := normalizeRelativePath(path)
 	if !valid {

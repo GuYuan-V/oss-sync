@@ -34,6 +34,7 @@ type Service struct {
 	DB *gorm.DB
 }
 
+// New 创建协作关系服务
 func New(db *gorm.DB) *Service { return &Service{DB: db} }
 
 // Invite 为 owner 或 manager 创建待接受的 Markdown 文件协作
@@ -214,6 +215,7 @@ type Broker struct {
 	version map[string]int64
 }
 
+// NewBroker 创建进程内协作事件分发器
 func NewBroker() *Broker {
 	return &Broker{
 		subs:    map[string][]chan Event{},

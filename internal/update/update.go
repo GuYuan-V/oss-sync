@@ -167,7 +167,7 @@ func (u *Updater) TriggerRestart() {
 	}()
 }
 
-// CheckUpdate 比较当前版本与最新 Release，并为状态接口保存结果副本，开发版本同样接受稳定 Release
+// CheckUpdate 比较当前版本与最新 Release，并缓存检查结果
 func (u *Updater) CheckUpdate(ctx context.Context) (*CheckResult, error) {
 	release, err := u.gh.fetchLatestFrom(ctx, u.source, u.proxy)
 	if err != nil && !errors.Is(err, ErrNoRelease) {

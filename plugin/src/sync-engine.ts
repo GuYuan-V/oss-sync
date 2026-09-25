@@ -54,6 +54,7 @@ type LiveAcknowledgement = {
   readonly bytesHash: string;
 };
 
+/** 同一 Vault 的普通同步由持久化基线、操作队列和修订游标共同驱动 */
 export class SyncEngine {
   private readonly api: OSSApiClient;
   private readonly baseline: BaselineStore;

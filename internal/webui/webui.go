@@ -100,6 +100,7 @@ type pluginNav struct {
 	Name string
 }
 
+// New 解析控制台模板并创建网页处理器
 func New(db *gorm.DB, cfg *config.Config) (*Handler, error) {
 	funcs := template.FuncMap{
 		"formatBytes": formatBytes,
@@ -241,8 +242,7 @@ func (h *Handler) Register(r *gin.Engine) {
 	r.POST("/admin/logout", h.logout)
 }
 
-// 会话
-
+// sessionUser 从网页会话 Cookie 解析已登录用户
 func (h *Handler) sessionUser(c *gin.Context) *models.User {
 	token, err := c.Cookie(sessionCookie)
 	if err != nil || token == "" {
@@ -426,7 +426,7 @@ func (h *Handler) render(c *gin.Context, status int, page, title, activeGroup, a
 	h.renderWithLayout(c, status, ld, data)
 }
 
-// setPluginNavigationForUser 构造插件设置导航。
+// setPluginNavigationForUser 构造插件设置导航
 func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 	for _, manifest := range serverplugin.BuiltinManifests() {
 		if manifest.ID == "papertrail-settings" && len(manifest.Settings) > 0 && len(h.pluginSettingVaults(u, manifest.ID)) > 0 {
@@ -451,8 +451,7 @@ func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 	}
 }
 
-// accessibleVaults 返回当前用户可访问的仓库（owner 或有效成员），
-// 供侧边栏仓库导航使用；默认仓库排在前面。
+// accessibleVaults 返回当前用户可访问的仓库，默认仓库排在前面
 func (h *Handler) accessibleVaults(u *models.User) []vaultNav {
 	if u == nil {
 		return nil
@@ -535,8 +534,7 @@ func requestIsHTTPS(c *gin.Context) bool {
 		strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")), "https")
 }
 
-// 静态资源
-
+// styles 返回控制台基础样式
 func (h *Handler) styles(c *gin.Context) {
 	raw, err := webFS.ReadFile("assets/console.css")
 	if err != nil {
@@ -559,8 +557,7 @@ func (h *Handler) script(name, contentType string) gin.HandlerFunc {
 	}
 }
 
-// 登录与注册
-
+// loginView 是登录页的显示数据
 type loginView struct {
 	Error string
 }
@@ -605,8 +602,7 @@ func (h *Handler) renderAuth(c *gin.Context, status int, page string, data any) 
 	h.renderWithLayout(c, status, ld, data)
 }
 
-// 网页文件操作
-
+// formatBytes 将字节数格式化为控制台容量文案
 func formatBytes(size int64) string {
 	const gib = 1024 * 1024 * 1024
 	const mib = 1024 * 1024

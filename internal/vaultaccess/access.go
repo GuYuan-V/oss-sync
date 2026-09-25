@@ -17,6 +17,7 @@ const (
 	RoleAdmin = "admin"
 )
 
+// ValidMemberRole 判断角色是否可用于 Vault 成员
 func ValidMemberRole(role string) bool {
 	return role == RoleManager || role == RoleParticipant
 }
@@ -26,6 +27,7 @@ func CanManage(role string) bool {
 	return role == RoleOwner || role == RoleManager || role == RoleAdmin
 }
 
+// CanDelete 判断角色是否可永久删除 Vault
 func CanDelete(role string) bool {
 	return role == RoleOwner || role == RoleAdmin
 }
@@ -49,6 +51,7 @@ func Resolve(db *gorm.DB, userID uint, vaultID string) (models.Vault, string, er
 	return vault, member.Role, nil
 }
 
+// IsNotFound 判断 Vault 解析错误是否为资源不可见
 func IsNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
 }

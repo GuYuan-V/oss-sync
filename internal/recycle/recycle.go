@@ -14,6 +14,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
+// ErrRetentionExpired 表示文件已过回收站保留期
 var ErrRetentionExpired = errors.New("recycle retention has expired")
 
 // RetentionDays 返回策略解析后的回收站保留天数，仓库设置可进一步缩短保留期
@@ -34,6 +35,7 @@ func RetentionDays(db *gorm.DB, vaultID string) (int, error) {
 	return days, nil
 }
 
+// ExpiresAt 返回回收站文件的保留期到期时间
 func ExpiresAt(file models.File, retentionDays int) time.Time {
 	if !file.DeletedAt.Valid {
 		return time.Time{}
@@ -41,11 +43,13 @@ func ExpiresAt(file models.File, retentionDays int) time.Time {
 	return file.DeletedAt.Time.Add(time.Duration(retentionDays) * 24 * time.Hour)
 }
 
+// CanRestore 判断文件在指定时间是否仍可恢复
 func CanRestore(file models.File, retentionDays int, now time.Time) bool {
 	expiresAt := ExpiresAt(file, retentionDays)
 	return !expiresAt.IsZero() && now.Before(expiresAt)
 }
 
+// CheckRestorable 校验回收站文件的恢复资格
 func CheckRestorable(db *gorm.DB, file models.File, now time.Time) error {
 	retentionDays, err := RetentionDays(db, file.VaultID)
 	if err != nil {

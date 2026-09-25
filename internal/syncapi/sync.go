@@ -35,6 +35,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
+// Handler 持有同步路由所需的数据库、修订信号和协作事件
 type Handler struct {
 	DB      *gorm.DB
 	Cfg     *config.Config
@@ -43,6 +44,7 @@ type Handler struct {
 	collab  *collaboration.Service
 }
 
+// New 为同一服务实例创建共享的同步处理器
 func New(db *gorm.DB, cfg *config.Config) *Handler {
 	return &Handler{
 		DB: db, Cfg: cfg,
@@ -120,17 +122,20 @@ type CheckRequest struct {
 	Files []CheckFileIn `json:"files"`
 }
 
+// CheckFileIn 是客户端提交的单文件元数据
 type CheckFileIn struct {
 	Path  string `json:"path"`
 	MTime int64  `json:"mtime"` // 客户端本地 mtime（Unix 毫秒）
 	Hash  string `json:"hash"`  // 客户端本地 SHA256
 }
 
+// CheckResponse 是批量同步检查结果
 type CheckResponse struct {
 	ServerTime int64          `json:"server_time"` // Unix 毫秒时间戳
 	Results    []CheckFileOut `json:"results"`
 }
 
+// CheckFileOut 表示单文件的同步决策
 type CheckFileOut struct {
 	Path        string `json:"path"`
 	Status      string `json:"status"` // 取值：upload_needed、download_needed、in_sync、conflict_detected、assume_in_sync

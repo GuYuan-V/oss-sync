@@ -32,8 +32,10 @@ If you run into problems, please open an [issue](https://github.com/helantianshe
   - First launch asks for a device name; device approval and Vault authorization are separate on the server, so a device can be approved before any Vault exists.
 - **Attachment and config sync**:
   - Images, PDFs, and other non-note files are supported; `.obsidian` config sync is off by default.
+  - The web console previews Markdown, images, PDFs, HTML, and SVG; HTML and SVG run inside a script-disabled sandbox.
+  - Text files can be edited in the web console without a server plugin. Saves use the sync write path and unchanged content does not create a new revision.
 - **Recycle bin and file history**:
-  - Deletions go to the recycle bin with restore and retention-based cleanup.
+  - Deletions go to the recycle bin with restore, remaining retention time, and retention-based cleanup.
   - History supports version browsing, line diff, and restore to any version.
 - **Sharing and public blog**:
   - Public links for a single note or a folder, with an allow-copy toggle.
@@ -43,7 +45,8 @@ If you run into problems, please open an [issue](https://github.com/helantianshe
 - **Server plugin extensions**:
   - WASM compatible, plus administrator-trusted executable plugins.
   - Plugins can register routes, hooks, middleware, admin pages, cron tasks, database migrations, dependencies, and host RPC.
-  - A public Go SDK removes the need to hand-write the process protocol.
+  - Admin page HTML fragments automatically use the console shell and active theme; complete HTML documents remain plugin-controlled.
+  - The public Go SDK includes host file read/write methods; plugin writes participate in sync revisions and file history.
 - **Data and deployment**:
   - SQLite by default, PostgreSQL optional, with periodic storage reconciliation.
   - One script installs the binary and registers systemd; Docker remains available.
@@ -217,7 +220,7 @@ Resource example:
 }
 ```
 
-The server runs precompiled WASM or executable plugin payloads directly. Online editing in the plugin page is limited to validated text resources; binary entrypoints are read-only. See the embedded plugin guide for the resource contract, selectors, lifecycle, request context, and safety boundary.
+The server runs precompiled WASM or executable plugin payloads directly. Online editing in the plugin page is limited to validated text resources; binary entrypoints are read-only. AdminPage fragments inherit the console layout and active theme; a complete HTML document remains plugin-controlled. See the [server plugin guide](docs/server-plugins.md) and the console's embedded **Plugin guide** for package layout, callbacks, authorization, host services, packaging, testing, and AI-assisted development.
 
 ---
 

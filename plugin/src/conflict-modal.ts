@@ -88,7 +88,7 @@ export class ConflictModal extends Modal {
             }),
         );
     }
-    // 无有序合并时保留经典差异视图，有序视图接管后该分支不再展示，避免重复
+    // 有序合并区域和经典差异视图互斥
     if (!orderedRegions) {
       try {
         const rows = buildConflictDiff(localContent, this.remoteContent);

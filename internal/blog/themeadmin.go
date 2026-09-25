@@ -258,7 +258,7 @@ func UploadTheme(dataDir, themeName string, r io.ReaderAt, size int64) error {
 	if err := os.Mkdir(dir, 0o750); err != nil {
 		return fmt.Errorf("创建主题目录: %w", err)
 	}
-	// 边写入边清理：失败时移除半成品
+	// 写入失败时删除未完成的主题目录
 	ok := false
 	defer func() {
 		if !ok {
@@ -485,11 +485,17 @@ var (
 	ErrThemeExists          = errThemeExists
 )
 
-// IsThemeReadOnly 等函数提供主题错误码判断
-func IsThemeReadOnly(err error) bool        { return errors.Is(err, errThemeReadOnly) }
+// IsThemeReadOnly 判断主题是否只读
+func IsThemeReadOnly(err error) bool { return errors.Is(err, errThemeReadOnly) }
+
+// IsThemeNotDownloadable 判断主题是否禁止下载
 func IsThemeNotDownloadable(err error) bool { return errors.Is(err, errThemeNotDownloadable) }
-func IsThemeNotDeletable(err error) bool    { return errors.Is(err, errThemeNotDeletable) }
-func IsThemeInUse(err error) bool           { return errors.Is(err, errThemeInUse) }
+
+// IsThemeNotDeletable 判断主题是否禁止删除
+func IsThemeNotDeletable(err error) bool { return errors.Is(err, errThemeNotDeletable) }
+
+// IsThemeInUse 判断主题是否正被仓库使用
+func IsThemeInUse(err error) bool { return errors.Is(err, errThemeInUse) }
 
 func dirStats(dir string) (int, int64, error) {
 	var count int

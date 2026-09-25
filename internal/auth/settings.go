@@ -27,6 +27,7 @@ func EnsureRegistrationSetting(db *gorm.DB, defaultEnabled bool) error {
 	}).Error
 }
 
+// RegistrationEnabled 读取持久化的注册开关，空库使用默认值
 func RegistrationEnabled(db *gorm.DB, defaultEnabled bool) (bool, error) {
 	if err := EnsureRegistrationSetting(db, defaultEnabled); err != nil {
 		return false, err
@@ -38,6 +39,7 @@ func RegistrationEnabled(db *gorm.DB, defaultEnabled bool) (bool, error) {
 	return setting.RegistrationEnabled, nil
 }
 
+// SetRegistrationEnabled 保存系统级注册开关
 func SetRegistrationEnabled(db *gorm.DB, enabled bool) error {
 	if err := EnsureRegistrationSetting(db, true); err != nil {
 		return err

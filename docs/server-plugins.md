@@ -1,15 +1,56 @@
-# Server Plugins
+# OSS Sync Server Plugins
 
-OSS Sync supports two server-plugin runtimes:
+## 1. Runtime choice
 
-- `wasm`: the existing WASM ABI. It remains available for packages that need the narrow host boundary.
-- `executable`: a trusted, persistent process launched by the OSS Sync server account. It can use the normal operating-system permissions of that account.
+OSS Sync has two runtimes:
 
-Only administrators can upload plugins. The web-console upload flow validates the package, performs an executable handshake when needed, and enables the plugin after installation. Treat every executable package as server code: it can read files, use the network, access databases, and run commands.
+- `executable`: a persistent, administrator-trusted process launched with the server account's OS permissions. Use this for the Go SDK, network integrations, database-backed features, file services, scheduled tasks, and admin pages.
+- `wasm`: WASM ABI v1 with a narrow memory boundary. WASI, filesystem, network, and database imports are unavailable.
 
-## Package
+An executable plugin is not a sandbox. It can read/write server files, access the database, use the network, read environment variables, and run commands as the server account. Install only reviewed code.
 
-Every ZIP must contain `manifest.json` and the files referenced by the manifest. The archive is limited to 32 MiB, has at most 512 files, and extracts to at most 64 MiB. Each non-manifest file is limited to 32 MiB; WASM is limited to 8 MiB. Absolute paths, `..`, backslashes, duplicate entries, directories, and symlinks are rejected.
+## 2. Package contract
+
+Every ZIP contains `manifest.json` and the files referenced by that manifest. The archive limits are:
+
+- 32 MiB archive;
+- 512 files;
+- 64 MiB extracted content;
+- 32 MiB per non-manifest file;
+- 8 MiB for `plugin.wasm`.
+
+Absolute paths, `..`, backslashes, duplicate entries, directories, and symlinks are rejected.
+
+### Executable package
+
+```text
+manifest.json
+plugin-linux-amd64
+plugin-windows-amd64.exe
+assets/...
+```
+
+```json
+{
+  "id": "hello-tools",
+  "name": "Hello tools",
+  "version": "1.0.0",
+  "api_version": 1,
+  "runtime": "executable",
+  "entrypoints": {
+    "linux-amd64": "plugin-linux-amd64",
+    "windows-amd64": "plugin-windows-amd64.exe"
+  },
+  "routes": [],
+  "registration": {
+    "routes": [
+      {"method":"GET","path":"/hello-tools","callback":"hello.page","auth":"public"}
+    ]
+  }
+}
+```
+
+The server runs the selected prebuilt entrypoint. It does not compile Go on the VM.
 
 ### WASM package
 
@@ -18,190 +59,288 @@ manifest.json
 plugin.wasm
 ```
 
-WASM packages with no declared presentation resources contain exactly those two files. A package that declares blog or console resources may include the declared resource directories as additional text and static asset files.
+A WASM module must export `memory`, `oss_abi_version`, `oss_alloc`, and `oss_handle`, and must not import functions or memory. The request and response JSON shapes are the same as the executable protocol.
 
-### Executable package
+## 3. Manifest and ready registration
 
-```text
-manifest.json
-bin/plugin.exe
-assets/any-files-needed-by-the-plugin
-```
+The manifest controls package installation, platform entrypoints, resource extraction, and recovery metadata. An executable process sends a runtime registration in its first `ready` frame. The runtime registration controls active hooks, routes, middleware, admin pages, assets, settings, tasks, migrations, dependencies, and lifecycle callbacks.
 
-The executable entrypoint is selected from the current server platform. `any` is the fallback when no exact `<os>-<arch>` key exists.
+Keep both declarations consistent. If an asset or route is present only in `manifest.json` but absent from the Go `Registration`, the installed file may exist while the active process does not expose it.
 
-```json
-{
-  "id": "hello-world",
-  "name": "Hello world",
-  "version": "1.0.0",
-  "description": "A trusted executable example.",
-  "api_version": 1,
-  "runtime": "executable",
-  "entrypoints": {
-    "windows-amd64": "bin/plugin.exe",
-    "linux-amd64": "bin/plugin",
-    "any": "bin/plugin"
-  },
-  "args": [],
-  "routes": [
-    { "method": "GET", "path": "/hello", "public": true },
-    { "method": "POST", "path": "/echo", "public": false }
-  ]
-}
-```
+The top-level manifest `routes` array is the legacy/package route declaration. New executable plugins should generally declare their callback-driven capabilities in `registration` and in the Go SDK registration.
 
-Entrypoint paths use forward slashes and must stay inside the package. Use a platform-specific executable when the binary format differs between operating systems. `args` are passed unchanged to the process.
+## 4. Executable protocol
 
-### Optional presentation resources
+The host starts one process for every enabled executable plugin. The working directory is the installed plugin directory. Requests and responses are UTF-8 JSON Lines on stdin/stdout. Diagnostics belong on stderr; stdout must contain protocol frames only.
 
-Plugins may declare presentation resources in `manifest.json`:
-
-```json
-{
-  "blog_themes": [{"id":"clean","name":"Clean reading","path":"blog/clean"}],
-  "console_themes": [{"id":"clean","name":"Clean console","path":"console/clean"}]
-}
-```
-
-Each blog resource directory must contain `template.html`; each console resource directory must contain `theme.css`. Resource IDs are unique within their array. The server materializes resources only while the plugin is enabled, appends their display names to the matching user selector, and removes them when the plugin is disabled or deleted. Built-in `default` and `papertrail` blog templates and built-in console `default` remain independent and read-only.
-
-The plugin admin page is the only resource management page. It can edit validated text files such as `manifest.json`, HTML, CSS, JS, JSON, Markdown, SVG, and YAML. Binary entrypoints and `plugin.wasm` are read-only. Text changes are validated and reloaded immediately; the server does not compile edited Go source.
-
-Plugin IDs are lowercase names containing letters, digits, and hyphens. Route paths are fixed, absolute paths with no wildcards, query markers, or path traversal. A plugin can declare at most 32 routes.
-
-## Executable protocol
-
-The host starts one process for every enabled executable plugin. The working directory is the installed plugin directory. The host writes requests to stdin and reads responses from stdout as UTF-8 JSON Lines. Plugin diagnostics may be written to stderr; stdout must contain protocol frames only.
-
-The first line sent by the plugin must be:
+The first plugin frame must be:
 
 ```json
 {"type":"ready","api_version":1}
 ```
 
-The host then sends a request frame. `request` is the same JSON object used by the WASM ABI:
-
-```json
-{"type":"request","id":"1","request":{"method":"GET","path":"/hello","query":{"name":["world"]}}}
-```
-
-The plugin returns a response frame with the same ID:
-
-```json
-{"type":"response","id":"1","response":{"status":200,"headers":{"Content-Type":"text/plain; charset=utf-8"},"body_base64":"aGVsbG8="}}
-```
-
-For a request-specific failure, the plugin may return:
-
-```json
-{"type":"error","id":"1","error":"request failed"}
-```
-
-When the plugin is disabled or the server shuts down, the host sends:
-
-```json
-{"type":"shutdown"}
-```
-
-The process should flush stdout after every frame and exit after `shutdown`. The host correlates responses by `id`, so requests may be processed concurrently. A missing handshake, malformed frame, process crash, or protocol violation makes all pending calls fail and the instance unavailable until it is enabled again. One invocation is limited to two seconds; requests and responses are limited to 1 MiB.
-
-The process receives these environment variables:
-
-```text
-OSS_PLUGIN_ID          installed plugin ID
-OSS_PLUGIN_DIR         absolute installed plugin directory
-OSS_PLUGIN_PROTOCOL    protocol version, currently 1
-```
-
-## Host extensions
-
-An executable plugin can register its own host extensions in the `ready` frame. Registration is not limited to OSS Sync's built-in hook names:
+A ready frame may include `registration`:
 
 ```json
 {
   "type": "ready",
   "api_version": 1,
   "registration": {
-    "hooks": [{ "name": "orders.before_save", "kind": "filter", "callback": "orders.before_save", "priority": 10 }],
-    "routes": [{ "method": "POST", "path": "/orders/*", "auth": "admin", "callback": "orders.create" }],
-    "middleware": [{ "name": "audit", "stage": "before", "path_prefix": "/api/", "callback": "audit.request" }],
-    "admin_pages": [{ "slug": "orders", "label": "Orders", "callback": "orders.admin" }],
-    "tasks": [{ "name": "sync_orders", "schedule": "@hourly", "callback": "orders.sync" }],
-    "migrations": [{ "id": "orders_v1", "statements": ["CREATE TABLE orders (id INTEGER NOT NULL)"] }],
-    "dependencies": [{ "plugin_id": "payments" }]
+    "routes": [
+      {"method":"GET","path":"/hello-tools","auth":"public","callback":"hello.page"}
+    ],
+    "admin_pages": [
+      {"slug":"orders","label":"Orders","callback":"orders.admin"}
+    ]
   }
 }
 ```
 
-Hooks are arbitrary names. `filter` callbacks return a replacement JSON value; `action` callbacks run for their side effects. Routes support exact paths and `/*` prefixes, and can require public, user, or admin authentication. Middleware can run before or after any host request. Admin pages appear in the administrator menu and are rendered by their callback. Tasks use the existing Cron scheduler. Each pending migration batch is applied in one database transaction; successful migrations are recorded once per plugin and migration ID. Dependencies must be enabled before the dependent plugin can start.
-
-## Host SDK and services
-
-The executable protocol is bidirectional. A plugin may send a `host_call` frame while processing a request:
+The host sends requests like:
 
 ```json
-{"type":"host_call","id":"host-1","method":"db.query","params":{"query":"SELECT * FROM files WHERE vault_id = ?","args":["vault-id"]}}
+{
+  "type":"request",
+  "id":"1",
+  "request": {
+    "method":"GET",
+    "path":"/hello-tools",
+    "query":{"name":["world"]}
+  }
+}
 ```
 
-The host replies with `host_response` or `host_error`. The current SDK methods include `db.query`, `db.exec`, `host.models`, `host.model.list`, `host.model.create`, `host.model.update`, `host.model.delete`, `host.vault.*`, `host.file.get`, `host.share.*`, `host.blog.*`, `host.plugin.list`, `host.settings.get`, `host.settings.set`, and `host.hook`. The Go SDK exposes these as typed `Users`, `Vaults`, `Files`, `Shares`, `Devices`, `Collaborations`, and `Blog` clients. `host.hook` lets one plugin trigger any registered action or filter by name. Core model access includes users, Vaults, files, shares, collaborations, and devices. Since executable plugins are fully trusted, `db.exec` intentionally permits plugin-owned SQL and tables. The plugin also retains normal server-account filesystem, network, environment, and process access.
+The plugin replies with the same ID:
 
-This is the extension model boundary: plugins can define business features, persistence, routes, filters, admin surfaces, scheduled work, and dependencies, while the host supplies authentication, lifecycle, core data, and request dispatch. Uploading an existing plugin ID runs registered migrations and the `upgrade` lifecycle callback, then restores the previous enabled state. The old package is retained until activation succeeds. On failure the host restores its previous package, metadata, runtime registrations, and tasks; restoration errors are reported. A failed migration batch is rolled back, but committed migrations and external lifecycle effects are not reversed by package restoration. Upgrade migrations and lifecycle callbacks must remain compatible with the previous plugin version.
+```json
+{
+  "type":"response",
+  "id":"1",
+  "response": {
+    "status":200,
+    "headers":{"Content-Type":"text/plain; charset=utf-8"},
+    "body_base64":"aGVsbG8="
+  }
+}
+```
 
-## Routes, settings, and hooks
+The host can send `shutdown`. The plugin should flush stdout after every frame and exit cleanly. Requests and responses are limited to 1 MiB; one invocation is limited to approximately two seconds. A missing handshake, malformed frame, process crash, or protocol violation fails pending calls and marks the instance unavailable until it is enabled again.
 
-Declare host hooks in `hooks`:
+The process receives:
+
+```text
+OSS_PLUGIN_ID
+OSS_PLUGIN_DIR
+OSS_PLUGIN_PROTOCOL
+```
+
+## 5. Runtime registration surface
+
+The public Go SDK `ossplugin.Registration` supports:
+
+- `Hooks`: action/filter callbacks;
+- `Routes`: callback routes with `public`, `user`, or `admin` auth;
+- `Middleware`: before/after request processing;
+- `AdminPages`: administrator pages;
+- `Assets`: files served from the installed package;
+- `Settings`: per-Vault declared fields;
+- `Tasks`: scheduled callbacks;
+- `Migrations`: plugin-owned SQL migrations;
+- `Dependencies`: enabled-plugin/version dependencies;
+- `Lifecycle`: activate, deactivate, upgrade, uninstall callbacks.
+
+The host validates registration names, paths, counts, settings, migrations, and callback names before activating the process.
+
+## 6. Routes and namespaces
+
+Top-level manifest routes are exposed at:
+
+```text
+/plugins/<plugin-id>/<declared-path>       public namespace
+/api/plugins/<plugin-id>/<declared-path>   Bearer-authenticated namespace
+```
+
+Authenticated namespaced routes require an OSS Sync Bearer JWT. If a request has `vault_id`, the host verifies Vault access and includes the plugin's saved settings. Public routes do not receive Vault settings.
+
+Runtime dynamic routes are matched by their declared absolute path. Prefer a plugin-specific prefix such as `/hello-tools/`. Runtime routes can use `public`, `user`, or `admin` authentication. User routes accept Bearer identity or the console web session cookie. Cookie-authenticated state-changing requests require the `X-CSRF-Token` header to match the `oss_csrf` cookie.
+
+The request object includes method, path, query, params, headers, cookies, user, settings, hook, payload, and base64 body as applicable.
+
+## 7. Host services
+
+The executable SDK exposes:
+
+```text
+db.query
+db.exec
+host.models
+host.model.list
+host.model.create
+host.model.update
+host.model.delete
+host.vault.*
+host.file.get
+host.file.put
+host.share.*
+host.blog.*
+host.plugin.list
+host.settings.get
+host.settings.set
+host.hook
+```
+
+Typed SDK methods are available from `client.Services()` for queries, model operations, plugin listing, settings, file reads, and file writes.
+
+### Database
+
+`db.query` and `db.exec` are intentionally powerful for trusted executable plugins. Use parameter arguments and plugin-owned tables. Do not write core file rows or storage blobs directly.
+
+### Files
+
+Use:
+
+```go
+file, err := client.Services().GetFile(ctx, vaultID, path)
+result, err := client.Services().PutFile(ctx, vaultID, path, content)
+```
+
+`PutFile` runs path validation, quota checks, atomic storage, SHA-256 deduplication, sync revision, history, long-poll notifications, and collaboration notifications. Direct SQL/file writes bypass these invariants.
+
+The host capability does not replace plugin business authorization. Check the authenticated user and target Vault before using a host service.
+
+## 8. Admin pages and console theme
+
+Admin pages appear in the administrator menu at:
+
+```text
+/dashboard/admin/plugins/<plugin-id>/page/<slug>
+```
+
+By default, an admin callback should return an HTML **fragment**. The host wraps the fragment in the console layout and loads `console.css`, `theme.js`, the active console theme, sidebar, user context, and CSRF context. Reuse `.button`, `.button--primary`, `.button--danger`, `.text-button`, `.gate-form`, `.stack-form`, `.ledger-panel`, and related classes.
+
+Bare `input` and `select` elements receive base console styling. Buttons need `.button` classes for the full appearance. Textareas and special controls need a plugin class.
+
+If callback output begins with `<!doctype html>` or `<html>`, the host treats it as a complete document and serves it unchanged. That is the explicit opt-out for a plugin that owns its entire page shell and theme.
+
+## 9. Blog hooks and data
+
+Declare hooks such as:
 
 ```json
 {
   "hooks": [
-    { "name": "blog.content" },
-    { "name": "editor.command", "id": "format-note", "label": "Format note" }
+    {"name":"blog.content"},
+    {"name":"blog.data"}
   ]
 }
 ```
 
-Supported hooks are `blog.content`, `markdown.content`, `theme.render`, `admin.page`, `editor.command`, and `comment.content`. Content hooks receive host JSON and return replacement content. `editor.command` is discovered from active registrations by the Obsidian plugin and registered in its command palette. The HTTP hook endpoint accepts only this hook, requires a device-bound token plus device and user access to the Vault, and requires `metadata.plugin_id` and `metadata.command_id` to identify one registered command. The host supplies the authenticated user and device identity; internal hooks cannot be invoked through this endpoint. Editor results are applied only if the document and its content still match the request snapshot. `admin.page` is available at `/dashboard/admin/plugins/<id>/page/<slug>`.
+`blog.content` is a content filter. A filter returns replacement content; an action performs side effects without replacing the value.
 
-The optional `settings` declaration uses the constrained host field schema (`text`, `textarea`, `url`, `choice`, and non-nested `group`). OSS Sync renders these fields in the top-level **Plugin settings** menu and stores values per Vault. Theme-linked settings remain available outside the current Vault page and automatically select an accessible matching Vault. Public routes never receive Vault settings. Plugins cannot inject settings HTML or JavaScript.
-
-## WASM ABI v1
-
-The WASM module must not import any function or memory. WASI is unavailable. It must export:
+`blog.data` receives:
 
 ```text
-memory                  exported linear memory
-oss_abi_version         () -> i32, returns 1
-oss_alloc               (i32 byte_length) -> i32
-oss_handle              (i32 request_ptr, i32 request_length) -> i64
+vault_id, share_id, path,
+is_home, is_folder,
+method, request_url, query,
+headers, cookies, client_ip
 ```
 
-`oss_handle` returns a packed pointer and length: the high 32 bits are the response pointer and the low 32 bits are the response byte length. The request and response are the same JSON shapes used by the executable protocol.
+The returned JSON is available in the selected blog template under `.PluginData[plugin-id]`. This is the preferred integration point for comments, VIP state, article statistics, recommendations, and widgets.
 
-Only `Content-Type`, `Cache-Control`, `ETag`, and `Location` response headers are accepted. Requests and responses are limited to 1 MiB, and one invocation is limited to two seconds.
+`safeHTML` is for trusted plugin-generated HTML only. Sanitize user-controlled comments, names, URLs, and article fields before rendering them as HTML.
 
-## Routes
+## 10. Settings, migrations, tasks, and dependencies
 
-Public routes are served at `/plugins/<plugin-id>/<declared-path>`. Authenticated routes are served at `/api/plugins/<plugin-id>/<declared-path>` and require a normal OSS Sync Bearer JWT. A route declared as authenticated is never exposed through the public namespace.
+Settings use the constrained field schema: `text`, `textarea`, `url`, `choice`, and non-nested `group`. Values are stored per Vault and sent only in contexts where the host has established Vault access.
 
-When an authenticated route includes `vault_id` in its query string, OSS Sync verifies that the caller can access that Vault and includes its saved plugin settings in the request JSON. Public routes never receive Vault settings.
+Migrations are identified by plugin ID plus migration ID and run transactionally. Use additive, upgrade-safe migrations. Tasks use the existing scheduler; make them idempotent and persist checkpoints in plugin-owned tables. Dependencies must be enabled before the dependent plugin starts.
 
-## Lifecycle
+## 11. Lifecycle
 
-1. Upload the ZIP from **Admin settings -> Plugins**.
-2. OSS Sync validates the manifest and payload. Executable packages must complete the `ready` handshake.
-3. The web-console upload flow enables the plugin after installation. Explicit installs through the manager remain disabled until `Enable` is called.
-4. Enabling starts one persistent WASM or executable instance.
-5. Enabled plugins are loaded again on the next server start.
-6. Disable a plugin before deleting it. Executable shutdown is graceful first and bounded by a timeout.
-7. If a process crashes, its requests fail and the plugin can be enabled again to start a fresh process.
+The normal lifecycle is:
 
-If an enabled plugin cannot be loaded after restart, it remains recorded with its last error and does not receive requests.
+1. Administrator uploads the ZIP.
+2. The host validates the manifest and payload.
+3. Executable plugins complete the ready handshake.
+4. The web-console upload flow enables the plugin.
+5. One persistent process starts per enabled executable plugin.
+6. Server restart restores enabled plugins.
+7. Disable sends a graceful shutdown and removes materialized plugin resources from selectors.
+8. Delete requires the plugin to be disabled first.
 
-## Security model
+Upgrade migrations and lifecycle callbacks must remain compatible with the previous version. Failed activation restores the previous package where possible; external side effects created by the plugin cannot be rolled back by the host.
 
-WASM provides memory isolation. Executable plugins intentionally do not: they are administrator-trusted server programs. They can read and write server files, access the database, use the network, read environment variables, and run system commands, with the same permissions as the server account. Install only code that the administrator has reviewed. The server still validates ZIP boundaries and the declared protocol, but those checks are not a sandbox.
+## 12. Security requirements
 
-The host capabilities are namespaced HTTP routes, Vault-scoped settings, blog/HTML content filters, theme render filters, administrator pages, and Obsidian editor commands. `comment.content` is reserved until OSS Sync has a comment entity and renderer.
+Executable plugins have server-account permissions. Treat these as mandatory review items:
 
-Host model list and typed Vault/Share RPC responses use the snake_case JSON fields declared by `pkg/ossplugin` DTOs. Database models are not the wire format.
+- validate every user-provided path, URL, ID, and body;
+- use parameterized SQL;
+- scope every query by user/Vault ownership;
+- use `PutFile` for file writes;
+- sanitize or escape user-controlled HTML;
+- protect cookie-authenticated writes with CSRF;
+- keep credentials in settings or environment, never source or logs;
+- never write non-protocol data to stdout;
+- cap pagination, request sizes, and remote API retries;
+- make scheduled jobs and webhooks idempotent.
+
+## 13. Testing and debugging
+
+Before upload:
+
+```text
+go test ./...
+go build ./...
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o plugin-linux-amd64 ./main.go
+```
+
+Test a clean install, target-platform startup, public and authenticated routes, CSRF rejection, per-Vault settings isolation, migration idempotence, disable/re-enable, upgrade failure recovery, process restart, no-op file writes, and user-controlled HTML.
+
+Common diagnosis:
+
+| Symptom | Likely cause |
+| --- | --- |
+| Cannot install | Invalid ZIP path, missing manifest, wrong entrypoint, or package limit |
+| Cannot enable | Invalid ready frame, wrong API version, stdout log noise, or callback registration error |
+| Route 404 | Wrong namespace, wrong exact path, missing runtime registration, or disabled plugin |
+| Route 401/403 | Wrong `Auth`, missing Bearer/session identity, or missing CSRF header |
+| Settings empty | Public route, missing `vault_id`, or Vault access failure |
+| Admin page unstyled | Returned a complete document or did not use console classes in a fragment |
+| Asset 404 | Manifest asset and runtime `Assets` list do not match the ZIP path |
+| File revision missing | Core `files` table/blob was changed directly instead of using `PutFile` |
+| Process unavailable | Protocol output on stdout, malformed JSON Lines, timeout, or oversized response |
+
+## 14. AI-assisted plugin development
+
+Give an AI this context before asking it to write code:
+
+```text
+You are implementing an OSS Sync executable server plugin.
+Use github.com/helantianshen/oss-sync/pkg/ossplugin.
+The plugin is trusted server code, not a sandbox.
+Do not invent SDK methods or manifest fields. Verify them in pkg/ossplugin/sdk.go,
+internal/serverplugin/package.go, internal/serverplugin/registration.go, and docs.
+Use plugin-owned migrations/tables for plugin data.
+Use Services().PutFile for file writes; never update core file rows or blobs directly.
+For cookie-authenticated browser writes, send X-CSRF-Token matching oss_csrf.
+AdminPage callbacks should return an HTML fragment unless they intentionally return
+<!doctype html> or <html> as a complete document.
+Keep stdout reserved for the plugin protocol; log only to stderr.
+Before coding, state the manifest, runtime registration, callbacks, routes, data model,
+authorization, and tests. Implement the smallest end-to-end slice first.
+```
+
+Require the AI to produce:
+
+1. package tree;
+2. manifest and runtime registration;
+3. callback-to-route table;
+4. request and response JSON schemas;
+5. migration SQL and ownership rules;
+6. input validation and threat model;
+7. platform build/package commands;
+8. deterministic tests for auth, no-op writes, retries, and upgrades.
+
+Reject answers that invent APIs, confuse route namespaces, treat executable plugins as sandboxed, or recommend direct writes to core file rows.

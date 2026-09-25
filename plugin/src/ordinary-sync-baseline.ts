@@ -24,6 +24,7 @@ export type DeletedAcknowledgement = {
 
 export type AcknowledgementInput = LiveAcknowledgement | DeletedAcknowledgement;
 
+/** 将服务端确认结果写入同步基线，可解析文本才保留合并祖先 */
 export function baselineFromAcknowledgement(input: AcknowledgementInput): BaselineEntry {
   if (input.kind === "deleted") {
     const entry: BaselineEntry = {

@@ -1,4 +1,5 @@
-// Package ossplugin 为受信 OSS Sync 扩展提供公开 Go SDK
+// Package ossplugin 为受信服务端插件提供 Go SDK 与宿主调用接口
+
 package ossplugin
 
 import (
@@ -13,8 +14,10 @@ import (
 	"sync"
 )
 
+// ProtocolVersion 是插件与宿主之间的协议版本
 const ProtocolVersion = 1
 
+// Registration 声明插件向宿主提供的扩展能力
 type Registration struct {
 	Hooks        []Hook         `json:"hooks,omitempty"`
 	Routes       []Route        `json:"routes,omitempty"`
@@ -28,6 +31,7 @@ type Registration struct {
 	Lifecycle    Lifecycle      `json:"lifecycle"`
 }
 
+// Lifecycle 声明插件生命周期阶段对应的 callback
 type Lifecycle struct {
 	Activate   string `json:"activate,omitempty"`
 	Deactivate string `json:"deactivate,omitempty"`
@@ -35,6 +39,7 @@ type Lifecycle struct {
 	Uninstall  string `json:"uninstall,omitempty"`
 }
 
+// Hook 声明宿主 Hook 处理器
 type Hook struct {
 	Name     string `json:"name"`
 	Callback string `json:"callback,omitempty"`
@@ -43,6 +48,8 @@ type Hook struct {
 	ID       string `json:"id,omitempty"`
 	Label    string `json:"label,omitempty"`
 }
+
+// Route 声明插件 HTTP 路由
 type Route struct {
 	Method   string `json:"method"`
 	Path     string `json:"path"`
@@ -50,6 +57,8 @@ type Route struct {
 	Auth     string `json:"auth,omitempty"`
 	Priority int    `json:"priority,omitempty"`
 }
+
+// Middleware 声明宿主请求中间件
 type Middleware struct {
 	Name       string `json:"name"`
 	Callback   string `json:"callback,omitempty"`
@@ -57,6 +66,8 @@ type Middleware struct {
 	PathPrefix string `json:"path_prefix,omitempty"`
 	Priority   int    `json:"priority,omitempty"`
 }
+
+// AdminPage 声明管理员控制台页面
 type AdminPage struct {
 	Slug     string `json:"slug"`
 	Label    string `json:"label"`
@@ -64,30 +75,41 @@ type AdminPage struct {
 	Parent   string `json:"parent,omitempty"`
 	Position int    `json:"position,omitempty"`
 }
+
+// Asset 声明随插件包提供的静态资源
 type Asset struct {
 	Path string `json:"path"`
 	URL  string `json:"url,omitempty"`
 }
+
+// SettingField 声明按 Vault 保存的设置字段
 type SettingField struct {
 	Key       string `json:"key"`
 	Label     string `json:"label"`
 	Type      string `json:"type"`
 	MaxLength int    `json:"max_length,omitempty"`
 }
+
+// Task 声明宿主调度器执行的定时任务
 type Task struct {
 	Name     string `json:"name"`
 	Schedule string `json:"schedule"`
 	Callback string `json:"callback,omitempty"`
 }
+
+// Migration 声明按 ID 应用的数据库语句
 type Migration struct {
 	ID         string   `json:"id"`
 	Statements []string `json:"statements"`
 }
+
+// Dependency 声明插件启动所需的依赖
 type Dependency struct {
 	PluginID   string `json:"plugin_id"`
 	Constraint string `json:"constraint,omitempty"`
 }
 
+// Request 是宿主传给插件 callback 的请求数据
 type Request struct {
 	Method     string              `json:"method"`
 	Path       string              `json:"path"`
@@ -103,24 +125,35 @@ type Request struct {
 	BodyBase64 string              `json:"body_base64,omitempty"`
 }
 
+// User 是请求中的已认证用户
 type User struct {
 	ID       uint   `json:"id"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
 }
 
+// Response 是插件 callback 返回给宿主的响应
 type Response struct {
 	Status     int               `json:"status"`
 	Headers    map[string]string `json:"headers,omitempty"`
 	BodyBase64 string            `json:"body_base64,omitempty"`
 }
+
+// Handler 处理插件请求并返回响应
 type Handler func(context.Context, Request) (Response, error)
 
+// ServiceClient 提供宿主服务调用
 type ServiceClient struct{ client *Client }
+
+// QueryRow 表示宿主查询返回的一行数据
 type QueryRow map[string]any
+
+// ExecResult 表示宿主写操作的结果
 type ExecResult struct {
 	RowsAffected int64 `json:"rows_affected"`
 }
+
+// PluginSummary 表示已安装插件的摘要
 type PluginSummary struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
@@ -237,6 +270,7 @@ func (s ServiceClient) GetFile(ctx context.Context, vaultID, path string) (FileC
 	return result, err
 }
 
+// Client 通过 stdin/stdout 与宿主交换请求和响应帧
 type Client struct {
 	in        *bufio.Scanner
 	out       *bufio.Writer
@@ -248,6 +282,7 @@ type Client struct {
 	wait      sync.WaitGroup
 }
 
+// New 创建使用指定输入输出流的插件协议客户端
 func New(in io.Reader, out io.Writer) *Client {
 	return &Client{
 		in: newScanner(in), out: bufio.NewWriter(out),
@@ -438,6 +473,7 @@ type frame struct {
 	Registration *Registration   `json:"registration,omitempty"`
 }
 
+// RunMain 注册插件能力与 callback，并运行标准输入输出协议
 func RunMain(registration Registration, configure func(*Client) error) {
 	client := New(os.Stdin, os.Stdout)
 	if err := configure(client); err != nil {

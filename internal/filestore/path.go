@@ -13,7 +13,7 @@ func VaultStorageKey(vaultID, relativePath string) string {
 	return filepath.ToSlash(filepath.Join("vaults", vaultID, "files", filepath.FromSlash(relativePath)))
 }
 
-// DiskPath 兼容标准 Vault 存储路径和旧版用户目录
+// DiskPath 解析标准 Vault 路径或用户目录存储路径
 func DiskPath(dataDir string, file models.File) string {
 	if file.StorageKey != "" {
 		return filepath.Join(dataDir, filepath.FromSlash(file.StorageKey))

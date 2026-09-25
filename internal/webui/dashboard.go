@@ -43,8 +43,7 @@ func (h *Handler) newSharesService() *shares.Handler {
 	return shares.New(h.DB, h.Cfg)
 }
 
-// 仓库列表
-
+// vaultRow 是当前用户仓库列表的显示数据
 type vaultRow struct {
 	ID           string
 	Name         string
@@ -181,8 +180,7 @@ func (h *Handler) setVaultLayout(ld *layoutData, vault models.Vault) {
 	}
 }
 
-// 仓库文件
-
+// fileRow 包含仓库文件的预览与编辑入口信息
 type fileRow struct {
 	Name     string
 	Path     string
@@ -528,8 +526,7 @@ func isTextFile(path string) bool {
 	return false
 }
 
-// 分享管理
-
+// shareRow 是仓库分享列表的显示数据
 type shareRow struct {
 	ShareID    string
 	TargetPath string
@@ -629,8 +626,7 @@ func (h *Handler) deleteShare(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/shares?saved=1")
 }
 
-// 回收站
-
+// recycleRow 包含回收站条目的时间与剩余保留期
 type recycleRow struct {
 	ID        uint
 	Path      string
@@ -780,8 +776,7 @@ func (h *Handler) purgeRecycle(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/recycle?saved=1")
 }
 
-// 修改记录
-
+// restoreHistory 将选定历史版本恢复到 Vault
 func (h *Handler) restoreHistory(c *gin.Context) {
 	vault, role, ok := h.resolveVaultPage(c)
 	if !ok {
@@ -886,8 +881,7 @@ func classifyWebFile(path string) string {
 	return "attachment"
 }
 
-// 仓库设置
-
+// vaultSettingsData 是仓库设置页面的显示数据
 type vaultSettingsData struct {
 	VaultID                 string
 	VaultName               string
@@ -1035,8 +1029,7 @@ func systemDefaultRecycleDays(db *gorm.DB) (int, error) {
 	return setting.DefaultRecycleBinDays, nil
 }
 
-// 设备管理
-
+// deviceRow 是用户设备列表的显示数据
 type deviceRow struct {
 	ClientID        string
 	Name            string
@@ -1293,8 +1286,7 @@ func (h *Handler) revokeDevice(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/devices?saved=1")
 }
 
-// 删除仓库
-
+// deleteVault 永久删除有权限的 Vault
 func (h *Handler) deleteVault(c *gin.Context) {
 	vault, role, ok := h.resolveVaultPage(c)
 	if !ok {

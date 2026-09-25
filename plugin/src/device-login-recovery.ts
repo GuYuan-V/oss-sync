@@ -14,6 +14,7 @@ export function createClientID(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+/** 仅在设备确实被吊销时替换本地身份并重试登录一次 */
 export async function loginWithRevokedDeviceRecovery<T>(
   login: () => Promise<T>,
   replaceIdentity: () => Promise<void>

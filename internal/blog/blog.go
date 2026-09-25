@@ -29,6 +29,7 @@ import (
 //go:embed templates/*.html
 var templatesFS embed.FS
 
+// Handler 渲染公开分享、博客目录与主题资源
 type Handler struct {
 	DB          *gorm.DB
 	Cfg         *config.Config
@@ -65,6 +66,7 @@ type PluginDataPayload struct {
 	ClientIP   string              `json:"client_ip,omitempty"`
 }
 
+// PluginHookPayload 是博客正文过滤 Hook 的输入
 type PluginHookPayload struct {
 	VaultID  string         `json:"vault_id"`
 	Theme    string         `json:"theme"`
@@ -83,6 +85,7 @@ func (h *Handler) SetPluginDataHooks(runner PluginDataHookRunner) {
 	h.pluginData = runner
 }
 
+// New 创建博客路由处理器并解析内置模板
 func New(db *gorm.DB, cfg *config.Config) (*Handler, error) {
 	tpl, err := template.ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
@@ -252,7 +255,7 @@ func trimByRunes(value string, maxLen int) string {
 	return string(runes)
 }
 
-// loadVaultSettings 优先读取 Vault 配置，并兼容旧版用户级配置
+// loadVaultSettings 先读取 Vault 配置，缺失时读取用户级配置
 func (h *Handler) loadVaultSettings(userID uint, vaultID string) (*models.VaultSetting, error) {
 	var vs models.VaultSetting
 	if err := h.DB.Where("vault_id = ?", vaultID).First(&vs).Error; err == nil {

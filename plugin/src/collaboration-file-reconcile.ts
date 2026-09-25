@@ -24,6 +24,7 @@ export type CollaborationReconcileDecision =
   | { readonly kind: "persist_text_conflict"; readonly remoteText: string }
   | { readonly kind: "preserve_both" };
 
+/** 基于祖先版本和本地/远端正文决定协作同步动作；二进制冲突保留双方 */
 export function decideCollaborationReconciliation(
   input: CollaborationReconcileInput,
 ): CollaborationReconcileDecision {

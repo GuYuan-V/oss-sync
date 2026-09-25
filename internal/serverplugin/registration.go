@@ -27,6 +27,7 @@ type ExtensionRegistration struct {
 	Lifecycle    RegisteredLifecycle      `json:"lifecycle,omitempty"`
 }
 
+// RegisteredLifecycle 是可执行插件生命周期 callback 的声明
 type RegisteredLifecycle struct {
 	Activate   string `json:"activate,omitempty"`
 	Deactivate string `json:"deactivate,omitempty"`
@@ -34,6 +35,7 @@ type RegisteredLifecycle struct {
 	Uninstall  string `json:"uninstall,omitempty"`
 }
 
+// RegisteredHook 是宿主 Hook 的注册信息
 type RegisteredHook struct {
 	Name     string `json:"name"`
 	Callback string `json:"callback,omitempty"`
@@ -43,6 +45,7 @@ type RegisteredHook struct {
 	Label    string `json:"label,omitempty"`
 }
 
+// RegisteredRoute 是动态 HTTP 路由的注册信息
 type RegisteredRoute struct {
 	Method   string `json:"method"`
 	Path     string `json:"path"`
@@ -51,6 +54,7 @@ type RegisteredRoute struct {
 	Priority int    `json:"priority,omitempty"`
 }
 
+// RegisteredMiddleware 是请求中间件的注册信息
 type RegisteredMiddleware struct {
 	Name       string `json:"name"`
 	Callback   string `json:"callback,omitempty"`
@@ -59,6 +63,7 @@ type RegisteredMiddleware struct {
 	Priority   int    `json:"priority,omitempty"`
 }
 
+// RegisteredAdminPage 是管理员页面的注册信息
 type RegisteredAdminPage struct {
 	Slug     string `json:"slug"`
 	Label    string `json:"label"`
@@ -67,22 +72,26 @@ type RegisteredAdminPage struct {
 	Position int    `json:"position,omitempty"`
 }
 
+// RegisteredAsset 是插件静态资源的注册信息
 type RegisteredAsset struct {
 	Path string `json:"path"`
 	URL  string `json:"url,omitempty"`
 }
 
+// RegisteredTask 是插件定时任务的注册信息
 type RegisteredTask struct {
 	Name     string `json:"name"`
 	Schedule string `json:"schedule"`
 	Callback string `json:"callback,omitempty"`
 }
 
+// RegisteredMigration 是插件数据库迁移的注册信息
 type RegisteredMigration struct {
 	ID         string   `json:"id"`
 	Statements []string `json:"statements"`
 }
 
+// RegisteredDependency 是插件依赖的注册信息
 type RegisteredDependency struct {
 	PluginID   string `json:"plugin_id"`
 	Constraint string `json:"constraint,omitempty"`

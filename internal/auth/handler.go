@@ -49,17 +49,20 @@ func (h *Handler) Register(r *gin.Engine) {
 	}
 }
 
+// RegisterRequest 是账号注册请求
 type RegisterRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=64"`
 	Password string `json:"password" binding:"required,min=8,max=128"`
 	Role     string `json:"role"` // 可空，默认 user
 }
 
+// LoginRequest 是账号登录请求
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
+// AuthResponse 是登录成功后的身份信息
 type AuthResponse struct {
 	Token     string `json:"token"`
 	ExpiresIn int64  `json:"expires_in"` // 秒

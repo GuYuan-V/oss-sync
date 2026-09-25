@@ -1,5 +1,6 @@
 export type SyncRunTask = (forceFull: boolean) => Promise<void>;
 
+/** 同一时刻只执行一次同步；并发请求合并为下一轮，完整同步请求优先 */
 export class SyncRunCoordinator {
   private activeRun: Promise<void> | null = null;
   private queued = false;

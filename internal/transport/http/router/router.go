@@ -51,7 +51,7 @@ func Build(deps Dependencies) (*gin.Engine, error) {
 		r.Use(deps.PluginManager.Middleware(deps.Cfg))
 	}
 
-	// 超过该阈值的 multipart 请求体由 Gin 写入临时文件，不再常驻内存
+	// Gin 将大于此值的 multipart 请求体写入临时文件
 	r.MaxMultipartMemory = deps.Cfg.Server.MaxMultipartMemoryMB << 20
 	registerHealthRoutes(r, deps.DB)
 
