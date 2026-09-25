@@ -627,9 +627,17 @@ export default class OSSPlugin extends Plugin {
         headers: options.headers,
         throw: false,
       });
+      let json: unknown = null;
+      if (response.text.trim() !== "") {
+        try {
+          json = JSON.parse(response.text);
+        } catch {
+          json = null;
+        }
+      }
       return {
         status: response.status,
-        json: response.json,
+        json,
         text: response.text,
         arrayBuffer: response.arrayBuffer,
         headers: response.headers,
