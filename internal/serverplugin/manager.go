@@ -74,13 +74,6 @@ func (m *Manager) SetFileWriter(writer FileWriter) {
 	m.fileWriter = writer
 }
 
-// IsEnabled 报告插件当前是否已启用并加载了运行实例
-func (m *Manager) IsEnabled(pluginID string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.modules[pluginID] != nil
-}
-
 type pluginInstance interface {
 	Invoke(context.Context, PluginRequest) (PluginResponse, error)
 	Close(context.Context) error

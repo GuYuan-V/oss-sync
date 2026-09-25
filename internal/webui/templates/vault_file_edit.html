@@ -1,0 +1,39 @@
+{{define "vault-file-edit"}}
+<section class="dashboard-heading">
+  <div>
+    <span class="eyebrow">Edit file</span>
+    <h1>{{.Data.Name}}</h1>
+    <p class="lead">{{.Layout.T "vault.edit_hint"}}</p>
+  </div>
+</section>
+
+{{if .Data.Saved}}<div class="notice notice--success" role="status">{{.Layout.T "vault.edit_saved"}}</div>{{end}}
+{{if .Data.Error}}<div class="notice notice--error" role="alert">{{.Data.Error}}</div>{{end}}
+
+<div class="control-grid">
+  <article class="ledger-panel">
+    <header>
+      <div>
+        <span class="eyebrow">Editor</span>
+        <h2>{{.Layout.T "vault.edit"}}</h2>
+        <nav class="file-breadcrumbs" aria-label="{{$.Layout.T "vault.file_path"}}">
+          <a href="/dashboard/vaults/{{.Data.VaultID}}">{{$.Layout.T "vault.root_directory"}}</a>
+          {{range .Data.Breadcrumbs}}
+          <span aria-hidden="true">/</span>
+          {{if .Current}}<span aria-current="page">{{.Name}}</span>{{else}}<a href="/dashboard/vaults/{{$.Data.VaultID}}?dir={{.Path}}">{{.Name}}</a>{{end}}
+          {{end}}
+        </nav>
+      </div>
+    </header>
+    <form method="post" action="/dashboard/vaults/{{.Data.VaultID}}/files/edit" class="stack-form">
+      <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
+      <input type="hidden" name="path" value="{{.Data.Path}}">
+      <textarea class="file-editor" name="content" spellcheck="false" autocapitalize="off" autocomplete="off">{{.Data.Content}}</textarea>
+      <div class="action-cell">
+        <button class="button button--primary" type="submit">{{.Layout.T "vault.edit_save"}}</button>
+        <a class="button" href="/dashboard/vaults/{{.Data.VaultID}}">{{.Layout.T "vault.edit_cancel"}}</a>
+      </div>
+    </form>
+  </article>
+</div>
+{{end}}

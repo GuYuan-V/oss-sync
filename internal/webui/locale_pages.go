@@ -25,5 +25,6 @@ func init() {
 		"page.vault_members":        {"%s · 协作成员", "%s · Members"},
 		"page.vault_history_detail": {"%s · 修改详情", "%s · History detail"},
 		"page.vault_preview":        {"%s · %s", "%s · %s"},
+		"page.vault_file_edit":      {"%s · 编辑 %s", "%s · Edit %s"},
 	})
 }

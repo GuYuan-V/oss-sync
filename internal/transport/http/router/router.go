@@ -81,6 +81,7 @@ func Build(deps Dependencies) (*gin.Engine, error) {
 
 	syncH := syncapi.New(deps.DB, deps.Cfg)
 	syncH.Register(r)
+	webH.SetFileWriter(syncH)
 
 	blogH, err := blog.New(deps.DB, deps.Cfg)
 	if err != nil {

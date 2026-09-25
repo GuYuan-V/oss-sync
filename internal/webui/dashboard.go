@@ -184,11 +184,12 @@ func (h *Handler) setVaultLayout(ld *layoutData, vault models.Vault) {
 // 仓库文件
 
 type fileRow struct {
-	Name    string
-	Path    string
-	Type    string
-	Size    int64
-	Preview string
+	Name     string
+	Path     string
+	Type     string
+	Size     int64
+	Preview  string
+	Editable bool
 }
 
 type folderRow struct {
@@ -209,16 +210,15 @@ type vaultFileBrowser struct {
 }
 
 type vaultFilesData struct {
-	VaultID         string
-	VaultName       string
-	StorageUsed     int64
-	StorageQuota    int64
-	FileCount       int
-	Folders         []folderRow
-	Files           []fileRow
-	Breadcrumbs     []breadcrumbRow
-	Error           string
-	MDEditorEnabled bool
+	VaultID      string
+	VaultName    string
+	StorageUsed  int64
+	StorageQuota int64
+	FileCount    int
+	Folders      []folderRow
+	Files        []fileRow
+	Breadcrumbs  []breadcrumbRow
+	Error        string
 }
 
 func (h *Handler) vaultFilesPage(c *gin.Context) {
@@ -243,8 +243,6 @@ func (h *Handler) vaultFilesPage(c *gin.Context) {
 	d.Files = browser.Files
 	d.Breadcrumbs = browser.Breadcrumbs
 	d.FileCount = len(files)
-	// md-editor 插件启用时，模板为 Markdown 文件显示编辑入口
-	d.MDEditorEnabled = h.pluginManager != nil && h.pluginManager.IsEnabled("md-editor")
 	ld := layoutData{}
 	h.setVaultLayout(&ld, vault)
 	h.renderVault(c, ld, "vault-files", h.t(c, "page.vault_files", vault.Name), d)
@@ -269,11 +267,12 @@ func buildVaultFileBrowser(files []models.File, directory string) vaultFileBrows
 			continue
 		}
 		browser.Files = append(browser.Files, fileRow{
-			Name:    name,
-			Path:    file.Path,
-			Type:    file.Type,
-			Size:    file.Size,
-			Preview: previewKind(file.Path),
+			Name:     name,
+			Path:     file.Path,
+			Type:     file.Type,
+			Size:     file.Size,
+			Preview:  previewKind(file.Path),
+			Editable: isEditableTextFile(file.Path),
 		})
 	}
 
@@ -637,6 +636,7 @@ type recycleRow struct {
 	Path      string
 	DeletedAt time.Time
 	ExpiresAt time.Time
+	Remaining string
 }
 
 type recycleData struct {
@@ -661,16 +661,33 @@ func (h *Handler) recyclePage(c *gin.Context) {
 		h.render(c, http.StatusInternalServerError, "vault-recycle", h.t(c, "page.recycle"), "vault", "vault-recycle", d)
 		return
 	}
+	now := time.Now()
 	for _, f := range files {
 		expires := f.DeletedAt.Time.Add(time.Duration(days) * 24 * time.Hour)
 		d.Files = append(d.Files, recycleRow{
 			ID: f.ID, Path: f.Path,
 			DeletedAt: f.DeletedAt.Time, ExpiresAt: expires,
+			Remaining: h.remainingLabel(c, expires, now),
 		})
 	}
 	ld := layoutData{}
 	h.setVaultLayout(&ld, vault)
 	h.renderVault(c, ld, "vault-recycle", h.t(c, "page.vault_recycle", vault.Name), d)
+}
+
+// remainingLabel 返回回收站条目距到期的本地化剩余时间文案
+func (h *Handler) remainingLabel(c *gin.Context, expires, now time.Time) string {
+	left := expires.Sub(now)
+	switch {
+	case left <= 0:
+		return h.t(c, "recycle.remaining_expired")
+	case left >= 24*time.Hour:
+		return h.t(c, "recycle.remaining_days", int(left/(24*time.Hour)))
+	case left >= time.Hour:
+		return h.t(c, "recycle.remaining_hours", int(left/time.Hour))
+	default:
+		return h.t(c, "recycle.remaining_soon")
+	}
 }
 
 func (h *Handler) restoreRecycle(c *gin.Context) {

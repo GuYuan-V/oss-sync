@@ -3,7 +3,7 @@
   <div>
     <span class="eyebrow">Vault files</span>
     <h1>{{.Data.VaultName}}</h1>
-    <p class="lead">{{.Layout.T "vault.browse_files_desc"}}</p>
+    <p class="lead">{{.Layout.T "vault.create_independent_vault_desc"}}</p>
     <nav class="action-cell" aria-label="{{$.Layout.T "common.vault_settings"}}">
       <a class="button" href="/dashboard/vaults/{{.Data.VaultID}}/shares">{{.Layout.T "common.shares"}}</a>
       <a class="button" href="/dashboard/vaults/{{.Data.VaultID}}/recycle">{{.Layout.T "common.recycle"}}</a>
@@ -62,8 +62,8 @@
             <td>{{formatBytes .Size}}</td>
             <td>
               <div class="action-cell">
+                {{if .Editable}}<a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/files/edit?path={{urlquery .Path}}">{{$.Layout.T "vault.edit"}}</a>{{end}}
                 {{if eq .Type "markdown"}}
-                {{if $.Data.MDEditorEnabled}}<a class="quiet-link" href="/md-editor?vault_id={{$.Data.VaultID}}&amp;path={{urlquery .Path}}">{{$.Layout.T "vault.edit"}}</a>{{end}}
                 <a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/history?path={{urlquery .Path}}">{{$.Layout.T "common.history"}}</a>
                 {{end}}
                 <a class="quiet-link" href="/dashboard/vaults/{{$.Data.VaultID}}/files/download?path={{.Path}}">{{$.Layout.T "common.download"}}</a>

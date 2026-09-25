@@ -44,6 +44,7 @@ type Handler struct {
 	updater       *update.Updater
 	updateSvc     *update.Service
 	pluginManager *serverplugin.Manager
+	fileWriter    fileContentWriter
 }
 
 // SetUpdateService 注入共享更新服务（直接注入，不代理 Bearer token）
@@ -55,6 +56,11 @@ func (h *Handler) SetUpdateService(svc *update.Service, up *update.Updater) {
 // SetPluginManager 注入服务插件管理器
 func (h *Handler) SetPluginManager(manager *serverplugin.Manager) {
 	h.pluginManager = manager
+}
+
+// SetFileWriter 注入文件写入实现，供控制台内置编辑器复用真实同步写入管线
+func (h *Handler) SetFileWriter(writer fileContentWriter) {
+	h.fileWriter = writer
 }
 
 // layoutData 是所有控制台页面共用的外壳数据
@@ -149,6 +155,8 @@ func (h *Handler) Register(r *gin.Engine) {
 		console.GET("/vaults/:vault_id/files/preview", h.previewFile)
 		console.GET("/vaults/:vault_id/files/download", h.downloadFile)
 		console.GET("/vaults/:vault_id/files/sandbox", h.sandboxPreviewFile)
+		console.GET("/vaults/:vault_id/files/edit", h.editFilePage)
+		console.POST("/vaults/:vault_id/files/edit", h.saveFileEdit)
 		console.GET("/vaults/:vault_id/shares", h.sharesPage)
 		console.POST("/vaults/:vault_id/shares", h.createShare)
 		console.POST("/vaults/:vault_id/shares/:share_id/allow_copy", h.toggleShareCopy)
