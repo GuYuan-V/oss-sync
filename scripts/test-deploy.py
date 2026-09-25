@@ -91,7 +91,6 @@ with tempfile.TemporaryDirectory(prefix='oss-deploy-test-') as work:
         text = text.replace('/etc/systemd/system', str(root / 'system'))
         text = text.replace('/run/systemd/system', str(root / 'system'))
         text = text.replace('/run/lock/oss-sync-deploy.lock', str(root / 'run/lock'))
-        text = text.replace('attempt<60', 'attempt<3')
         (release / name).write_text(text)
     binary = root / 'oss-server'
     subprocess.run(['go', 'build', '-ldflags', '-X github.com/helantianshen/oss-sync/internal/version.Version=1.2.3', '-o', str(binary), './cmd/server'], cwd=REPO, check=True)
