@@ -381,7 +381,7 @@ Settings: []ossplugin.SettingField{
 },
 ```
 
-宿主设置格式支持 `text`、`textarea`、`url`、`choice` 和非嵌套 `group`，但当前 Go SDK 的 `SettingField` 只包含简单字段；`choice` 需要 `choices`，`group` 需要嵌套字段，不能直接用上面的 SDK 类型声明。设置按 Vault 保存，公共路由不会收到 Vault settings。
+宿主设置格式支持 `text`、`textarea`、`url`、`choice` 和非嵌套 `group`，但当前 Go SDK 的 `SettingField` 只包含简单字段；`choice` 需要 `choices`，`group` 需要嵌套字段，不能直接用上面的 SDK 类型声明。设置按 Vault 保存；博客主题资源可在 `theme.json` 的 `public_settings` 中声明允许公开的键，宿主只将这些键映射到通用博客字段和 `.ThemeConfigJS`，其他公共路由不会收到 Vault settings。
 
 SDK 读取设置:
 

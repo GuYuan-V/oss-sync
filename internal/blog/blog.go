@@ -201,7 +201,7 @@ type renderParams struct {
 	LogoURL     string
 	LogoSize    int
 	LogoShape   string
-	Buttons     []PaperTrailButton
+	Buttons     []BlogButton
 	HomePosts   []HomePost
 	// 自定义主题可用的横幅与文章元数据
 	BannerURL       string
@@ -215,7 +215,8 @@ type renderParams struct {
 }
 
 func (h *Handler) shareRenderParams(share models.Share, setting *models.VaultSetting) renderParams {
-	cfg := ParsePaperTrailConfig(setting.ThemeConfig)
+	config := h.publicThemeConfig(setting.VaultID, setting.ThemeName, setting.ThemeConfig)
+	cfg := ParseBlogThemeConfig(config)
 	blogHomeURL := ""
 	if setting.IsPublicBlog {
 		blogHomeURL = "/b/" + share.VaultID
@@ -229,7 +230,7 @@ func (h *Handler) shareRenderParams(share models.Share, setting *models.VaultSet
 		ThemeName:       setting.ThemeName,
 		VaultID:         share.VaultID,
 		ThemeBaseURL:    themeBaseURL(setting.ThemeName),
-		ThemeConfigJS:   template.JS(mustJSON(setting.ThemeConfig)),
+		ThemeConfigJS:   template.JS(mustJSON(config)),
 		CustomHeader:    customHeader,
 		CustomFooter:    customFooter,
 		ShareID:         share.ShareID,

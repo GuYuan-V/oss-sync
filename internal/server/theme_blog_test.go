@@ -58,7 +58,7 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	pt := doForm(t, router, http.MethodGet, "/dashboard/plugins/papertrail-settings/settings?vault_id="+vaultID, nil, session, csrf)
 	if pt.Code != http.StatusOK ||
 		!strings.Contains(pt.Body.String(), `name="setting_blog_name"`) ||
-		!strings.Contains(pt.Body.String(), "Papertrail 设置") ||
+		!strings.Contains(pt.Body.String(), "博客设置") ||
 		!strings.Contains(pt.Body.String(), `data-theme-setting-group`) ||
 		!strings.Contains(pt.Body.String(), `data-group-add`) ||
 		strings.Contains(pt.Body.String(), ` name="group_buttons_label"`) {
@@ -96,7 +96,7 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	if setting.ThemeName != "papertrail" {
 		t.Fatalf("theme = %q, want papertrail", setting.ThemeName)
 	}
-	cfg := blog.ParsePaperTrailConfig(setting.ThemeConfig)
+	cfg := blog.ParseBlogThemeConfig(setting.ThemeConfig)
 	if cfg.BlogName != "我的笔记" || cfg.LogoSize != 128 || len(cfg.Buttons) != 1 || cfg.Buttons[0].Label != "关于" {
 		t.Fatalf("papertrail config: %+v", cfg)
 	}

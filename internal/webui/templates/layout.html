@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Layout.Title}} · OSS Sync</title>
+  <script nonce="{{.Layout.CSPNonce}}">(function(){try{var k=document.documentElement.getAttribute("data-theme-key")||"oss-console-theme",p=localStorage.getItem(k);if(p!=="light"&&p!=="dark"&&p!=="auto")p="auto";var d=p==="dark"||(p==="auto"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");document.documentElement.setAttribute("data-theme-pref",p)}catch(e){}})();</script>
   <script src="/ui/assets/theme.js?v=2"></script>
   <link rel="stylesheet" href="/ui/assets/console.css?v=10">
   {{if and .Layout.ConsoleThemeName (ne .Layout.ConsoleThemeName "default")}}

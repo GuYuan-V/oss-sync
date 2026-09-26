@@ -29,4 +29,7 @@ func TestWebConsoleVaultSidebar_whenVaultOpen_identifiesVaultAndLinksSections(t 
 			t.Errorf("current vault sidebar missing %s", want)
 		}
 	}
+	if !strings.Contains(body, `href="/dashboard/vaults"`) || !strings.Contains(body, `href="/dashboard/vaults/new"`) {
+		t.Fatalf("vault management links missing from sidebar: %s", body)
+	}
 }

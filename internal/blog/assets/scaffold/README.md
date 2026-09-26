@@ -35,3 +35,16 @@
 文章 Markdown 顶部完整闭合的 `---` frontmatter（`title` / `description` / `published` / `category` / `tags` / `image`）作为上表元数据并从正文隐藏；未闭合或损坏的块保留原文。
 
 主题资源目录由插件 manifest 的 `blog_themes[].path` 声明；管理员上传并启用插件后，资源才会出现在选择框。功能设置在插件的 `settings` 中声明，不把插件 ZIP 嵌套进模板目录。
+
+## 主题元数据
+
+博客主题资源可在资源目录根部提供 `theme.json`：
+
+```json
+{
+  "supports_public_blog": true,
+  "public_settings": ["blog_name", "description", "logo_url", "logo_size", "logo_shape", "banner_url", "mobile_banner_url", "buttons"]
+}
+```
+
+`public_settings` 只能列出插件 `settings` 中已声明的键。插件配置按 Vault 保存在 `VaultPluginSetting`；服务端只把主题白名单中同时存在于插件 settings schema 的值合并到 Vault 的博客主题配置，并映射到 `.BlogName`、`.Description`、`.LogoURL`、`.LogoSize`、`.LogoShape`、`.BannerURL`、`.MobileBannerURL`、`.Buttons` 和 `.ThemeConfigJS`。未列入白名单或插件 schema 的值不会通过插件设置注入公开页面。

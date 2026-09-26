@@ -15,6 +15,7 @@ import (
 	"github.com/tetratelabs/wazero"
 	"gorm.io/gorm"
 
+	"github.com/helantianshen/oss-sync/internal/blog"
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
@@ -313,7 +314,8 @@ func (m *Manager) EnabledThemeOptions() ([]ThemeOption, []ThemeOption) {
 			continue
 		}
 		for _, resource := range manifest.BlogThemes {
-			blogThemes = append(blogThemes, ThemeOption{Name: resource.Key(manifest.ID), Label: resource.Name, PluginID: manifest.ID, SupportsPublicBlog: true})
+			name := resource.Key(manifest.ID)
+			blogThemes = append(blogThemes, ThemeOption{Name: name, Label: resource.Name, PluginID: manifest.ID, SupportsPublicBlog: blog.SupportsPublicBlog(filepath.Dir(m.root), name)})
 		}
 		for _, resource := range manifest.ConsoleThemes {
 			consoleThemes = append(consoleThemes, ThemeOption{Name: resource.Key(manifest.ID), Label: resource.Name, PluginID: manifest.ID})

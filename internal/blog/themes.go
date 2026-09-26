@@ -11,10 +11,13 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 type themeMetadata struct {
-	SupportsPublicBlog bool `json:"supports_public_blog"`
+	SupportsPublicBlog bool     `json:"supports_public_blog"`
+	PublicSettings     []string `json:"public_settings"`
 }
 
 // SupportsPublicBlog 判断主题是否显式支持公开博客渲染
@@ -32,6 +35,132 @@ func SupportsPublicBlog(dataDir, themeName string) bool {
 	}
 	var metadata themeMetadata
 	return json.Unmarshal(raw, &metadata) == nil && metadata.SupportsPublicBlog
+}
+
+func themePluginID(dataDir, themeName string) string {
+	if IsBuiltinTheme(themeName) {
+		return ""
+	}
+	dir, err := themeDirectory(dataDir, themeName)
+	if err != nil {
+		return ""
+	}
+	marker, err := readPluginThemeMarker(dir)
+	if err != nil {
+		return ""
+	}
+	return marker.PluginID
+}
+
+func publicThemeSettings(dataDir, themeName string) []string {
+	if IsBuiltinTheme(themeName) {
+		return nil
+	}
+	dir, err := themeDirectory(dataDir, themeName)
+	if err != nil {
+		return nil
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "theme.json"))
+	if err != nil {
+		return nil
+	}
+	var metadata themeMetadata
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return nil
+	}
+	if !metadata.SupportsPublicBlog {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(metadata.PublicSettings))
+	keys := make([]string, 0, len(metadata.PublicSettings))
+	for _, key := range metadata.PublicSettings {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func (h *Handler) publicThemeConfig(vaultID, themeName string, base models.JSONMap) models.JSONMap {
+	pluginID := themePluginID(h.Cfg.Storage.DataDir, themeName)
+	if pluginID == "" || h.DB == nil {
+		return base
+	}
+	publicSettings := publicThemeSettings(h.Cfg.Storage.DataDir, themeName)
+	if len(publicSettings) == 0 {
+		return base
+	}
+	var plugin models.ServerPlugin
+	if err := h.DB.Where("id = ? AND enabled = ?", pluginID, true).First(&plugin).Error; err != nil {
+		return base
+	}
+	var manifest struct {
+		Settings []struct {
+			Key string `json:"key"`
+		} `json:"settings"`
+		Registration struct {
+			Settings []struct {
+				Key string `json:"key"`
+			} `json:"settings"`
+		} `json:"registration"`
+		BlogThemes []struct {
+			ID string `json:"id"`
+		} `json:"blog_themes"`
+	}
+	if err := json.Unmarshal([]byte(plugin.ManifestJSON), &manifest); err != nil {
+		return base
+	}
+	prefix := pluginID + "--"
+	if !strings.HasPrefix(themeName, prefix) {
+		return base
+	}
+	resourceID := strings.TrimPrefix(themeName, prefix)
+	declaredResource := false
+	for _, resource := range manifest.BlogThemes {
+		if resource.ID == resourceID {
+			declaredResource = true
+			break
+		}
+	}
+	if !declaredResource {
+		return base
+	}
+	var setting models.VaultPluginSetting
+	if err := h.DB.Where("vault_id = ? AND plugin_id = ?", vaultID, pluginID).First(&setting).Error; err != nil {
+		return base
+	}
+	declaredSettings := make(map[string]struct{}, len(manifest.Settings)+len(manifest.Registration.Settings))
+	for _, field := range manifest.Settings {
+		declaredSettings[field.Key] = struct{}{}
+	}
+	for _, field := range manifest.Registration.Settings {
+		declaredSettings[field.Key] = struct{}{}
+	}
+	var config models.JSONMap
+	for _, key := range publicSettings {
+		if _, ok := declaredSettings[key]; !ok {
+			continue
+		}
+		if value, ok := setting.Config[key]; ok {
+			if config == nil {
+				config = make(models.JSONMap, len(base)+len(publicSettings))
+				for baseKey, baseValue := range base {
+					config[baseKey] = baseValue
+				}
+			}
+			config[key] = value
+		}
+	}
+	if config != nil {
+		return config
+	}
+	return base
 }
 
 const (

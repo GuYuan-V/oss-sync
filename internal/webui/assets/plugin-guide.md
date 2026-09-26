@@ -332,7 +332,7 @@ Settings: []ossplugin.SettingField{
 },
 ```
 
-The host settings schema supports `text`, `textarea`, `url`, `choice`, and non-nested `group`. The current Go SDK `SettingField` only describes simple fields: `choice` requires `choices`, and `group` requires nested fields, so neither can be declared with the SDK type shown above. Settings are stored per Vault; public routes do not receive Vault settings.
+The host settings schema supports `text`, `textarea`, `url`, `choice`, and non-nested `group`. The current Go SDK `SettingField` only describes simple fields: `choice` requires `choices`, and `group` requires nested fields, so neither can be declared with the SDK type shown above. Settings are stored per Vault. A blog theme resource may declare public keys in `theme.json` under `public_settings`; the host exposes only those keys through the generic blog fields and `.ThemeConfigJS`. Other public routes do not receive Vault settings.
 
 The plugin cannot inject arbitrary settings HTML or JavaScript. Use declared fields for configuration and use an AdminPage for operational UI.
 

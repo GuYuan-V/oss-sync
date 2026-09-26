@@ -82,6 +82,7 @@ type layoutData struct {
 	FlashKind        string // success 或 error
 	ConsoleThemeName string
 	Language         string
+	CSPNonce         string
 	ContentHTML      template.HTML
 }
 
@@ -430,7 +431,7 @@ func (h *Handler) render(c *gin.Context, status int, page, title, activeGroup, a
 func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 	for _, manifest := range serverplugin.BuiltinManifests() {
 		if manifest.ID == "papertrail-settings" && len(manifest.Settings) > 0 && len(h.pluginSettingVaults(u, manifest.ID)) > 0 {
-			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: translate(ld.Language, "common.blog_settings")})
 			break
 		}
 	}
@@ -495,6 +496,7 @@ func pluginHasNoAssociations(db *gorm.DB, pluginID string) bool {
 
 // renderWithLayout 渲染页面内容并把结果注入统一布局
 func (h *Handler) renderWithLayout(c *gin.Context, status int, ld layoutData, data any) {
+	ld.CSPNonce = randomToken()
 	pageData := struct {
 		Layout layoutData
 		Data   any
@@ -508,7 +510,7 @@ func (h *Handler) renderWithLayout(c *gin.Context, status int, ld layoutData, da
 		}
 	}
 	ld.ContentHTML = template.HTML(buf.String())
-	setPageHeaders(c)
+	setPageHeaders(c, ld.CSPNonce)
 	c.Status(status)
 	_ = h.tpl.ExecuteTemplate(c.Writer, "layout", struct {
 		Layout layoutData
@@ -516,15 +518,19 @@ func (h *Handler) renderWithLayout(c *gin.Context, status int, ld layoutData, da
 	}{Layout: ld, Data: data})
 }
 
-func setPageHeaders(c *gin.Context) {
+func setPageHeaders(c *gin.Context, nonce string) {
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.Header("Cache-Control", "no-store")
 	c.Header("Referrer-Policy", "same-origin")
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("X-Frame-Options", "DENY")
+	scriptSource := "'self'"
+	if nonce != "" {
+		scriptSource += " 'nonce-" + nonce + "'"
+	}
 	c.Header(
 		"Content-Security-Policy",
-		"default-src 'none'; connect-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; "+
+		"default-src 'none'; connect-src 'self'; script-src "+scriptSource+"; style-src 'self'; img-src 'self' data: https:; "+
 			"frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 	)
 }

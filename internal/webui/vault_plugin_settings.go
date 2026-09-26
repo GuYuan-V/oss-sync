@@ -62,11 +62,12 @@ func (h *Handler) pluginSettingsPage(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
+	pluginName := h.localizedPluginDisplayName(c, manifest.ID, manifest.Name)
 	d := pluginSettingsData{
 		VaultID:       vault.ID,
 		VaultName:     vault.Name,
 		PluginID:      manifest.ID,
-		PluginName:    manifest.Name,
+		PluginName:    pluginName,
 		PluginVersion: manifest.Version,
 		Fields:        buildPluginSettingViews(manifest.Settings, config),
 		Vaults:        h.pluginSettingVaults(u, pluginID),
@@ -76,7 +77,7 @@ func (h *Handler) pluginSettingsPage(c *gin.Context) {
 	ld := layoutData{}
 	h.setVaultLayout(&ld, vault)
 	ld.ActivePluginID = manifest.ID
-	h.renderVault(c, ld, "vault-plugin-settings", h.t(c, "page.plugin_settings", vault.Name, manifest.Name), d)
+	h.renderVault(c, ld, "vault-plugin-settings", h.t(c, "page.plugin_settings", vault.Name, pluginName), d)
 }
 
 func (h *Handler) pluginSettingsGlobalPage(c *gin.Context) {
@@ -89,7 +90,7 @@ func (h *Handler) savePluginSettingsGlobal(c *gin.Context) {
 
 // renderPluginSettingsNoVault 渲染无生效仓库时的引导页
 func (h *Handler) renderPluginSettingsNoVault(c *gin.Context, u *models.User, pluginID string) {
-	name := h.pluginDisplayName(pluginID)
+	name := h.localizedPluginDisplayName(c, pluginID, h.pluginDisplayName(pluginID))
 	h.render(c, http.StatusOK, "vault-plugin-settings",
 		h.t(c, "page.plugin_settings", "", name),
 		"plugins", "vault-plugin-settings",
@@ -112,6 +113,13 @@ func (h *Handler) pluginDisplayName(pluginID string) string {
 		return record.Name
 	}
 	return pluginID
+}
+
+func (h *Handler) localizedPluginDisplayName(c *gin.Context, pluginID, fallback string) string {
+	if pluginID == "papertrail-settings" {
+		return h.t(c, "common.blog_settings")
+	}
+	return fallback
 }
 
 // pluginSettingVaults 返回插件设置生效的仓库；关联插件按主题筛选
@@ -156,7 +164,7 @@ func (h *Handler) pluginSettingVaults(u *models.User, pluginID string) []pluginS
 		}
 		out := make([]pluginSettingVaultOption, 0, len(vaults))
 		for _, vault := range vaults {
-			if themeByVault[vault.ID] == "papertrail" {
+			if blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, themeByVault[vault.ID]) {
 				out = append(out, pluginSettingVaultOption{ID: vault.ID, Name: vault.Name})
 			}
 		}
@@ -240,12 +248,13 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 	}
 	raw := pluginSettingsFromForm(c, manifest.Settings)
 	clean, err := blog.ValidateSettingConfig(manifest.Settings, raw)
+	pluginName := h.localizedPluginDisplayName(c, manifest.ID, manifest.Name)
 	if err != nil {
-		d := pluginSettingsData{VaultID: vault.ID, VaultName: vault.Name, PluginID: manifest.ID, PluginName: manifest.Name, PluginVersion: manifest.Version, Fields: buildPluginSettingViews(manifest.Settings, models.JSONMap(raw)), Error: err.Error()}
+		d := pluginSettingsData{VaultID: vault.ID, VaultName: vault.Name, PluginID: manifest.ID, PluginName: pluginName, PluginVersion: manifest.Version, Fields: buildPluginSettingViews(manifest.Settings, models.JSONMap(raw)), Error: err.Error()}
 		ld := layoutData{}
 		h.setVaultLayout(&ld, vault)
 		ld.ActivePluginID = manifest.ID
-		h.renderVaultStatus(c, http.StatusBadRequest, ld, "vault-plugin-settings", h.t(c, "page.plugin_settings", vault.Name, manifest.Name), d)
+		h.renderVaultStatus(c, http.StatusBadRequest, ld, "vault-plugin-settings", h.t(c, "page.plugin_settings", vault.Name, pluginName), d)
 		return
 	}
 	var setting models.VaultPluginSetting

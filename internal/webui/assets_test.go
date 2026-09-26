@@ -18,7 +18,7 @@ func TestSetPageHeaders_whenRendered_setsCSPImagePolicyWithoutRelaxingOtherDirec
 	}
 	ctx.Request = req
 
-	setPageHeaders(ctx)
+	setPageHeaders(ctx, "test-nonce")
 	policy := w.Header().Get("Content-Security-Policy")
 	if policy == "" {
 		t.Fatal("missing CSP header")
