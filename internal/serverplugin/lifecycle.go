@@ -79,6 +79,9 @@ func (m *Manager) enable(ctx context.Context, id string) (resultErr error) {
 	if err := m.checkDependencies(registration.Dependencies); err != nil {
 		return m.enableError(id, err)
 	}
+	if err := m.applyMigrations(ctx, id, registration.Migrations); err != nil {
+		return m.enableError(id, err)
+	}
 	if err := m.syncThemeResources(id, packageData); err != nil {
 		return m.enableError(id, err)
 	}

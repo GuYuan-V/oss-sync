@@ -45,9 +45,12 @@ func (m *Manager) materializeThemeResource(pluginID string, resource ThemeResour
 		return fmt.Errorf("create plugin theme root: %w", err)
 	}
 	target := filepath.Join(root, resource.Key(pluginID))
-	if existing, err := readResourceMarker(target); err == nil && existing.PluginID != pluginID {
-		return fmt.Errorf("theme resource %q conflicts with an existing resource", resource.Key(pluginID))
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if info, err := os.Lstat(target); err == nil {
+		existing, markerErr := readResourceMarker(target)
+		if !info.IsDir() || markerErr != nil || existing.PluginID != pluginID || existing.ResourceID != resource.ID {
+			return fmt.Errorf("theme resource %q conflicts with an existing resource", resource.Key(pluginID))
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("inspect existing theme resource: %w", err)
 	}
 	tmp, err := os.MkdirTemp(root, ".plugin-resource-")

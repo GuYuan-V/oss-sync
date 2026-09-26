@@ -34,6 +34,10 @@ func TestSplitFrontmatterKeepsMalformedBlockAsContent(t *testing.T) {
 		"---\ntitle: 未闭合\n正文",
 		"--- junk\ntitle: 起始行不合法\n---\n正文",
 		"引言在前\n---\ntitle: 不在开头\n---\n正文",
+		"---\ntitle: [broken\n---\n正文",
+		"---\ntitle: \"未闭合\n---\n正文",
+		"---\n- 不是元数据映射\n---\n正文",
+		"---\ntitle: 重复\ntitle: 重复键\n---\n正文",
 	} {
 		fm, body := splitFrontmatter(raw)
 		if body != raw {
