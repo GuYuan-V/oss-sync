@@ -16,39 +16,39 @@ import (
 	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
 
-// PaperTrailConfig 是 papertrail 博客设置的结构化配置
-type PaperTrailConfig struct {
-	LogoURL     string             `json:"logo_url"`
-	LogoSize    int                `json:"logo_size"`
-	LogoShape   string             `json:"logo_shape"`
-	BlogName    string             `json:"blog_name"`
-	Description string             `json:"description"`
-	Buttons     []PaperTrailButton `json:"buttons"`
-	// 自定义主题可用的页面横幅
-	BannerURL       string `json:"banner_url"`
-	MobileBannerURL string `json:"mobile_banner_url"`
+// BlogThemeConfig 是公开博客通用展示字段的结构化配置
+type BlogThemeConfig struct {
+	LogoURL         string       `json:"logo_url"`
+	LogoSize        int          `json:"logo_size"`
+	LogoShape       string       `json:"logo_shape"`
+	BlogName        string       `json:"blog_name"`
+	Description     string       `json:"description"`
+	Buttons         []BlogButton `json:"buttons"`
+	BannerURL       string       `json:"banner_url"`
+	MobileBannerURL string       `json:"mobile_banner_url"`
 }
 
-// PaperTrailButton 博客自定义按钮
-type PaperTrailButton struct {
+// BlogButton 表示博客页可展示的自定义链接
+type BlogButton struct {
 	Label    string `json:"label"`
 	URL      string `json:"url"`
 	IconURL  string `json:"icon_url"`
 	Position int    `json:"position"`
 }
 
-// ParsePaperTrailConfig 从 ThemeConfig 解析结构化配置
-func ParsePaperTrailConfig(themeConfig map[string]any) PaperTrailConfig {
-	cfg := PaperTrailConfig{}
+// ParseBlogThemeConfig 从 Vault 配置解析公开博客通用展示字段
+func ParseBlogThemeConfig(themeConfig map[string]any) BlogThemeConfig {
+	cfg := BlogThemeConfig{}
+
 	if themeConfig == nil {
 		return cfg
 	}
 	if v, ok := themeConfig["logo_size"].(string); ok {
-		cfg.LogoSize = parsePaperTrailLogoSize(v)
+		cfg.LogoSize = parseBlogLogoSize(v)
 	} else if v, ok := themeConfig["logo_size"].(float64); ok {
-		cfg.LogoSize = parsePaperTrailLogoSize(fmt.Sprintf("%d", int(v)))
+		cfg.LogoSize = parseBlogLogoSize(fmt.Sprintf("%d", int(v)))
 	} else if v, ok := themeConfig["logo_size"].(int); ok {
-		cfg.LogoSize = parsePaperTrailLogoSize(fmt.Sprintf("%d", v))
+		cfg.LogoSize = parseBlogLogoSize(fmt.Sprintf("%d", v))
 	}
 	if v, ok := themeConfig["logo_url"].(string); ok {
 		cfg.LogoURL = v
@@ -74,7 +74,7 @@ func ParsePaperTrailConfig(themeConfig map[string]any) PaperTrailConfig {
 			if !ok {
 				continue
 			}
-			btn := PaperTrailButton{}
+			btn := BlogButton{}
 			if v, ok := m["label"].(string); ok {
 				btn.Label = v
 			}
@@ -97,7 +97,7 @@ func ParsePaperTrailConfig(themeConfig map[string]any) PaperTrailConfig {
 	return cfg
 }
 
-func parsePaperTrailLogoSize(raw string) int {
+func parseBlogLogoSize(raw string) int {
 	value, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil {
 		return 0
@@ -148,7 +148,8 @@ func (h *Handler) handleHome(c *gin.Context) {
 		if err := h.DB.Where("id = ?", setting.VaultID).First(&vault).Error; err != nil {
 			continue
 		}
-		cfg := ParsePaperTrailConfig(setting.ThemeConfig)
+		config := h.publicThemeConfig(setting.VaultID, setting.ThemeName, setting.ThemeConfig)
+		cfg := ParseBlogThemeConfig(config)
 		description := cfg.Description
 		if description == "" {
 			description = vault.Description
@@ -164,7 +165,7 @@ func (h *Handler) handleHome(c *gin.Context) {
 	h.renderPublicHome(c, publicHomeData{Blogs: blogs})
 }
 
-func blogTitle(cfg PaperTrailConfig, fallback string) string {
+func blogTitle(cfg BlogThemeConfig, fallback string) string {
 	if cfg.BlogName != "" {
 		return cfg.BlogName
 	}
@@ -245,14 +246,15 @@ func (h *Handler) handleVaultBlog(c *gin.Context) {
 		return
 	}
 	posts := h.homePosts(vault.OwnerID, vaultID)
-	cfg := ParsePaperTrailConfig(vs.ThemeConfig)
+	config := h.publicThemeConfig(vs.VaultID, vs.ThemeName, vs.ThemeConfig)
+	cfg := ParseBlogThemeConfig(config)
 	customEnabled := settingspolicy.CustomFragmentsEnabled(h.DB)
 	params := renderParams{
 		VaultID:         vaultID,
 		Title:           blogTitle(cfg, vault.Name),
 		ThemeName:       vs.ThemeName,
 		ThemeBaseURL:    themeBaseURL(vs.ThemeName),
-		ThemeConfigJS:   template.JS(mustJSON(vs.ThemeConfig)),
+		ThemeConfigJS:   template.JS(mustJSON(config)),
 		CustomHeader:    renderSafeCustomFragmentEnabled(vs.CustomHeader, customEnabled),
 		CustomFooter:    renderSafeCustomFragmentEnabled(vs.CustomFooter, customEnabled),
 		IsHome:          true,

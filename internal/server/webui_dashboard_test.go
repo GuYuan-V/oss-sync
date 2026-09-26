@@ -755,7 +755,7 @@ func TestWebConsolePluginSettingsKeepsSubmittedValuesWhenURLIsInvalid(t *testing
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid theme settings status=%d, want 400; body=%s", response.Code, response.Body)
 	}
-	for _, want := range []string{"Draft blog", "Draft description", "javascript:alert(1)", "/icon.svg", "设置 Logo URL 必须是 http(s) 或站内相对 URL"} {
+	for _, want := range []string{"Draft blog", "Draft description", "javascript:alert(1)", "/icon.svg", "设置 博客 Logo URL 必须是 http(s) 或站内相对 URL"} {
 		if !strings.Contains(response.Body.String(), want) {
 			t.Fatalf("invalid theme settings lost %q: body=%s", want, response.Body)
 		}

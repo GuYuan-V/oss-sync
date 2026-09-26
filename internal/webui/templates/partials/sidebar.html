@@ -32,6 +32,7 @@
           <span class="side-nav__arrow" aria-hidden="true"></span>
         </button>
         <ul class="side-nav__sub">
+          <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vaults"}} is-active{{end}}" href="/dashboard/vaults">{{.Layout.T "common.my_vaults"}}</a></li>
           <li><a class="side-nav__sublink{{if eq .Layout.ActivePage "vaults-new"}} is-active{{end}}" href="/dashboard/vaults/new">{{.Layout.T "common.new_vault"}}</a></li>
 
           {{range .Layout.NavVaults}}
@@ -64,7 +65,7 @@
         </button>
         <ul class="side-nav__sub">
           {{range .Layout.PluginSettings}}
-          <li><a class="side-nav__sublink{{if and (eq $.Layout.ActivePage "vault-plugin-settings") (eq $.Layout.ActivePluginID .ID)}} is-active{{end}}" href="/dashboard/plugins/{{.ID}}/settings">{{.Name}} {{$.Layout.T "common.settings"}}</a></li>
+          <li><a class="side-nav__sublink{{if and (eq $.Layout.ActivePage "vault-plugin-settings") (eq $.Layout.ActivePluginID .ID)}} is-active{{end}}" href="/dashboard/plugins/{{.ID}}/settings">{{if eq .ID "papertrail-settings"}}{{$.Layout.T "common.blog_settings"}}{{else}}{{.Name}} {{$.Layout.T "common.settings"}}{{end}}</a></li>
           {{end}}
         </ul>
       </li>

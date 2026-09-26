@@ -6,6 +6,7 @@ func init() {
 		"common.save":                     {"保存", "Save"},
 		"common.back":                     {"返回", "Back"},
 		"common.cancel":                   {"取消", "Cancel"},
+		"common.blog_settings":            {"博客设置", "Blog settings"},
 		"common.settings":                 {"设置", "Settings"},
 		"common.shares":                   {"分享管理", "Shares"},
 		"common.recycle":                  {"回收站", "Recycle bin"},
