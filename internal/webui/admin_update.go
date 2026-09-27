@@ -26,6 +26,8 @@ type adminUpdateStatus struct {
 	CapabilityOK   bool                     `json:"capability_ok"`
 	CapabilityErr  string                   `json:"capability_error,omitempty"`
 	ExternalUpdate bool                     `json:"external_update"`
+	ManagedUpdate  bool                     `json:"managed_update"`
+	ManagedResult  *update.ManagedResult    `json:"managed_result,omitempty"`
 	DownloadSource string                   `json:"download_source"`
 	DownloadProxy  string                   `json:"download_proxy,omitempty"`
 	Active         *update.PublicOperation  `json:"active,omitempty"`
@@ -47,6 +49,10 @@ func (h *Handler) buildUpdateStatus() adminUpdateStatus {
 		s.DownloadSource = h.Cfg.Update.EffectiveDownloadSource()
 		s.DownloadProxy = h.Cfg.Update.EffectiveDownloadProxy()
 	}
+	// 先按宿主机写回的结果收敛托管更新操作，使 Active/History 反映最新状态
+	if h.updateSvc != nil {
+		h.updateSvc.ReconcileManagedUpdate()
+	}
 	if h.updateSvc != nil && h.updateSvc.Manager() != nil {
 		ms := h.updateSvc.Manager().CurrentStatus()
 		s.Active = ms.Active
@@ -64,12 +70,22 @@ func (h *Handler) buildUpdateStatus() adminUpdateStatus {
 	if h.updater == nil {
 		s.CapabilityErr = "update service not initialized"
 	} else if err := update.CheckCurrentCapability(h.updater.ExecPath()); err != nil {
-		s.ExternalUpdate = update.IsExternalUpdateError(err)
-		if !s.ExternalUpdate {
+		switch {
+		case update.IsManagedUpdateError(err):
+			s.ManagedUpdate = true
+		case update.IsExternalUpdateError(err):
+			s.ExternalUpdate = true
+		default:
 			s.CapabilityErr = err.Error()
 		}
 	} else {
 		s.CapabilityOK = true
+	}
+	// 托管更新：读取宿主机写回的最近结果供前端展示（进行中/History 由活跃操作反映）
+	if s.ManagedUpdate && h.Cfg != nil && h.Cfg.Storage.DataDir != "" {
+		if res, ok := update.ReadManagedResult(h.Cfg.Storage.DataDir); ok {
+			s.ManagedResult = res
+		}
 	}
 	return s
 }
@@ -210,6 +226,30 @@ func (h *Handler) adminUpdateTrigger(c *gin.Context) {
 		return
 	}
 	if err := update.CheckCurrentCapability(h.updater.ExecPath()); err != nil {
+		if update.IsManagedUpdateError(err) {
+			opID, ver, mErr := h.updateSvc.StartManagedUpdate(checkID)
+			if mErr != nil {
+				code := http.StatusBadGateway
+				switch {
+				case errors.Is(mErr, update.ErrAlreadyInProgress):
+					code = http.StatusConflict
+				case errors.Is(mErr, update.ErrCheckNotFound):
+					code = http.StatusNotFound
+				case errors.Is(mErr, update.ErrCheckExpired):
+					code = http.StatusGone
+				}
+				c.JSON(code, gin.H{"ok": false, "code": "managed_trigger_failed", "error": mErr.Error()})
+				return
+			}
+			c.JSON(http.StatusAccepted, gin.H{
+				"ok":      true,
+				"code":    "managed_accepted",
+				"op_id":   opID,
+				"version": ver,
+				"note":    h.t(c, "admin.update_managed_accepted"),
+			})
+			return
+		}
 		if update.IsExternalUpdateError(err) {
 			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "code": string(update.CodeExternalUpdate), "error": h.t(c, "admin.update_external_required")})
 			return

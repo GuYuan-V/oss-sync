@@ -38,6 +38,8 @@ deploy() {
   case "$INSTALL_DIR/" in /home/*|/root/*|/run/user/*) fail 'systemd ProtectHome 不允许在用户家目录部署' ;; esac
   SERVICE=oss-sync
   UNIT=/etc/systemd/system/oss-sync.service
+  UPDATE_PATH_UNIT=/etc/systemd/system/oss-sync-update.path
+  UPDATE_SVC_UNIT=/etc/systemd/system/oss-sync-update.service
   GLOBAL_BIN_DIR="${OSS_GLOBAL_BIN_DIR:-/usr/local/bin}"
   valid_path "$GLOBAL_BIN_DIR" || fail '全局命令目录必须是有效绝对路径'
   exec 9>/run/lock/oss-sync-deploy.lock
@@ -119,7 +121,8 @@ PY
         if ((WAS_ACTIVE)); then systemctl start "$SERVICE" || true; fi
       else
         systemctl disable "$SERVICE" || true
-        rm -f "$UNIT" "$INSTALL_DIR/deployment.env"
+        systemctl disable --now oss-sync-update.path 2>/dev/null || true
+        rm -f "$UNIT" "$UPDATE_PATH_UNIT" "$UPDATE_SVC_UNIT" "$INSTALL_DIR/deployment.env"
         systemctl daemon-reload || true
       fi
     fi
@@ -225,6 +228,7 @@ PYELF
   [[ "$(id -u oss-sync)" != 0 ]] || fail '服务账户不能为 root'
   install -d -o root -g root -m 755 "$INSTALL_DIR" "$INSTALL_DIR/bin" "$INSTALL_DIR/configs" "$GLOBAL_BIN_DIR"
   install -d -o oss-sync -g oss-sync -m 750 "$INSTALL_DIR/data"
+  install -d -o oss-sync -g oss-sync -m 750 "$INSTALL_DIR/data/.update"
   touch "$INSTALL_DIR/.binary-deployment"
   chmod 600 "$INSTALL_DIR/.binary-deployment"
   systemctl stop "$SERVICE" 2>/dev/null || { ((HAD_INSTALL == 0)) || fail '无法停止旧服务'; }
@@ -245,6 +249,7 @@ OSS_ENV=prod
 OSS_SERVER_PORT=$PORT
 OSS_STORAGE_MAX_TOTAL_SIZE_MB=$((LIMIT * 1024))
 OSS_UPDATE_MANAGER=systemd
+OSS_UPDATE_VIA_PATH_UNIT=1
 ENV
   chmod 640 "$INSTALL_DIR/service.env"
   chown root:oss-sync "$INSTALL_DIR/service.env"
@@ -275,8 +280,31 @@ ReadWritePaths=$INSTALL_DIR/data
 [Install]
 WantedBy=multi-user.target
 UNIT
+  cat > "$UPDATE_PATH_UNIT" <<PATHUNIT
+[Unit]
+Description=OSS Sync 网页触发更新监听
+
+[Path]
+PathExists=$INSTALL_DIR/data/.update/request
+Unit=oss-sync-update.service
+
+[Install]
+WantedBy=multi-user.target
+PATHUNIT
+  cat > "$UPDATE_SVC_UNIT" <<SVCUNIT
+[Unit]
+Description=OSS Sync 网页触发更新执行
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+ExecStart=$INSTALL_DIR/oss.sh apply-web-update
+SVCUNIT
+  rm -f "$INSTALL_DIR/data/.update/request"
   systemctl daemon-reload
   systemctl enable "$SERVICE"
+  systemctl enable --now oss-sync-update.path
   systemctl start "$SERVICE"
   healthy=0
   for ((attempt=0; attempt<60; attempt++)); do
@@ -443,7 +471,9 @@ manage_uninstall() {
       [[ "$answer" == y || "$answer" == yes ]] || return 0
       acquire_lock
       systemctl disable --now oss-sync
-      rm -f /etc/systemd/system/oss-sync.service
+      systemctl disable --now oss-sync-update.path 2>/dev/null || true
+      systemctl stop oss-sync-update.service 2>/dev/null || true
+      rm -f /etc/systemd/system/oss-sync.service /etc/systemd/system/oss-sync-update.path /etc/systemd/system/oss-sync-update.service
       systemctl daemon-reload
       for name in oss oss-sync; do
         [[ "$(readlink -f "$DEPLOY_BIN_DIR/$name")" != "$DIR/oss.sh" ]] || rm -f "$DEPLOY_BIN_DIR/$name"
@@ -458,7 +488,9 @@ manage_uninstall() {
       [[ "$answer" == y || "$answer" == yes ]] || return 0
       acquire_lock
       systemctl disable --now oss-sync
-      rm -f /etc/systemd/system/oss-sync.service
+      systemctl disable --now oss-sync-update.path 2>/dev/null || true
+      systemctl stop oss-sync-update.service 2>/dev/null || true
+      rm -f /etc/systemd/system/oss-sync.service /etc/systemd/system/oss-sync-update.path /etc/systemd/system/oss-sync-update.service
       systemctl daemon-reload
       for name in oss oss-sync; do
         [[ "$(readlink -f "$DEPLOY_BIN_DIR/$name")" != "$DIR/oss.sh" ]] || rm -f "$DEPLOY_BIN_DIR/$name"
@@ -469,6 +501,79 @@ manage_uninstall() {
     0) return 0 ;;
     *) fail '无效操作' ;;
   esac
+}
+
+# write_update_result 原子写入网页更新结果，供服务端读取
+write_update_result() {
+  local res="$1" op_id="$2" ver="$3" status="$4" err="$5"
+  local dir tmp
+  dir="$(dirname "$res")"
+  [[ -d "$dir" ]] || return 0
+  tmp="$(mktemp "$dir/.result.XXXXXX")" || return 0
+  if OSS_R_OPID="$op_id" OSS_R_VER="$ver" OSS_R_STATUS="$status" OSS_R_ERR="$err" \
+    python3 - "$tmp" <<'PY'
+import json, os, sys, time
+json.dump({
+    "op_id": os.environ.get("OSS_R_OPID", ""),
+    "version": os.environ.get("OSS_R_VER", ""),
+    "status": os.environ.get("OSS_R_STATUS", ""),
+    "error": os.environ.get("OSS_R_ERR", ""),
+    "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+}, open(sys.argv[1], "w"))
+PY
+  then
+    chmod 640 "$tmp" 2>/dev/null || true
+    chown root:oss-sync "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$res"
+  else
+    rm -f "$tmp"
+  fi
+}
+
+# manage_apply_web_update 处理网页写入的更新请求：校验版本并禁止降级后复用 deploy install
+manage_apply_web_update() {
+  local upd_dir="$DIR/data/.update"
+  local req="$upd_dir/request" res="$upd_dir/result.json"
+  [[ -f "$req" ]] || return 0
+  local payload parsed op_id target
+  payload="$(cat "$req" 2>/dev/null || true)"
+  rm -f "$req"
+  if ! parsed="$(OSS_REQ="$payload" OSS_CUR="${DEPLOY_VERSION:-}" python3 - <<'PY'
+import json, os, re, sys
+def parse(v):
+    m = re.match(r'^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$', (v or "").lstrip("v"))
+    if not m:
+        return None
+    a, b, c, rc = m.groups()
+    return (int(a), int(b), int(c), 0 if rc is not None else 1, int(rc) if rc else 0)
+try:
+    d = json.loads(os.environ.get("OSS_REQ", "") or "{}")
+    d = d if isinstance(d, dict) else {}
+except Exception:
+    d = {}
+op = str(d.get("op_id", ""))
+tgt = str(d.get("target_version", "")).lstrip("v")
+cur, t = parse(os.environ.get("OSS_CUR", "")), parse(tgt)
+if t is None or (cur is not None and t < cur):
+    print("op_id=" + op)
+    sys.exit(2)
+print(op + "\t" + tgt)
+PY
+)"; then
+    op_id="$(printf '%s' "$parsed" | sed -n 's/^op_id=//p')"
+    write_update_result "$res" "$op_id" "" failed '无效目标版本或不允许降级'
+    return 0
+  fi
+  op_id="${parsed%%$'\t'*}"
+  target="${parsed#*$'\t'}"
+  local status=success err=""
+  if ( OSS_INSTALL_DIR="$DIR" OSS_RELEASE_PROXY="${DEPLOY_PROXY:-official}" OSS_VERSION="$target" deploy install ); then
+    status=success
+  else
+    status=failed
+    err='更新失败，详见 journalctl -u oss-sync-update 与 oss-sync'
+  fi
+  write_update_result "$res" "$op_id" "$target" "$status" "$err"
 }
 
 manage() {
@@ -502,6 +607,7 @@ manage() {
       5|logs) journalctl -u oss-sync -f ;;
       6|uninstall) manage_uninstall "${2:-}" "${3:-}" ;;
       status) systemctl status oss-sync --no-pager ;;
+      apply-web-update) manage_apply_web_update ;;
       *) fail '无效操作' ;;
     esac
     # 命令行一次性调用执行完即退出；交互模式返回主菜单。

@@ -15,6 +15,7 @@ const (
 	CodeSymlinkNotAllowed   ErrorCode = "symlink_not_allowed"
 	CodeUnwritableDirectory ErrorCode = "unwritable_directory"
 	CodeExternalUpdate      ErrorCode = "external_update_required"
+	CodeManagedUpdate       ErrorCode = "managed_update_available"
 	CodeInvalidVersion      ErrorCode = "invalid_version"
 	CodeInvalidRepo         ErrorCode = "invalid_repo"
 	CodeInvalidAsset        ErrorCode = "invalid_asset"
@@ -60,6 +61,7 @@ var (
 	ErrSymlinkNotAllowed   = &UpdateError{Code: CodeSymlinkNotAllowed, Message: "executable must not be a symlink"}
 	ErrUnwritableDirectory = &UpdateError{Code: CodeUnwritableDirectory, Message: "executable directory is not writable"}
 	ErrExternalUpdate      = &UpdateError{Code: CodeExternalUpdate, Message: "deployment must be updated externally"}
+	ErrManagedUpdate       = &UpdateError{Code: CodeManagedUpdate, Message: "deployment update is applied by the host path unit"}
 	ErrInvalidVersion      = &UpdateError{Code: CodeInvalidVersion, Message: "invalid version"}
 	ErrInvalidRepo         = &UpdateError{Code: CodeInvalidRepo, Message: "invalid github repo"}
 	ErrInvalidAsset        = &UpdateError{Code: CodeInvalidAsset, Message: "invalid asset"}
@@ -81,4 +83,9 @@ func IsUnsupportedPlatformError(err error) bool {
 // IsExternalUpdateError 判断当前部署是否必须由外部管理器更新
 func IsExternalUpdateError(err error) bool {
 	return errors.Is(err, ErrExternalUpdate)
+}
+
+// IsManagedUpdateError 判断当前部署是否经宿主机 path unit 托管更新
+func IsManagedUpdateError(err error) bool {
+	return errors.Is(err, ErrManagedUpdate)
 }

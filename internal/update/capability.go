@@ -58,10 +58,20 @@ func CheckCapability(execPath string, goos, goarch string) error {
 	return nil
 }
 
+// ManagedUpdateEnabled 判断当前为 systemd 部署且已安装网页触发更新的 path unit
+// 此时更新由宿主机 oss-sync-update.path/.service 以 root 托管，网页只写请求文件
+func ManagedUpdateEnabled() bool {
+	return os.Getenv("OSS_UPDATE_MANAGER") == "systemd" && os.Getenv("OSS_UPDATE_VIA_PATH_UNIT") == "1"
+}
+
 // CheckCurrentCapability 使用当前版本与平台校验能力
 func CheckCurrentCapability(execPath string) error {
-	// systemd 负责进程生命周期，自更新辅助进程不能接管服务
+	// systemd 负责进程生命周期，进程内 helper 交接不能接管服务
 	if os.Getenv("OSS_UPDATE_MANAGER") == "systemd" {
+		// 安装了 path unit 时改由宿主机托管更新，网页写请求文件触发
+		if ManagedUpdateEnabled() {
+			return ErrManagedUpdate
+		}
 		return ErrExternalUpdate
 	}
 	return CheckCapability(execPath, runtime.GOOS, runtime.GOARCH)

@@ -115,6 +115,15 @@ with tempfile.TemporaryDirectory(prefix='oss-deploy-test-') as work:
         run(['bash', str(release / 'oss.sh')])
         assert (dest / 'data/oss.db').exists()
         assert (root / 'bin/oss').resolve() == dest / 'oss.sh'
+        assert (root / 'system/oss-sync-update.path').exists()
+        assert (root / 'system/oss-sync-update.service').exists()
+        assert (dest / 'data/.update').is_dir()
+        assert 'OSS_UPDATE_VIA_PATH_UNIT=1' in (dest / 'service.env').read_text()
+        # 网页触发更新：非法目标版本应被拒绝并写出 failed 结果，不触发真正部署
+        (dest / 'data/.update/request').write_text('{"op_id":"t1","target_version":"nope"}')
+        run(['bash', str(dest / 'oss.sh'), 'apply-web-update'])
+        assert not (dest / 'data/.update/request').exists()
+        assert '"status": "failed"' in (dest / 'data/.update/result.json').read_text()
         config = dest / 'configs/config.prod.yaml'
         config.write_text(config.read_text() + '\n# 保留自定义配置\n')
         original = config.read_bytes()

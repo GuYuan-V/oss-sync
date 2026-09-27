@@ -399,6 +399,7 @@
     var updateAvailable = false;
     var capabilityReady = panel.getAttribute("data-capability-ready") === "true";
     var externalUpdate = panel.getAttribute("data-external-update") === "true";
+    var managedUpdate = panel.getAttribute("data-managed-update") === "true";
     var msg = function (key) { return panel.getAttribute("data-msg-" + key) || ""; };
 
     function setNote(text) {
@@ -418,7 +419,7 @@
     }
 
     function syncTrigger() {
-      var hidden = !capabilityReady || !updateAvailable || !checkIdInput.value.trim() || !versionInput.value.trim();
+      var hidden = !(capabilityReady || managedUpdate) || !updateAvailable || !checkIdInput.value.trim() || !versionInput.value.trim();
       triggerForm.hidden = hidden;
       triggerBtn.disabled = hidden || triggerBtn.hasAttribute("data-busy");
       if (!hidden) triggerBtn.textContent = msg("to-version").replace("{version}", versionInput.value.trim());
@@ -437,10 +438,18 @@
         .then(function (status) {
           capabilityReady = status.capability_ok === true;
           externalUpdate = status.external_update === true;
+          managedUpdate = status.managed_update === true;
           if (stateEl) stateEl.textContent = status.active && status.active.state ? status.active.state : msg("idle");
           if (activeIdEl) activeIdEl.textContent = status.active && status.active.id ? status.active.id : "—";
-          if (capEl) capEl.textContent = externalUpdate ? msg("capability-managed") : (capabilityReady ? msg("capability-ok") : msg("capability-not-ready"));
-          if (capDetailEl) capDetailEl.textContent = externalUpdate ? msg("external-required") : (status.capability_error || "—");
+          if (capEl) capEl.textContent = managedUpdate ? msg("capability-managed-web") : (externalUpdate ? msg("capability-managed") : (capabilityReady ? msg("capability-ok") : msg("capability-not-ready")));
+          if (capDetailEl) {
+            if (managedUpdate) {
+              var mr = status.managed_result;
+              capDetailEl.textContent = mr ? (mr.status === "success" ? ("✓ " + (mr.version || "")) : (mr.error || "failed")) : "—";
+            } else {
+              capDetailEl.textContent = externalUpdate ? msg("external-required") : (status.capability_error || "—");
+            }
+          }
           if (statusJSONEl) statusJSONEl.textContent = JSON.stringify(status, null, 2);
           if (polledEl) polledEl.textContent = new Date().toLocaleString();
           setDisabled(status.is_updating === true);
@@ -493,7 +502,7 @@
           }
           if (expiresEl) expiresEl.textContent = result.expires_at ? new Date(result.expires_at / 1e6).toLocaleString() : "—";
           setMetaVisible(true);
-          setNote(updateAvailable ? msg(externalUpdate ? "external-available" : "available").replace("{version}", latestVersion) : msg("up-to-date"));
+          setNote(updateAvailable ? msg(managedUpdate ? "managed-available" : (externalUpdate ? "external-available" : "available")).replace("{version}", latestVersion) : msg("up-to-date"));
         }).catch(function (error) {
           setNote(String(error));
         }).finally(function () {
@@ -520,10 +529,11 @@
       fetch(triggerForm.getAttribute("data-update-action"), { method: "POST", body: body, headers: { "X-CSRF-Token": csrf }, credentials: "same-origin" })
         .then(function (response) { return response.json().then(function (result) { return { status: response.status, body: result }; }); })
         .then(function (result) {
-          setNote(result.body.error || result.body.code || "");
           if (result.status === 202 || result.body.ok) {
             updateAvailable = false;
-            setNote(msg("started"));
+            setNote(result.body.note || msg(managedUpdate ? "managed-accepted" : "started"));
+          } else {
+            setNote(result.body.error || result.body.code || "");
           }
         }).catch(function (error) {
           setNote(String(error));

@@ -666,3 +666,79 @@ func TestAdminUpdateStatus_SystemdRequiresHostUpdate(t *testing.T) {
 		t.Fatalf("unexpected systemd update status: %+v", status)
 	}
 }
+
+func TestAdminUpdateStatus_ManagedWebUpdate(t *testing.T) {
+	db, cfg, _ := newWebUITestDB(t)
+	h, _, _ := newWebUIHandlerWithUpdate(t, db, cfg)
+	t.Setenv("OSS_UPDATE_MANAGER", "systemd")
+	t.Setenv("OSS_UPDATE_VIA_PATH_UNIT", "1")
+	status := h.buildUpdateStatus()
+	if status.CapabilityOK || status.ExternalUpdate || !status.ManagedUpdate || status.CapabilityErr != "" {
+		t.Fatalf("unexpected managed update status: %+v", status)
+	}
+}
+
+func TestAdminUpdate_ManagedTriggerWritesRequest(t *testing.T) {
+	origVer := version.Version
+	version.Version = "1.0.0"
+	t.Cleanup(func() { version.Version = origVer })
+	db, cfg, dataDir := newWebUITestDB(t)
+	h, mgr, _ := newWebUIHandlerWithUpdate(t, db, cfg)
+	t.Setenv("OSS_UPDATE_MANAGER", "systemd")
+	t.Setenv("OSS_UPDATE_VIA_PATH_UNIT", "1")
+	checkID := newCheckedForWebUITest(t, mgr, "9.9.9")
+	user := createTestUserWithHash(t, db, "adminmanaged", "admin")
+	sess, csrf := issueWebSession(t, cfg, user)
+	form := url.Values{"_csrf": {csrf}, "check_id": {checkID}, "expected_version": {"9.9.9"}, "confirm": {"on"}}
+	w := doWebRequest(t, h, "POST", "/dashboard/admin/system/update", form, sess, csrf, true)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("managed trigger should be 202, got %d body %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "managed_accepted") {
+		t.Errorf("body should contain managed_accepted, got %s", w.Body.String())
+	}
+	data, err := os.ReadFile(filepath.Join(dataDir, ".update", "request"))
+	if err != nil {
+		t.Fatalf("read managed request: %v", err)
+	}
+	if !strings.Contains(string(data), `"target_version":"9.9.9"`) {
+		t.Fatalf("managed request missing target version: %s", data)
+	}
+}
+
+func TestAdminUpdate_ManagedReconcileFinalizesOperation(t *testing.T) {
+	origVer := version.Version
+	version.Version = "1.0.0"
+	t.Cleanup(func() { version.Version = origVer })
+	db, cfg, dataDir := newWebUITestDB(t)
+	h, mgr, svc := newWebUIHandlerWithUpdate(t, db, cfg)
+	t.Setenv("OSS_UPDATE_MANAGER", "systemd")
+	t.Setenv("OSS_UPDATE_VIA_PATH_UNIT", "1")
+	opID, ver, err := svc.StartManagedUpdate(newCheckedForWebUITest(t, mgr, "9.9.9"))
+	if err != nil {
+		t.Fatalf("StartManagedUpdate: %v", err)
+	}
+	if act := mgr.ActiveOperation(); act == nil || act.ID != opID {
+		t.Fatalf("期望活跃托管操作 %s，得到 %+v", opID, act)
+	}
+	// buildUpdateStatus 在收敛前应反映为进行中
+	if st := h.buildUpdateStatus(); !st.IsUpdating || !st.ManagedUpdate {
+		t.Fatalf("收敛前应为进行中的托管更新: %+v", st)
+	}
+	// 模拟宿主机写回成功结果后收敛
+	resPath := filepath.Join(dataDir, ".update", "result.json")
+	if err := os.WriteFile(resPath, []byte(`{"op_id":"`+opID+`","version":"`+ver+`","status":"success"}`), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	svc.ReconcileManagedUpdate()
+	op, err := mgr.GetOperation(opID)
+	if err != nil {
+		t.Fatalf("GetOperation: %v", err)
+	}
+	if op.State != update.StateDone {
+		t.Fatalf("收敛后操作应为 done，得到 %s", op.State)
+	}
+	if mgr.ActiveOperation() != nil {
+		t.Fatal("收敛后不应再有活跃操作")
+	}
+}

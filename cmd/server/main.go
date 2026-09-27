@@ -56,6 +56,8 @@ func main() {
 		} else if n > 0 {
 			log.Printf("[OSS] 已恢复 %d 个待处理更新，等待 helper 完成", n)
 		}
+		// 宿主机托管更新：重启后依据 result.json 收敛活跃操作
+		updateSvc.ReconcileManagedUpdate()
 	} else {
 		log.Printf("[OSS] 创建更新管理器失败: %v", err)
 	}
