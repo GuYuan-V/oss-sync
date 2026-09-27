@@ -525,12 +525,14 @@ func setPageHeaders(c *gin.Context, nonce string) {
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("X-Frame-Options", "DENY")
 	scriptSource := "'self'"
+	styleSource := "'self'"
 	if nonce != "" {
 		scriptSource += " 'nonce-" + nonce + "'"
+		styleSource += " 'nonce-" + nonce + "'"
 	}
 	c.Header(
 		"Content-Security-Policy",
-		"default-src 'none'; connect-src 'self'; script-src "+scriptSource+"; style-src 'self'; img-src 'self' data: https:; "+
+		"default-src 'none'; connect-src 'self'; script-src "+scriptSource+"; style-src "+styleSource+"; img-src 'self' data: https:; "+
 			"frame-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 	)
 }
