@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/helantianshen/oss-sync/internal/models"
 )
 
 const maxEditablePluginFileBytes = 1 << 20
@@ -44,7 +46,7 @@ func (m *Manager) EditableFiles(id string) ([]EditablePluginFile, error) {
 	return files, nil
 }
 
-func (m *Manager) SaveTextFile(ctx context.Context, id, path, content string) error {
+func (m *Manager) SaveTextFile(ctx context.Context, id, path, content string) (resultErr error) {
 	if ctx == nil {
 		return errors.New("plugin editor context is nil")
 	}
@@ -74,23 +76,33 @@ func (m *Manager) SaveTextFile(ctx context.Context, id, path, content string) er
 		return errors.New("plugin file is not editable")
 	}
 	wasEnabled := record.Enabled
-	if wasEnabled {
-		if err := m.disable(ctx, id); err != nil {
-			return err
-		}
-	}
 	committed := false
 	defer func() {
 		if committed {
 			return
 		}
-		_ = writeInstalledTextFile(m.root, id, path, old)
 		recovery, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		if err := writeInstalledTextFile(m.root, id, path, old); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("restore plugin file: %w", err))
+			return
+		}
+		record.Enabled = false
+		if err := m.db.WithContext(recovery).Save(&record).Error; err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("restore plugin metadata: %w", err))
+			return
+		}
 		if wasEnabled {
-			_ = m.enable(recovery, id)
+			if err := m.enable(recovery, id); err != nil {
+				resultErr = errors.Join(resultErr, fmt.Errorf("restore enabled plugin: %w", err))
+			}
 		}
 	}()
+	if wasEnabled {
+		if err := m.disable(ctx, id); err != nil {
+			return err
+		}
+	}
 
 	if err := writeInstalledTextFile(m.root, id, path, []byte(content)); err != nil {
 		return err
@@ -129,7 +141,7 @@ func (m *Manager) SaveTextFile(ctx context.Context, id, path, content string) er
 		"payload_size":  after.PayloadSize,
 		"last_error":    "",
 	}
-	if err := m.db.Model(&record).Updates(updates).Error; err != nil {
+	if err := m.db.Model(&models.ServerPlugin{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return err
 	}
 	if wasEnabled {

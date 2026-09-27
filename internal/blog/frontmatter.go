@@ -5,6 +5,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"gopkg.in/yaml.v3"
 )
 
 // 阅读时长按每分钟 400 字估算
@@ -53,6 +55,10 @@ func splitFrontmatter(raw string) (frontmatter, string) {
 		body = rest[1+lineEnd+1:]
 	}
 	if strings.TrimSpace(fenceLine) != "---" {
+		return frontmatter{}, raw
+	}
+	var metadata map[string]any
+	if err := yaml.Unmarshal([]byte(block), &metadata); err != nil {
 		return frontmatter{}, raw
 	}
 	return parseFrontmatterBlock(block), body
