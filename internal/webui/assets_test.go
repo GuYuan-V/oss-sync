@@ -35,7 +35,7 @@ func TestSetPageHeaders_whenRendered_setsCSPImagePolicyWithoutRelaxingOtherDirec
 		"default-src 'none'",
 		"connect-src 'self'",
 		"script-src 'self'",
-		"style-src 'self'",
+		"style-src 'self' 'nonce-test-nonce'",
 		"form-action 'self'",
 		"frame-ancestors 'none'",
 		"base-uri 'none'",

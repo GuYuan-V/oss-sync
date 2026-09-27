@@ -897,6 +897,25 @@ func TestAuthPagesThemeControlsAndAuthLayout(t *testing.T) {
 			t.Errorf("login page missing %q", want)
 		}
 	}
+	body := login.Body.String()
+	styleMarker := `<style nonce="`
+	styleStart := strings.Index(body, styleMarker)
+	if styleStart < 0 {
+		t.Fatal("login page missing nonce-protected critical theme style")
+	}
+	styleStart += len(styleMarker)
+	styleEnd := strings.Index(body[styleStart:], `"`)
+	if styleEnd < 1 {
+		t.Fatal("login page critical theme style has an empty nonce")
+	}
+	nonce := body[styleStart : styleStart+styleEnd]
+	if !strings.Contains(body, `html[data-theme="dark"]`) {
+		t.Fatal("login page critical theme style missing dark background rule")
+	}
+	policy := login.Header().Get("Content-Security-Policy")
+	if !strings.Contains(policy, "style-src 'self' 'nonce-"+nonce+"'") {
+		t.Fatalf("CSP does not authorize critical theme style nonce %q: %s", nonce, policy)
+	}
 
 	// 注册页同样带主题控件
 	register := doForm(t, router, http.MethodGet, "/register", nil, nil)
