@@ -889,13 +889,22 @@ func TestAuthPagesThemeControlsAndAuthLayout(t *testing.T) {
 		`data-theme-pref="auto"`,
 		`data-theme-pref="light"`,
 		`data-theme-pref="dark"`,
+		`data-language-toggle`,
+		`data-language-target="en"`,
+		"English",
 		"/ui/assets/theme.js",
 		"/ui/assets/app.js",
 		"console.css?v=",
+		`data-cfasync="false"`,
 	} {
 		if !strings.Contains(login.Body.String(), want) {
 			t.Errorf("login page missing %q", want)
 		}
+	}
+	// 首帧主题启动脚本与 theme.js 必须退出 CDN 脚本代理（如 Cloudflare Rocket Loader），
+	// 否则内联 nonce 脚本被改写为延迟类型，首帧仍按亮色绘制后才切暗色
+	if got := strings.Count(login.Body.String(), `data-cfasync="false"`); got < 2 {
+		t.Fatalf("login page has %d Rocket Loader opt-outs, want at least 2", got)
 	}
 	body := login.Body.String()
 	styleMarker := `<style nonce="`
@@ -922,13 +931,13 @@ func TestAuthPagesThemeControlsAndAuthLayout(t *testing.T) {
 	if register.Code != http.StatusOK {
 		t.Fatalf("register page: %d", register.Code)
 	}
-	for _, want := range []string{`id="theme-switcher"`, `data-theme-pref="auto"`, "/ui/assets/app.js"} {
+	for _, want := range []string{`id="theme-switcher"`, `data-theme-pref="auto"`, `data-language-toggle`, "/ui/assets/app.js"} {
 		if !strings.Contains(register.Body.String(), want) {
 			t.Errorf("register page missing %q", want)
 		}
 	}
 
-	// 公开博客目录：控制台主题键 + 主题控件 + app.js
+	// 公开博客目录：控制台主题键与主题控件
 	home := doForm(t, router, http.MethodGet, "/", nil, nil)
 	if home.Code != http.StatusOK {
 		t.Fatalf("home page: %d", home.Code)
@@ -948,7 +957,7 @@ func TestAuthPagesThemeControlsAndAuthLayout(t *testing.T) {
 	if css.Code != http.StatusOK {
 		t.Fatalf("console.css: %d", css.Code)
 	}
-	for _, want := range []string{".body--auth .console", "--wordmark-bg"} {
+	for _, want := range []string{".body--auth .console", "--wordmark-bg", "grid-template-columns: repeat(3", ".language-switcher__btn", "grid-column: 1 / -1", ".theme-switcher__btn.is-active", "border: 0", "box-shadow: none"} {
 		if !strings.Contains(css.Body.String(), want) {
 			t.Errorf("console.css missing %q", want)
 		}

@@ -165,6 +165,7 @@ func (h *Handler) saveAccountLanguage(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/dashboard/account?error="+url.QueryEscape(h.t(c, "err.save_language_failed")))
 		return
 	}
+	c.SetCookie(webLanguageCookie, language, 365*24*60*60, "/", "", requestIsHTTPS(c), false)
 	c.Redirect(http.StatusSeeOther, "/dashboard/account?settings_saved=1#language")
 }
 

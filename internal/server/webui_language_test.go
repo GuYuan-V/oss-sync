@@ -161,6 +161,27 @@ func TestWebConsoleLoginPageStaysChineseDefault(t *testing.T) {
 	}
 }
 
+func TestWebConsoleQuickLanguageToggleOverridesRequestAndCookie(t *testing.T) {
+	t.Chdir(t.TempDir())
+	srv, _, _ := newTestServer(t)
+	router := srv.Router()
+
+	query := httptest.NewRecorder()
+	router.ServeHTTP(query, httptest.NewRequest(http.MethodGet, "/login?lang=en", nil))
+	if query.Code != http.StatusOK || !strings.Contains(query.Body.String(), `<html lang="en"`) || !strings.Contains(query.Body.String(), "中文") {
+		t.Fatalf("query language override failed: %d %s", query.Code, query.Body.String())
+	}
+
+	cookie := &http.Cookie{Name: "oss_web_language", Value: "en", Path: "/"}
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	req.AddCookie(cookie)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `<html lang="en"`) {
+		t.Fatalf("cookie language override failed: %d %s", w.Code, w.Body.String())
+	}
+}
+
 // TestWebConsoleEnglishModePreservesUserContent 验证英文模式下用户内容
 // （中文仓库名、中文 Markdown 正文）原样渲染，不被翻译
 func TestWebConsoleEnglishModePreservesUserContent(t *testing.T) {
