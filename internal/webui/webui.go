@@ -26,10 +26,11 @@ import (
 )
 
 // sessionCookie 是登录后网页会话的 HttpOnly cookie
-const sessionCookie = "oss_web_session"
-
-// csrfCookie 是 double-submit CSRF token cookie（非 HttpOnly，供 JS 读取）
-const csrfCookie = "oss_csrf"
+const (
+	sessionCookie     = "oss_web_session"
+	csrfCookie        = "oss_csrf"
+	webLanguageCookie = "oss_web_language"
+)
 
 //go:embed templates/*.html templates/partials/*.html assets/*
 var webFS embed.FS
@@ -354,7 +355,20 @@ func (h *Handler) userLang(c *gin.Context) string {
 	return defaultWebLanguage
 }
 
+func cookieValue(c *gin.Context, name string) string {
+	value, err := c.Cookie(name)
+	if err != nil {
+		return ""
+	}
+	return value
+}
+
 func requestedWebLanguage(c *gin.Context) string {
+	for _, candidate := range []string{c.Query("lang"), cookieValue(c, webLanguageCookie)} {
+		if candidate == "zh" || candidate == "en" {
+			return candidate
+		}
+	}
 	accept := c.GetHeader("Accept-Language")
 	if accept == "" {
 		return ""
@@ -431,7 +445,7 @@ func (h *Handler) render(c *gin.Context, status int, page, title, activeGroup, a
 func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 	for _, manifest := range serverplugin.BuiltinManifests() {
 		if manifest.ID == "papertrail-settings" && len(manifest.Settings) > 0 && len(h.pluginSettingVaults(u, manifest.ID)) > 0 {
-			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: translate(ld.Language, "common.blog_settings")})
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: manifest.ID, Name: manifest.Name})
 			break
 		}
 	}

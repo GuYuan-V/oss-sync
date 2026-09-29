@@ -463,7 +463,7 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 		`data-update-trigger-form data-update-action="/dashboard/admin/system/update" hidden`,
 		`data-capability-ready="true"`,
 		`data-external-update="false"`,
-		`data-msg-checking="正在检查新版本，请稍候…"`,
+		`data-managed-update="false"`,
 		`data-update-download-source`,
 		`value="proxy" selected`,
 		`value="official"`,
@@ -517,8 +517,20 @@ func TestAdminSystemTemplate_UpdatePanel(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(buf.String(), `data-update-download-source`) ||
-		!strings.Contains(buf.String(), `data-external-update="true"`) {
+		!strings.Contains(buf.String(), `data-external-update="true"`) ||
+		!strings.Contains(buf.String(), `data-managed-update="false"`) {
 		t.Fatal("systemd deployment must retain version check source selection")
+	}
+	managed = data.Data["Update"].(adminUpdateStatus)
+	managed.ExternalUpdate = false
+	managed.ManagedUpdate = true
+	data.Data["Update"] = managed
+	buf.Reset()
+	if err := tpl.ExecuteTemplate(&buf, "admin-system", data); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `data-managed-update="true"`) {
+		t.Fatal("managed systemd deployment must expose managed update state to JavaScript")
 	}
 }
 

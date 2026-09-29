@@ -1090,16 +1090,23 @@ body.body--console .console {
 .side-nav__sublink.is-active { color: var(--cobalt); border-left-color: var(--cobalt); }
 
 .sidebar__foot { padding: 14px 10px; border-top: 1px solid var(--sidebar-border); }
-.theme-switcher { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.theme-switcher { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
 .theme-switcher__btn {
   min-width: 0;
-  min-height: 34px;
+  min-height: 36px;
   padding: 7px 8px;
-  box-shadow: 2px 2px 0 var(--button-shadow);
+  border: 0;
+  box-shadow: none;
   font-size: 12px;
   line-height: 1;
   white-space: nowrap;
 }
+.theme-switcher__btn.is-active {
+  color: var(--paper);
+  background: var(--ink);
+}
+.theme-switcher__btn.is-active:hover { color: var(--paper); background: var(--ink); filter: none; }
+.language-switcher__btn { grid-column: 1 / -1; }
 .sidebar-overlay { display: none; }
 
 .modal { position: fixed; inset: 0; z-index: 60; display: none; }
@@ -1356,6 +1363,10 @@ body.body--console .console {
 :root[data-theme="dark"] .button--primary { background: var(--cobalt); box-shadow: 4px 4px 0 var(--button-shadow); }
 :root[data-theme="dark"] .button--primary:hover { background: var(--cobalt-dark); }
 :root[data-theme="dark"] .button.is-active { background: var(--cobalt-dark); border-color: var(--cobalt-dark); }
+:root[data-theme="dark"] .theme-switcher__btn.is-active {
+  color: var(--paper);
+  background: var(--ink);
+}
 
 /* 窄屏（最大 900px）下的移动端布局 */
 @media (max-width: 900px) {

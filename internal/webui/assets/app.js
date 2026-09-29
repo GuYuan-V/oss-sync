@@ -5,6 +5,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     initSidebar();
     initThemeSwitcher();
+    initLanguageSwitcher();
     initConfirmForms();
     initFlashDismiss();
     initCollaborationSelection();
@@ -123,6 +124,41 @@
         window.OSSTheme.setPreference(themeKey, pref);
         setActive(pref);
       });
+    });
+  }
+
+  function initLanguageSwitcher() {
+    var button = document.querySelector("[data-language-toggle]");
+    if (!button) return;
+
+    button.addEventListener("click", function () {
+      var target = button.getAttribute("data-language-target");
+      if (target !== "zh" && target !== "en") return;
+
+      document.cookie = "oss_web_language=" + target + "; Path=/; Max-Age=31536000; SameSite=Lax";
+      button.disabled = true;
+
+      function reloadInLanguage() {
+        var next = new URL(window.location.href);
+        next.searchParams.set("lang", target);
+        window.location.assign(next.toString());
+      }
+
+      var csrf = button.getAttribute("data-language-csrf") || "";
+      if (!csrf || !window.location.pathname.startsWith("/dashboard")) {
+        reloadInLanguage();
+        return;
+      }
+
+      var body = new URLSearchParams();
+      body.set("_csrf", csrf);
+      body.set("web_language", target);
+      fetch("/dashboard/account/language", {
+        method: "POST",
+        body: body,
+        headers: { "X-CSRF-Token": csrf },
+        credentials: "same-origin",
+      }).then(reloadInLanguage, reloadInLanguage);
     });
   }
 

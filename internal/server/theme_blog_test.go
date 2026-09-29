@@ -58,7 +58,9 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	pt := doForm(t, router, http.MethodGet, "/dashboard/plugins/papertrail-settings/settings?vault_id="+vaultID, nil, session, csrf)
 	if pt.Code != http.StatusOK ||
 		!strings.Contains(pt.Body.String(), `name="setting_blog_name"`) ||
-		!strings.Contains(pt.Body.String(), "博客设置") ||
+		!strings.Contains(pt.Body.String(), "Papertrail 设置") ||
+		strings.Contains(pt.Body.String(), `name="setting_banner_url"`) ||
+		strings.Contains(pt.Body.String(), `name="setting_mobile_banner_url"`) ||
 		!strings.Contains(pt.Body.String(), `data-theme-setting-group`) ||
 		!strings.Contains(pt.Body.String(), `data-group-add`) ||
 		strings.Contains(pt.Body.String(), ` name="group_buttons_label"`) {
@@ -115,6 +117,24 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	blogHome := doForm(t, router, http.MethodGet, "/b/"+vaultID, nil, nil)
 	if blogHome.Code != http.StatusOK || !strings.Contains(blogHome.Body.String(), `--pt-hero-logo-size: 128px`) {
 		t.Fatalf("papertrail homepage logo size: %d body=%s", blogHome.Code, blogHome.Body)
+	}
+	// 公开博客首帧必须自带主题启动与关键背景，并退出 CDN 脚本代理，避免亮暗闪烁
+	for _, page := range []struct {
+		name string
+		body string
+	}{
+		{"public home", home2.Body.String()},
+		{"blog home", blogHome.Body.String()},
+	} {
+		if !strings.Contains(page.body, `html[data-theme="dark"] body`) {
+			t.Errorf("%s missing first-paint dark background rule", page.name)
+		}
+		if !strings.Contains(page.body, `<script data-cfasync="false" src="/ui/assets/theme.js`) {
+			t.Errorf("%s theme script must opt out before its src attribute", page.name)
+		}
+		if got := strings.Count(page.body, `data-cfasync="false"`); got < 2 {
+			t.Errorf("%s has %d Rocket Loader opt-outs, want at least 2", page.name, got)
+		}
 	}
 
 	// 文章页正常渲染
