@@ -892,7 +892,7 @@ func TestAuthPagesThemeControlsAndAuthLayout(t *testing.T) {
 		`data-language-toggle`,
 		`data-language-target="en"`,
 		"English",
-		"/ui/assets/theme.js",
+		`<script data-cfasync="false" src="/ui/assets/theme.js`,
 		"/ui/assets/app.js",
 		"console.css?v=",
 		`data-cfasync="false"`,

@@ -129,6 +129,9 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 		if !strings.Contains(page.body, `html[data-theme="dark"] body`) {
 			t.Errorf("%s missing first-paint dark background rule", page.name)
 		}
+		if !strings.Contains(page.body, `<script data-cfasync="false" src="/ui/assets/theme.js`) {
+			t.Errorf("%s theme script must opt out before its src attribute", page.name)
+		}
 		if got := strings.Count(page.body, `data-cfasync="false"`); got < 2 {
 			t.Errorf("%s has %d Rocket Loader opt-outs, want at least 2", page.name, got)
 		}
