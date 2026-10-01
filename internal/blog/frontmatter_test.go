@@ -86,11 +86,11 @@ func TestBuildArticleMetaResolvesCoverFromAttachment(t *testing.T) {
 }
 
 // 自定义主题（如 Shirone）依赖的模板字段契约：renderParams 必须始终提供这些字段，
-// 缺失任一字段都会因 missingkey=error 导致自定义主题渲染失败并回退内置主题
+// 缺失结构体字段会导致自定义主题渲染失败并回退内置主题
 func TestCustomThemeTemplateContract(t *testing.T) {
 	const tpl = `{{.BannerURL}}|{{.MobileBannerURL}}|{{.ArticlePost.Summary}}|{{.ArticlePost.Date}}|{{.ArticlePost.Category}}|{{.ArticlePost.WordCount}}|{{.ArticlePost.ReadingMinutes}}|{{.ArticlePost.CoverURL}}|{{range .ArticlePost.Tags}}{{.}};{{end}}
 {{range .HomePosts}}{{.Title}}|{{.Category}}|{{.WordCount}}|{{.CoverURL}}|{{range .Tags}}{{.}},{{end}};{{end}}`
-	parsed, err := template.New("custom-theme").Option("missingkey=error").Parse(tpl)
+	parsed, err := template.New("custom-theme").Option("missingkey=zero").Parse(tpl)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -120,5 +120,30 @@ func TestCustomThemeTemplateContract(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestSplitFrontmatterUsesYAMLValues(t *testing.T) {
+	tests := []struct {
+		name, block, summary string
+		tags                 []string
+	}{
+		{"literal", "description: |\n  First line\n  Second line\n", "First line\nSecond line\n", nil},
+		{"folded", "description: >-\n  First line\n  Second line\n", "First line Second line", nil},
+		{"quoted", "description: \"A \\\"quote\\\" and # text\" # comment\n", "A \"quote\" and # text", nil},
+		{"tags", "tags: ['one, two', 'three']\nsummary: fallback\n", "fallback", []string{"one, two", "three"}},
+		{"nested", "other:\n  description: hidden\n", "", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fm, body := splitFrontmatter("---\n" + tt.block + "---\nBody")
+			if fm.description != tt.summary || body != "Body" || strings.Join(fm.tags, "|") != strings.Join(tt.tags, "|") {
+				t.Fatalf("metadata=%+v body=%q", fm, body)
+			}
+		})
+	}
+	fm, _ := splitFrontmatter("---\ntitle: 'A: title' # comment\npublished: 2026-10-02\nimage: 'images/a b.png'\n---\nBody")
+	if fm.title != "A: title" || fm.published != "2026-10-02" || fm.image != "images/a b.png" {
+		t.Fatalf("metadata=%+v", fm)
 	}
 }

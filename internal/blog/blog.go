@@ -492,7 +492,7 @@ func (h *Handler) renderFolderFile(c *gin.Context, share models.Share, f models.
 		return
 	}
 	resolver := h.buildResolver(share.UserID, share.VaultID)
-	assetResolver := blogAssetResolver{shareID: share.ShareID}
+	assetResolver := blogAssetResolver{shareID: share.ShareID, markdownPath: f.Path}
 	fm, body := splitFrontmatter(raw)
 	html, err := markdown.RenderMarkdownWithAssets(resolver, assetResolver, body)
 	if err != nil {

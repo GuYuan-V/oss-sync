@@ -1,6 +1,6 @@
 # OSS Blog 自定义主题开发模板
 
-这个目录由管理面板创建，服务端会将它作为一个 Vault 的博客页面模板使用。
+本目录是模板源码参考。自定义模板必须作为服务端插件的 `blog_themes` 资源安装，不能独立上传。
 
 ## 文件
 
@@ -9,11 +9,11 @@
 - `theme.js`：通过 `/themes/<主题名称>/theme.js` 提供。
 - 不要添加 `settings.json`：模板只负责样式，功能设置由关联插件提供。
 
-修改这些文件后刷新公开分享页即可看到结果，不需要重启服务。
+在插件管理中保存模板文本资源后，刷新公开页面即可看到结果。发布时更新插件包；不要直接编辑 `data/themes` 内的派生副本，插件启用或升级会重新生成它。
 
 ## 模板字段
 
-> 自定义模板以 `missingkey=error` 渲染：引用下表以外的字段会让整页渲染失败并静默回退到内置 `default` 主题。只使用下表字段。完整说明见“模板管理 → 模板指南”。
+> 自定义模板使用 Go `html/template` 和 `missingkey=zero`。缺少 map 键时得到零值；不存在的结构体字段、未保护的空值链式访问或模板语法错误仍会失败。服务端回退到 `default`，并通过响应头 `X-Theme-Fallback` 提供原因。完整说明见“插件管理 → 插件指南 → 博客模板契约”。
 
 | 字段 | 说明 |
 | --- | --- |
@@ -53,3 +53,14 @@
 - 文章、文件夹和博客首页分别检查 `.ContentHTML`、`.IsFolder` 与 `.IsHome` 分支。
 - 保留键盘可达的控件、可见焦点和 `prefers-reduced-motion`；复制控件只在 `.AllowCopy` 为真时显示。
 - 不要在模板中拼接未经信任的 HTML 或脚本。完整字段和插件资源契约见网页内置「插件指南」。
+
+## 页面与内容契约
+
+- `/b/<vault-id>` 是动态博客首页，使用 `.IsHome` 和 `.HomePosts`，此时 `.ContentHTML` 为空。首页包含全部有效的单篇 Markdown 分享，按分享创建时间倒序排列；不自动列出仅通过文件夹分享的文章。
+- `/p/<share-id>` 为单篇文章；文件夹分享会跳转到带尾斜线的目录页。目录页 `.IsFolder=true`；目录下文章的 `.IsFolder=false`。正文和目录 HTML 通过 `.ContentHTML` 输出。
+- `default` 只支持分享阅读；`papertrail` 支持博客首页。自定义模板必须实现 `.IsHome` 分支，并建议提供 `theme.json` 的 `supports_public_blog: true`。未提供元数据文件的旧模板按支持首页处理；提供文件后，该字段省略或为 false 均不支持首页。
+- `.VaultID`、`.PluginData` 也可使用。插件数据通过 `pluginField`、`hasPlugin` 或带 `with` 守卫的 `index` 读取；没有 `.ThemeConfig` 字段，配置使用 `.ThemeConfigJS`。
+- `public_settings` 生效需同时声明 `supports_public_blog: true`，且键存在于所属已启用插件的 settings schema 中。不要将密钥列入公开白名单。
+- Markdown YAML 摘要支持 `|`、`>` 多行写法，标签支持 YAML 列表。`summary`、`date`、`cover` 分别为 `description`、`published`、`image` 的备用字段。
+- 图片 `./`、`../` 相对文章目录解析，不能越出仓库；其他路径先匹配仓库根路径，再匹配文章相对路径。裸文件名最后按同仓库附件名查找。`http(s)` 图片与封面直接使用外部地址；以 `/` 开头的封面是站点 URL。
+- 文件夹分享的资源 URL 可带 `source` 指定文章；来源必须仍在该分享内且确实引用该资源。请使用服务端生成的资源 URL。

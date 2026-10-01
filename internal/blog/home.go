@@ -186,7 +186,7 @@ func (h *Handler) homePosts(userID uint, vaultID string) []HomePost {
 	if err := h.DB.Where(
 		"user_id = ? AND vault_id = ? AND is_folder = ?",
 		userID, vaultID, false,
-	).Order("created_at desc").Limit(100).Find(&shares).Error; err != nil {
+	).Order("created_at desc").Order("share_id asc").Find(&shares).Error; err != nil {
 		return nil
 	}
 	var posts []HomePost

@@ -57,67 +57,47 @@ func splitFrontmatter(raw string) (frontmatter, string) {
 	if strings.TrimSpace(fenceLine) != "---" {
 		return frontmatter{}, raw
 	}
-	var metadata map[string]any
-	if err := yaml.Unmarshal([]byte(block), &metadata); err != nil {
+	var metadata map[string]yaml.Node
+	if err := yaml.Unmarshal([]byte(block+"\n"), &metadata); err != nil {
 		return frontmatter{}, raw
 	}
-	return parseFrontmatterBlock(block), body
+	return parseFrontmatterBlock(metadata), body
 }
 
-// parseFrontmatterBlock 解析 --- 块内的标量行，支持 tags 的缩进列表与行内 [a, b] 两种写法
-func parseFrontmatterBlock(block string) frontmatter {
-	fm := frontmatter{}
-	inTags := false
-	for _, line := range strings.Split(block, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		if inTags {
-			if strings.HasPrefix(trimmed, "-") {
-				if tag := trimYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))); tag != "" {
-					fm.tags = append(fm.tags, tag)
-				}
-				continue
+// parseFrontmatterBlock 使用 YAML 解码后的节点，保留多行文本、引号和日期字面值
+func parseFrontmatterBlock(metadata map[string]yaml.Node) frontmatter {
+	fields := make(map[string]yaml.Node, len(metadata))
+	for key, value := range metadata {
+		fields[strings.ToLower(key)] = value
+	}
+	scalar := func(keys ...string) string {
+		for _, key := range keys {
+			if node, ok := fields[key]; ok && node.Kind == yaml.ScalarNode && node.Tag != "!!null" {
+				return node.Value
 			}
-			inTags = false
 		}
-		key, value, ok := strings.Cut(trimmed, ":")
-		if !ok {
-			continue
-		}
-		key = strings.ToLower(strings.TrimSpace(key))
-		value = trimYAMLScalar(value)
-		switch key {
-		case "title":
-			fm.title = value
-		case "description", "summary":
-			fm.description = value
-		case "published", "date":
-			fm.published = value
-		case "category":
-			fm.category = value
-		case "image", "cover":
-			fm.image = value
-		case "tags":
-			if value == "" {
-				inTags = true
-				continue
+		return ""
+	}
+	fm := frontmatter{
+		title: scalar("title"), description: scalar("description", "summary"),
+		published: scalar("published", "date"), category: scalar("category"),
+		image: scalar("image", "cover"),
+	}
+	tags := fields["tags"]
+	if tags.Kind == yaml.SequenceNode {
+		for _, tag := range tags.Content {
+			if tag.Kind == yaml.ScalarNode && tag.Tag != "!!null" && strings.TrimSpace(tag.Value) != "" {
+				fm.tags = append(fm.tags, strings.TrimSpace(tag.Value))
 			}
-			value = strings.TrimPrefix(value, "[")
-			value = strings.TrimSuffix(value, "]")
-			for _, part := range strings.Split(value, ",") {
-				if tag := trimYAMLScalar(part); tag != "" {
-					fm.tags = append(fm.tags, tag)
-				}
+		}
+	} else if tags.Kind == yaml.ScalarNode && tags.Tag != "!!null" {
+		for _, tag := range strings.Split(tags.Value, ",") {
+			if tag = strings.TrimSpace(tag); tag != "" {
+				fm.tags = append(fm.tags, tag)
 			}
 		}
 	}
 	return fm
-}
-
-func trimYAMLScalar(v string) string {
-	return strings.Trim(strings.TrimSpace(v), "\"'")
 }
 
 // buildArticleMeta 汇总文章标题与元数据；标题优先 frontmatter，摘要优先 description，

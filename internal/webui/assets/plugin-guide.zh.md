@@ -611,3 +611,85 @@ stdout 只能用于插件协议,日志写 stderr。
 8. 覆盖鉴权、重复保存、重试、升级和回滚的确定性测试。
 
 如果 AI 发明不存在的 SDK 方法、混淆 route 命名空间、把 executable 当成沙箱,或建议直接修改核心文件表,不要直接采用。
+
+## 博客模板契约
+
+博客按 HTTP 请求动态渲染，不生成静态站点文件。内置 `default` 用于分享阅读，`papertrail` 支持公开博客首页。仓库管理者在仓库设置中选择支持首页的模板并开启公开博客，再为需要发布的文章创建单篇分享；开启博客不会公开未分享的文章。
+
+### 安装和文件结构
+
+自定义模板是插件资源。插件 ZIP 必须包含有效的 `manifest.json`、可运行入口以及主题资源目录；没有独立模板上传或脚手架管理页面。向现有插件 manifest 添加：
+
+```json
+"blog_themes": [{"id":"clean","name":"Clean","path":"blog/clean"}]
+```
+
+ZIP 中对应的文件（打包时必须包含 `blog/clean` 目录下的文件）：
+
+```text
+manifest.json
+<manifest 声明的运行入口>
+blog/clean/template.html
+blog/clean/style.css
+blog/clean/theme.js
+blog/clean/theme.json
+```
+
+`template.html` 必需，其他文件按模板需要提供。管理员在插件管理上传并启用插件后，仓库设置才会出现模板选项。资源地址为 `/themes/<plugin-id>--<resource-id>/...`，模板应使用 `.ThemeBaseURL`。插件停用后其模板资源不可用。使用插件管理中的文本编辑功能修改源文件；不要直接编辑 `data/themes` 派生副本，启用或升级插件会重新生成它。
+
+推荐的 `theme.json`：
+
+```json
+{"supports_public_blog":true,"public_settings":["blog_name","description"]}
+```
+
+`supports_public_blog` 应与 `.IsHome` 分支实现一致。没有 `theme.json` 的旧模板按支持首页处理；文件存在时，字段省略、false 或无效 JSON 均不支持首页。公开设置需同时满足：支持首页、所属插件已启用、键列入 `public_settings`、键由插件顶层 `settings` 或 `registration.settings` 声明、当前 Vault 已保存该值。不要将密钥列入白名单。
+
+### 页面与字段
+
+最小页面结构：
+
+```gotemplate
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>{{.Title}}</title>
+<link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css"></head>
+<body>
+{{if .IsHome}}
+  <h1>{{.Title}}</h1>
+  {{range .HomePosts}}<article><h2><a href="{{.URL}}">{{.Title}}</a></h2><p>{{.Summary}}</p></article>{{else}}<p>暂无分享文章</p>{{end}}
+{{else if .IsFolder}}
+  <h1>{{.FolderTitle}}</h1><nav>{{.ContentHTML}}</nav>
+{{else}}
+  <h1>{{.ArticleTitle}}</h1><article>{{.ContentHTML}}</article>
+{{end}}
+</body></html>
+```
+
+| 字段 | 契约 |
+| --- | --- |
+| `.Title` / `.ThemeName` / `.ThemeBaseURL` | 页面标题、模板资源名称、静态资源 URL 前缀 |
+| `.VaultID` / `.ShareID` | 当前仓库和分享 ID；首页 ShareID 为空 |
+| `.IsHome` / `.HomePosts` | `/b/<vault-id>` 首页及全部有效单篇 Markdown 分享；按分享创建时间倒序，同时间按分享 ID 排序，不分页，不包含仅通过文件夹分享的文章 |
+| `.HomePosts` 元素 | `.Title`、`.Summary`、`.URL`、`.Date`、`.Time`、`.Category`、`.Tags`、`.CoverURL`、`.WordCount`；Time 为文件更新时间，Date 优先取 frontmatter |
+| `.IsFolder` / `.FolderTitle` | 文件夹目录视图及目录名；目录内文章 IsFolder 为 false |
+| `.ArticleTitle` / `.ArticlePost` | 文章标题与元数据；ArticlePost 含 `.Summary`、`.Date`、`.Category`、`.Tags`、`.CoverURL`、`.WordCount`、`.ReadingMinutes` |
+| `.ContentHTML` | 已渲染的正文或目录 HTML；首页为空，必须读取 HomePosts |
+| `.AllowCopy` / `.BlogHomeURL` | 是否显示复制按钮；公开博客首页 URL，未开启时为空 |
+| `.BlogName` / `.Description` | 博客名称、介绍 |
+| `.LogoURL` / `.LogoSize` / `.LogoShape` | Logo URL、像素尺寸、square/circle |
+| `.BannerURL` / `.MobileBannerURL` | 桌面和移动横幅 URL |
+| `.Buttons` | 链接列表，元素含 `.Label`、`.URL`、`.IconURL`、`.Position` |
+| `.CustomHeader` / `.CustomFooter` / `.FooterNotice` | 自定义片段与提示；自定义片段受系统开关及清洗规则控制 |
+| `.ThemeConfigJS` | 安全 JSON，可用于 `<script>window.config = {{.ThemeConfigJS}};</script>`；没有 `.ThemeConfig` 字段 |
+| `.PluginData` | 插件展示数据；用 `pluginField .PluginData "plugin-id" "field"`、`hasPlugin` 或 `with index` 读取；`safeHTML` 仅用于可信且已清洗的 HTML |
+
+YAML frontmatter 必须位于文首并由独立的 `---` 行闭合。支持 `title`、`description`（备用 `summary`）、`published`（备用 `date`）、`category`、`tags`、`image`（备用 `cover`）。摘要支持 `|` 和 `>` 多行写法，标签支持 YAML 列表或逗号分隔文本；同组字段优先使用主字段。有效块从正文隐藏，损坏或未闭合块保留。标题缺省使用文件名，摘要缺省使用首个非标题正文行，日期缺省使用文件更新时间。
+
+附件引用中，`./`、`../` 仅相对文章目录解析且不能越出仓库；其他路径先查仓库根路径，再查文章相对路径，裸文件名最后匹配同仓库附件名（重名时取 mtime 最新者）。若要避开根目录同名文件，请使用 `./`。支持 URL 编码的路径。远程 `http(s)` 图片和封面直接使用原 URL，以 `/` 开头的封面也是站点 URL。文件夹分享的资源地址携带 `source` 文章路径，服务端会校验分享范围、文章存续和实际引用关系。
+
+### 排错与验收
+
+模板使用 Go `html/template` 自动转义，配置为 `missingkey=zero`。缺失 map 键返回零值，但不存在的结构体字段、空值链式访问和语法错误仍会失败。用 `with` 保护可选数据。失败时回退 `default`，查看 HTTP 响应头 `X-Theme-Fallback` 获取原因；default 不实现首页列表，因此 HTTP 200 不能单独证明模板渲染成功。
+
+发布前分别验证首页、单篇文章、文件夹目录和目录内文章，检查模板标记与回退头、CSS/JS/图片请求，以及禁用复制、空列表、超过 100 篇、移动端和键盘操作。自定义模板继续使用完整 `.HomePosts` 列表；文章很多时页面较长。

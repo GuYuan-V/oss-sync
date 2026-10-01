@@ -567,3 +567,79 @@ Ask the AI to return these artifacts:
 8. deterministic tests for auth, no-op writes, retries, and upgrades.
 
 Never accept an answer that invents an SDK method, assumes a route namespace, writes core file rows directly, or treats an executable plugin as sandboxed.
+
+## Blog template contract
+
+Blogs render dynamically per HTTP request; they do not export static sites. Built-in `default` handles shared reading, while `papertrail` supports a blog homepage. Select a homepage-capable theme in Vault settings, enable the public blog, and create individual article shares. Enabling a blog does not publish unshared notes.
+
+### Installation
+
+Templates are plugin resources, not independently installable ZIPs. Include a valid manifest, a working runtime entrypoint, and the resource files. Add this field to the plugin manifest:
+
+```json
+"blog_themes": [{"id":"clean","name":"Clean","path":"blog/clean"}]
+```
+
+```text
+manifest.json
+<runtime entrypoint declared by the manifest>
+blog/clean/template.html
+blog/clean/style.css
+blog/clean/theme.js
+blog/clean/theme.json
+```
+
+`template.html` is required; other files depend on the template. Include the resource files in the ZIP, upload and enable the plugin in plugin management, then select its theme in Vault settings. Use `.ThemeBaseURL` for `/themes/<plugin-id>--<resource-id>` assets. Disabling the plugin makes its resources unavailable. Edit source files through plugin management; `data/themes` contains derived copies regenerated on enable or upgrade. There is no standalone template upload or scaffold management page.
+
+Recommended `theme.json`:
+
+```json
+{"supports_public_blog":true,"public_settings":["blog_name","description"]}
+```
+
+Only advertise homepage support when the template implements `.IsHome`. Legacy templates without `theme.json` are considered homepage-capable; when the file exists, an omitted/false flag or invalid JSON disables support. Public settings require homepage support, an enabled owning plugin, a whitelist entry, a matching top-level `settings` or `registration.settings` declaration, and a saved Vault value. Never whitelist secrets.
+
+### Rendering contract
+
+```gotemplate
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>{{.Title}}</title>
+<link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css"></head><body>
+{{if .IsHome}}
+  <h1>{{.Title}}</h1>
+  {{range .HomePosts}}<article><h2><a href="{{.URL}}">{{.Title}}</a></h2><p>{{.Summary}}</p></article>{{else}}<p>No shared posts</p>{{end}}
+{{else if .IsFolder}}
+  <h1>{{.FolderTitle}}</h1><nav>{{.ContentHTML}}</nav>
+{{else}}
+  <h1>{{.ArticleTitle}}</h1><article>{{.ContentHTML}}</article>
+{{end}}
+</body></html>
+```
+
+| Field | Contract |
+| --- | --- |
+| `.Title`, `.ThemeName`, `.ThemeBaseURL` | Page title, theme resource name, asset URL prefix |
+| `.VaultID`, `.ShareID` | Vault and share IDs; ShareID is empty on the homepage |
+| `.IsHome`, `.HomePosts` | `/b/<vault-id>` homepage and all valid individually shared Markdown posts, ordered by share creation descending then share ID; no pagination; folder-only shares are excluded |
+| HomePosts item | `.Title`, `.Summary`, `.URL`, `.Date`, `.Time`, `.Category`, `.Tags`, `.CoverURL`, `.WordCount`; Time is file update time, Date prefers frontmatter |
+| `.IsFolder`, `.FolderTitle` | Folder index and title; an article inside a folder has IsFolder=false |
+| `.ArticleTitle`, `.ArticlePost` | Article title and metadata; ArticlePost has `.Summary`, `.Date`, `.Category`, `.Tags`, `.CoverURL`, `.WordCount`, `.ReadingMinutes` |
+| `.ContentHTML` | Rendered article or directory HTML; empty on homepages, which must use HomePosts |
+| `.AllowCopy`, `.BlogHomeURL` | Whether to show copy controls; public homepage URL, empty when disabled |
+| `.BlogName`, `.Description` | Blog name and introduction |
+| `.LogoURL`, `.LogoSize`, `.LogoShape` | Logo URL, pixel size, square/circle |
+| `.BannerURL`, `.MobileBannerURL` | Desktop and mobile banner URLs |
+| `.Buttons` | Links with `.Label`, `.URL`, `.IconURL`, `.Position` |
+| `.CustomHeader`, `.CustomFooter`, `.FooterNotice` | Custom fragments and notice; custom fragments are policy-controlled and sanitized |
+| `.ThemeConfigJS` | Safe JSON for `<script>window.config = {{.ThemeConfigJS}};</script>`; there is no `.ThemeConfig` field |
+| `.PluginData` | Plugin display data; read via `pluginField`, `hasPlugin`, or guarded `with index`; use `safeHTML` only for trusted, sanitized HTML |
+
+Frontmatter starts at the beginning of the document and ends with a standalone `---` line. Fields are `title`, `description` (fallback `summary`), `published` (fallback `date`), `category`, `tags`, and `image` (fallback `cover`). Primary keys take precedence. YAML literal/folded multiline descriptions, quoted strings, tag lists and comma-separated tag text are supported. Valid frontmatter is hidden; malformed/unclosed blocks remain visible. Defaults are the filename for title, first non-heading body line for summary, and file update time for date.
+
+`./` and `../` attachment references resolve only relative to the article and cannot escape the Vault. Other paths prefer an exact Vault-root match, then an article-relative match; bare names finally match same-Vault attachment basenames, preferring the latest mtime. Use `./` to avoid root-name collisions. URL-encoded paths work. Remote HTTP(S) images/covers retain their URL; covers starting with `/` are site URLs. Folder asset URLs carry a `source` article path, checked against share scope, live article existence and its actual references.
+
+### Diagnostics and acceptance
+
+Templates use Go `html/template` escaping and `missingkey=zero`. Missing map keys yield zero values; unknown struct fields, unguarded nil chains and syntax errors still fail. Guard optional data with `with`. Failures fall back to `default` and expose the reason in `X-Theme-Fallback`. Default has no homepage post list, so HTTP 200 alone does not prove successful custom rendering.
+
+Verify homepage, individual article, folder index and folder article separately. Check template markers, fallback headers, CSS/JS/images, copy-disabled states, empty and over-100-post lists, mobile layout and keyboard behavior. Existing templates receive the complete HomePosts list; large collections create longer pages.

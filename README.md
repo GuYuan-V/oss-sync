@@ -39,7 +39,7 @@ If you run into problems, please open an [issue](https://github.com/helantianshe
   - History supports version browsing, line diff, and restore to any version.
 - **Sharing and public blog**:
   - Public links for a single note or a folder, with an allow-copy toggle.
-  - Two built-in blog themes (`default` and `papertrail`) with a public index and per-Vault access.
+  - Built-in `default` for shared reading and `papertrail` for public blog homepages, selected per Vault.
 - **Markdown collaboration**:
   - Invite, accept, and revoke collaborators; real-time over SSE with long-polling fallback.
 - **Server plugin extensions**:
@@ -210,6 +210,8 @@ cd examples/server-plugin-echo
 go build -o plugin.exe .
 Compress-Archive manifest.json,plugin.exe my-plugin.zip
 ```
+
+Include declared resource directories in the ZIP, for example `Compress-Archive manifest.json,plugin.exe,blog,console my-plugin.zip` (only include existing directories). See the [blog template contract](docs/server-plugins.md#blog-template-contract) for fields, page branches, attachment paths and diagnostics.
 
 Resource example:
 

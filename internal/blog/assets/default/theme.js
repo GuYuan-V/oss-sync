@@ -308,17 +308,9 @@
     const button = document.querySelector("[data-back-to-top]");
     if (!button) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const setVisibility = () => {
-      button.classList.toggle("is-visible", window.scrollY > 260);
-    };
-    button.style.opacity = "0";
-    button.setAttribute("aria-hidden", "true");
-    window.addEventListener("scroll", setVisibility, { passive: true });
     button.addEventListener("click", () => {
       window.scrollTo({ top: 0, behavior: reducedMotion ? "auto" : "smooth" });
     });
-    setVisibility();
-    window.addEventListener("pageshow", setVisibility);
   };
 
   const disableMissingThemeScript = () => {

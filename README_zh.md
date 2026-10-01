@@ -80,7 +80,7 @@
 
   - 支持单篇或文件夹公开链接，可设置允许复制。
 
-  - 内置 `default` 与 `papertrail` 两套博客主题，支持公开首页与按仓库访问。
+  - 内置 `default` 分享阅读模板与支持公开博客首页的 `papertrail` 模板，按仓库选择。
 
 - **Markdown 协作**：
 
@@ -404,6 +404,8 @@ cd examples/server-plugin-echo
 go build -o plugin.exe .
 Compress-Archive manifest.json,plugin.exe my-plugin.zip
 ```
+
+包含博客或控制台资源时，ZIP 还必须加入声明的资源目录，例如 `Compress-Archive manifest.json,plugin.exe,blog,console my-plugin.zip`（仅列出实际存在的目录）。博客字段、首页分支、附件路径与排错见[博客模板契约](internal/webui/assets/plugin-guide.zh.md#博客模板契约)。
 
 资源声明示例：
 
