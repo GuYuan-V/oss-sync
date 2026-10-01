@@ -61,6 +61,7 @@ func (h *Handler) handleSharedAsset(c *gin.Context) {
 	}
 	abs := filestore.DiskPath(h.Cfg.Storage.DataDir, file)
 	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Security-Policy", "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:")
 	c.File(abs)
 }
 
