@@ -40,6 +40,9 @@ func (r blogAssetResolver) ResolveAsset(reference string) string {
 	if r.markdownPath != "" {
 		assetURL += "&source=" + url.QueryEscape(r.markdownPath)
 	}
+	if parsed, err := url.Parse(reference); err == nil && parsed.Fragment != "" {
+		assetURL += "#" + parsed.EscapedFragment()
+	}
 	return assetURL
 }
 
@@ -120,9 +123,12 @@ func (h *Handler) markdownReferencesAsset(userID uint, vaultID, markdownPath, re
 }
 
 func (h *Handler) resolveAssetFile(userID uint, vaultID, markdownPath, reference string) (models.File, error) {
-	if decoded, err := url.PathUnescape(reference); err == nil {
-		reference = decoded
+	parsed, err := url.Parse(reference)
+	if err != nil {
+		return models.File{}, gorm.ErrRecordNotFound
 	}
+	// 查询参数和片段不属于磁盘路径，Path 已完成一次 URL 解码
+	reference = parsed.Path
 	lookup := func(candidate string) (models.File, error) {
 		var file models.File
 		if candidate == ".." || strings.HasPrefix(candidate, "../") || strings.Contains(candidate, "\\") {
@@ -152,7 +158,7 @@ func (h *Handler) resolveAssetFile(userID uint, vaultID, markdownPath, reference
 	// Obsidian 裸文件名引用允许跨目录匹配，SQL 通配符必须作为文件名字符处理
 	escaped := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(reference)
 	var file models.File
-	err := h.DB.Where(
+	err = h.DB.Where(
 		"user_id = ? AND vault_id = ? AND is_deleted = ? AND type = ? AND path LIKE ? ESCAPE '\\'",
 		userID, vaultID, false, "attachment", "%/"+escaped,
 	).Order("m_time desc").Order("path asc").First(&file).Error
