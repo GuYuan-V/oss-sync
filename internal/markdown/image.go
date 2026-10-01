@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"strings"
 
 	gast "github.com/yuin/goldmark/ast"
@@ -12,7 +13,7 @@ import (
 	"github.com/yuin/goldmark/util"
 )
 
-// AssetResolver 将 Markdown 资源引用转换为可访问地址
+// AssetResolver 将 URL 编码的 Markdown 资源引用转换为可访问地址
 type AssetResolver interface {
 	ResolveAsset(reference string) string
 }
@@ -73,7 +74,11 @@ func (r *imageHTMLRenderer) renderImageEmbed(w util.BufWriter, source []byte, no
 	image := node.(*ImageEmbed)
 	destination := image.Reference
 	if r.resolver != nil {
-		destination = r.resolver.ResolveAsset(image.Reference)
+		// Wiki 附件引用是字面路径，百分号等字符必须先编码为 URL 路径
+		if parsed, err := url.Parse(destination); err != nil || !parsed.IsAbs() {
+			destination = strings.NewReplacer("%", "%25", "?", "%3F", "#", "%23").Replace(destination)
+		}
+		destination = r.resolver.ResolveAsset(destination)
 	}
 	fmt.Fprintf(w, `<img src="%s" alt="%s">`, htmlEscape(destination), htmlEscape(image.Reference))
 	return gast.WalkContinue, nil
