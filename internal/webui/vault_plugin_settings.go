@@ -157,7 +157,8 @@ func (h *Handler) pluginSettingVaults(u *models.User, pluginID string) []pluginS
 		}
 		out := make([]pluginSettingVaultOption, 0, len(vaults))
 		for _, vault := range vaults {
-			if blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, themeByVault[vault.ID]) {
+			// 内置插件的设置只服务其绑定模板，避免选用其他模板的仓库出现无关设置项
+			if themeByVault[vault.ID] == builtinThemeForBuiltinPlugin(pluginID) {
 				out = append(out, pluginSettingVaultOption{ID: vault.ID, Name: vault.Name})
 			}
 		}
@@ -299,13 +300,22 @@ func (h *Handler) loadPluginSettings(pluginID, vaultID string) (serverplugin.Man
 	return h.loadPluginSettingValues(manifest, vaultID)
 }
 
+// builtinPapertrailTheme 是内置 papertrail-settings 插件唯一服务的博客模板
+const builtinPapertrailTheme = "papertrail"
+
+// builtinThemeForBuiltinPlugin 返回内置插件绑定的博客模板；未知内置插件返回空字符串
+func builtinThemeForBuiltinPlugin(pluginID string) string {
+	if pluginID == "papertrail-settings" {
+		return builtinPapertrailTheme
+	}
+	return ""
+}
+
 func (h *Handler) pluginSettingsLinkedToVault(pluginID, vaultID string) bool {
-	for _, builtin := range serverplugin.BuiltinManifests() {
-		if builtin.ID == pluginID {
-			var theme models.VaultSetting
-			return h.DB.Where("vault_id = ?", vaultID).First(&theme).Error == nil &&
-				blog.SupportsPublicBlog(h.Cfg.Storage.DataDir, theme.ThemeName)
-		}
+	if theme := builtinThemeForBuiltinPlugin(pluginID); theme != "" {
+		var setting models.VaultSetting
+		return h.DB.Where("vault_id = ?", vaultID).First(&setting).Error == nil &&
+			(setting.ThemeName == theme || (setting.ThemeName == "" && theme == "default"))
 	}
 	var count int64
 	if err := h.DB.Model(&models.ServerPluginAssociation{}).Where("plugin_id = ? AND kind = ? AND target_id = (SELECT theme_name FROM vault_settings WHERE vault_id = ?)", pluginID, "blog_theme", vaultID).Count(&count).Error; err != nil {
