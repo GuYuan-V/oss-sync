@@ -305,7 +305,7 @@ func (h *Handler) adminVaultsPage(c *gin.Context) {
 	d.Page = h.currentPage(c, total, d.PageSize)
 	d.VaultCount = int(total)
 	var vaults []models.Vault
-	if err := h.DB.Order("created_at desc").Limit(d.PageSize).Offset(d.Page.Offset()).Find(&vaults).Error; err != nil {
+	if err := h.DB.Order("created_at desc, id desc").Limit(d.PageSize).Offset(d.Page.Offset()).Find(&vaults).Error; err != nil {
 		h.render(c, http.StatusInternalServerError, "admin-vaults", h.t(c, "page.admin_vaults"), "admin", "admin-vaults", d)
 		return
 	}
@@ -500,7 +500,7 @@ func (h *Handler) adminDevicesPage(c *gin.Context) {
 	d.Page = h.currentPage(c, total, d.PageSize)
 	var devices []models.ClientDevice
 	if err := h.DB.Where("status <> ?", deviceauth.DeviceStatusRevoked).
-		Order("created_at desc").Limit(d.PageSize).Offset(d.Page.Offset()).Find(&devices).Error; err != nil {
+		Order("created_at desc, id desc").Limit(d.PageSize).Offset(d.Page.Offset()).Find(&devices).Error; err != nil {
 		h.render(c, http.StatusInternalServerError, "admin-devices", h.t(c, "page.admin_devices"), "admin", "admin-devices", d)
 		return
 	}

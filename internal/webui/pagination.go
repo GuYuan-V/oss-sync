@@ -60,7 +60,7 @@ func (p Page) To() int {
 func PageURL(base string, query url.Values, page int) string {
 	next := url.Values{}
 	for key, values := range query {
-		if key == "page" || key == "size" {
+		if key == "page" {
 			continue
 		}
 		next[key] = values

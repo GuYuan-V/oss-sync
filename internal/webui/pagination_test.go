@@ -108,12 +108,12 @@ func TestPageURLPreservesFilters(t *testing.T) {
 	query.Set("size", "100")
 
 	got := PageURL("/dashboard/admin/devices", query, 7)
-	want := "/dashboard/admin/devices?page=7&q=vault&status=pending"
+	want := "/dashboard/admin/devices?page=7&q=vault&size=100&status=pending"
 	if got != want {
 		t.Fatalf("PageURL() = %q, want %q", got, want)
 	}
 
-	if first := PageURL("/dashboard/admin/devices", query, 1); first != "/dashboard/admin/devices?q=vault&status=pending" {
+	if first := PageURL("/dashboard/admin/devices", query, 1); first != "/dashboard/admin/devices?q=vault&size=100&status=pending" {
 		t.Fatalf("PageURL(page 1) = %q, want no page param", first)
 	}
 

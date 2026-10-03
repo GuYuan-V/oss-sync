@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -262,19 +264,55 @@ type PluginUpdateInfo struct {
 	Notes         string `json:"notes,omitempty"`
 	HasUpdate     bool   `json:"has_update"`
 	UpdatableHere bool   `json:"updatable"`
+	CheckFailed   bool   `json:"check_failed,omitempty"`
+}
+
+func validPluginUpdateURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || parsed.User != nil {
+		return false
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return true
+	case "http":
+		host := parsed.Hostname()
+		if strings.EqualFold(host, "localhost") {
+			return true
+		}
+		ip := net.ParseIP(host)
+		return ip != nil && ip.IsLoopback()
+	default:
+		return false
+	}
+}
+
+func pluginUpdateHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return errors.New("too many redirects")
+			}
+			if !validPluginUpdateURL(req.URL.String()) {
+				return errors.New("plugin update redirect uses an unsafe URL")
+			}
+			return nil
+		},
+	}
 }
 
 // PluginUpdateFromURL 下载作者更新接口提供的 ZIP 并完成升级
 // 下载地址由 manifest 的 update_url 接口返回，仅限 https 或本机回环
-func (m *Manager) PluginUpdateFromURL(ctx context.Context, pluginID, downloadURL string) (PluginInfo, error) {
-	if downloadURL == "" {
-		return PluginInfo{}, fmt.Errorf("plugin %s provides no download url", pluginID)
+func (m *Manager) PluginUpdateFromURL(ctx context.Context, pluginID, expectedVersion, downloadURL string) (PluginInfo, error) {
+	if !validPluginUpdateURL(downloadURL) {
+		return PluginInfo{}, fmt.Errorf("plugin %s provides an unsafe download url", pluginID)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return PluginInfo{}, err
 	}
-	res, err := (&http.Client{Timeout: 5 * time.Minute}).Do(req)
+	res, err := pluginUpdateHTTPClient(5 * time.Minute).Do(req)
 	if err != nil {
 		return PluginInfo{}, err
 	}
@@ -289,18 +327,18 @@ func (m *Manager) PluginUpdateFromURL(ctx context.Context, pluginID, downloadURL
 	if len(content) > MaxArchiveBytes {
 		return PluginInfo{}, fmt.Errorf("plugin package exceeds %d bytes", MaxArchiveBytes)
 	}
-	info, err := m.Upgrade(ctx, bytes.NewReader(content), int64(len(content)))
+	packageData, err := ParsePackage(bytes.NewReader(content), int64(len(content)))
 	if err != nil {
-		if errors.Is(err, ErrPluginExists) {
-			// 目标插件尚未安装时退化为首次安装
-			return m.Install(ctx, bytes.NewReader(content), int64(len(content)))
-		}
 		return PluginInfo{}, err
 	}
-	if enableErr := m.Enable(ctx, info.ID); enableErr != nil {
-		return info, enableErr
+	if packageData.Manifest.ID != pluginID {
+		return PluginInfo{}, fmt.Errorf("plugin update id %q does not match %q", packageData.Manifest.ID, pluginID)
 	}
-	return info, nil
+	if order, compareErr := version.Compare(packageData.Manifest.Version, expectedVersion); compareErr != nil || order != 0 {
+		return PluginInfo{}, fmt.Errorf("plugin update version %q does not match %q", packageData.Manifest.Version, expectedVersion)
+	}
+	// 更新检查只覆盖已启用插件，Upgrade 会保留其启用状态并完成运行时恢复
+	return m.Upgrade(ctx, bytes.NewReader(content), int64(len(content)))
 }
 
 // CheckPluginUpdates 批量查询已启用插件声明的更新接口
@@ -323,6 +361,7 @@ func (m *Manager) CheckPluginUpdates(ctx context.Context) ([]PluginUpdateInfo, e
 		latest, downloadURL, notes, fetchErr := m.fetchPluginUpdate(ctx, info.UpdateURL)
 		if fetchErr != nil {
 			// 接口失败不阻塞其他插件的检查，也不写入错误状态
+			entry.CheckFailed = true
 			results = append(results, entry)
 			continue
 		}
@@ -338,11 +377,14 @@ func (m *Manager) CheckPluginUpdates(ctx context.Context) ([]PluginUpdateInfo, e
 }
 
 func (m *Manager) fetchPluginUpdate(ctx context.Context, updateURL string) (version, downloadURL, notes string, err error) {
+	if !validPluginUpdateURL(updateURL) {
+		return "", "", "", errors.New("plugin update endpoint uses an unsafe URL")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, updateURL, nil)
 	if err != nil {
 		return "", "", "", err
 	}
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := pluginUpdateHTTPClient(10 * time.Second)
 	res, err := client.Do(req)
 	if err != nil {
 		return "", "", "", err
@@ -362,6 +404,9 @@ func (m *Manager) fetchPluginUpdate(ctx context.Context, updateURL string) (vers
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return "", "", "", err
+	}
+	if payload.DownloadURL != "" && !validPluginUpdateURL(strings.TrimSpace(payload.DownloadURL)) {
+		return "", "", "", errors.New("plugin download uses an unsafe URL")
 	}
 	return strings.TrimSpace(payload.Version), strings.TrimSpace(payload.DownloadURL), strings.TrimSpace(payload.Notes), nil
 }

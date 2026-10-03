@@ -179,6 +179,12 @@ func ValidateManifest(manifest Manifest) error {
 	if len(manifest.Description) > 2000 {
 		return fmt.Errorf("%w: description is too long", ErrInvalidManifest)
 	}
+	if manifest.SettingsVisibility != "" && manifest.SettingsVisibility != SettingsVisibilityAlways && manifest.SettingsVisibility != SettingsVisibilityWhenUsed {
+		return fmt.Errorf("%w: unsupported settings_visibility %q", ErrInvalidManifest, manifest.SettingsVisibility)
+	}
+	if manifest.UpdateURL != "" && !validPluginUpdateURL(manifest.UpdateURL) {
+		return fmt.Errorf("%w: update_url must use https or loopback http", ErrInvalidManifest)
+	}
 	if manifest.APIVersion != CurrentAPIVersion {
 		return fmt.Errorf("%w: unsupported api_version %d", ErrInvalidManifest, manifest.APIVersion)
 	}

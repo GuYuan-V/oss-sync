@@ -29,8 +29,6 @@ type adminPluginsData struct {
 	EditFiles   []serverplugin.EditablePluginFile
 	// Updates 是 manifest 声明更新源且有新版本的插件，key 为插件 ID
 	Updates map[string]serverplugin.PluginUpdateInfo
-	// Updatable 是宿主可代为更新的插件 ID 集合
-	Updatable map[string]bool
 	// Updated 与 UpdatedVersion 描述刚完成的一次更新，用于成功提示
 	Updated        string
 	UpdatedVersion string
@@ -139,9 +137,8 @@ func (h *Handler) adminPluginsPage(c *gin.Context) {
 	if available := strings.TrimSpace(c.Query("update")); available != "" {
 		latest := strings.TrimSpace(c.Query("latest"))
 		d.Updates = map[string]serverplugin.PluginUpdateInfo{
-			available: {PluginID: available, Latest: latest, HasUpdate: latest != ""},
+			available: {PluginID: available, Latest: latest, HasUpdate: latest != "", UpdatableHere: true},
 		}
-		d.Updatable = map[string]bool{available: true}
 	}
 	h.render(c, http.StatusOK, "admin-plugins", h.t(c, "page.admin_plugins"), "admin", "admin-plugins", d)
 }
@@ -295,6 +292,10 @@ func (h *Handler) adminPluginUpdateCheck(c *gin.Context) {
 		if update.PluginID != c.Param("id") {
 			continue
 		}
+		if update.CheckFailed {
+			h.redirectPluginError(c, "admin.plugin_update_check_failed")
+			return
+		}
 		if !update.HasUpdate {
 			h.redirectPluginError(c, "admin.plugin_up_to_date")
 			return
@@ -321,10 +322,17 @@ func (h *Handler) adminPluginUpdate(c *gin.Context) {
 		return
 	}
 	for _, update := range updates {
-		if update.PluginID != c.Param("id") || !update.UpdatableHere {
+		if update.PluginID != c.Param("id") {
 			continue
 		}
-		if _, updateErr := h.pluginManager.PluginUpdateFromURL(c.Request.Context(), update.PluginID, update.DownloadURL); updateErr != nil {
+		if update.CheckFailed {
+			h.redirectPluginError(c, "admin.plugin_update_check_failed")
+			return
+		}
+		if !update.UpdatableHere {
+			continue
+		}
+		if _, updateErr := h.pluginManager.PluginUpdateFromURL(c.Request.Context(), update.PluginID, update.Latest, update.DownloadURL); updateErr != nil {
 			h.redirectPluginError(c, "admin.plugin_update_failed")
 			return
 		}

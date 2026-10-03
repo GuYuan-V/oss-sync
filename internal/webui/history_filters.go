@@ -153,7 +153,7 @@ func (h *Handler) historyPage(c *gin.Context) {
 	}
 	d.Page = h.currentPage(c, total, d.PageSize)
 	var rows []models.FileHistory
-	if err := filters.apply(query).Order("created_at desc").
+	if err := filters.apply(query).Order("created_at desc, id desc").
 		Limit(d.PageSize).Offset(d.Page.Offset()).Find(&rows).Error; err != nil {
 		h.renderVaultStatus(c, http.StatusInternalServerError, ld, "vault-history", h.t(c, "page.vault_history", vault.Name), d)
 		return

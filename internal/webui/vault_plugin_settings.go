@@ -164,6 +164,19 @@ func (h *Handler) pluginSettingVaults(u *models.User, pluginID string) []pluginS
 		}
 		return out
 	}
+	var plugin models.ServerPlugin
+	if err := h.DB.Where("id = ? AND enabled = ?", pluginID, true).First(&plugin).Error; err == nil {
+		manifest, parseErr := serverplugin.ParseManifest([]byte(plugin.ManifestJSON))
+		if parseErr == nil && manifest.SettingsVisibleWhenUsed() && len(manifest.BlogThemes) > 0 {
+			out := make([]pluginSettingVaultOption, 0, len(vaults))
+			for _, vault := range vaults {
+				if pluginBlogThemeInUse(manifest, themeByVault[vault.ID]) {
+					out = append(out, pluginSettingVaultOption{ID: vault.ID, Name: vault.Name})
+				}
+			}
+			return out
+		}
+	}
 
 	var links []models.ServerPluginAssociation
 	if err := h.DB.Where("plugin_id = ?", pluginID).Find(&links).Error; err != nil {
@@ -294,7 +307,7 @@ func (h *Handler) loadPluginSettings(pluginID, vaultID string) (serverplugin.Man
 			manifest.Settings = registration.Settings
 		}
 	}
-	if !h.pluginSettingsLinkedToVault(manifest.ID, vaultID) {
+	if !h.pluginSettingsLinkedToVault(manifest, vaultID) {
 		return serverplugin.Manifest{}, nil, errors.New("plugin settings are not active for this Vault")
 	}
 	return h.loadPluginSettingValues(manifest, vaultID)
@@ -311,17 +324,31 @@ func builtinThemeForBuiltinPlugin(pluginID string) string {
 	return ""
 }
 
-func (h *Handler) pluginSettingsLinkedToVault(pluginID, vaultID string) bool {
-	if theme := builtinThemeForBuiltinPlugin(pluginID); theme != "" {
+func (h *Handler) pluginSettingsLinkedToVault(manifest serverplugin.Manifest, vaultID string) bool {
+	if theme := builtinThemeForBuiltinPlugin(manifest.ID); theme != "" {
 		var setting models.VaultSetting
 		return h.DB.Where("vault_id = ?", vaultID).First(&setting).Error == nil &&
 			(setting.ThemeName == theme || (setting.ThemeName == "" && theme == "default"))
 	}
+	if manifest.SettingsVisibleWhenUsed() && len(manifest.BlogThemes) > 0 {
+		var setting models.VaultSetting
+		return h.DB.Where("vault_id = ?", vaultID).First(&setting).Error == nil &&
+			pluginBlogThemeInUse(manifest, setting.ThemeName)
+	}
 	var count int64
-	if err := h.DB.Model(&models.ServerPluginAssociation{}).Where("plugin_id = ? AND kind = ? AND target_id = (SELECT theme_name FROM vault_settings WHERE vault_id = ?)", pluginID, "blog_theme", vaultID).Count(&count).Error; err != nil {
+	if err := h.DB.Model(&models.ServerPluginAssociation{}).Where("plugin_id = ? AND kind = ? AND target_id = (SELECT theme_name FROM vault_settings WHERE vault_id = ?)", manifest.ID, "blog_theme", vaultID).Count(&count).Error; err != nil {
 		return false
 	}
-	return count > 0 || pluginHasNoAssociations(h.DB, pluginID)
+	return count > 0 || pluginHasNoAssociations(h.DB, manifest.ID)
+}
+
+func pluginBlogThemeInUse(manifest serverplugin.Manifest, selected string) bool {
+	for _, theme := range manifest.BlogThemes {
+		if selected == theme.Key(manifest.ID) || selected == theme.Name || selected == theme.ID {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Handler) loadPluginSettingValues(manifest serverplugin.Manifest, vaultID string) (serverplugin.Manifest, models.JSONMap, error) {
