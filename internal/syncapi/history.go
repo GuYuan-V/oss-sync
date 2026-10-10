@@ -120,8 +120,8 @@ func (h *Handler) requireHistoryReader(c *gin.Context, path string) (*models.Use
 	}
 	var count int64
 	if err := h.DB.Model(&models.Collaboration{}).Where(
-		"vault_id = ? AND file_id = ? AND collaborator_id = ? AND status = ?",
-		file.VaultID, file.ID, u.ID, collaboration.StatusAccepted,
+		"vault_id = ? AND file_id = ? AND collaborator_id = ? AND status = ? AND allow_history_view = ?",
+		file.VaultID, file.ID, u.ID, collaboration.StatusAccepted, true,
 	).Count(&count).Error; err != nil || count == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
 		return nil, models.Vault{}, "", false
@@ -167,8 +167,8 @@ func (h *Handler) requireHistoryReaderSync(c *gin.Context, path string) (*models
 	}
 	var count int64
 	if err := h.DB.Model(&models.Collaboration{}).Where(
-		"vault_id = ? AND file_id = ? AND collaborator_id = ? AND status = ?",
-		file.VaultID, file.ID, u.ID, collaboration.StatusAccepted,
+		"vault_id = ? AND file_id = ? AND collaborator_id = ? AND status = ? AND allow_history_view = ?",
+		file.VaultID, file.ID, u.ID, collaboration.StatusAccepted, true,
 	).Count(&count).Error; err != nil || count == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "vault not found"})
 		return nil, models.Vault{}, "", "", false
@@ -264,6 +264,8 @@ type historyDetailOut struct {
 	Content string   `json:"content,omitempty"`
 	Diff    []string `json:"diff,omitempty"`
 	IsText  bool     `json:"is_text"`
+	// Mode 本次 diff 的对比基准：current 对当前文件，last 对上一版本
+	Mode string `json:"mode"`
 }
 
 // V2HistoryDetail 处理 GET /api/vaults/:vault_id/sync/history/:history_id?mode=last|current&path=xxx
@@ -295,8 +297,10 @@ func (h *Handler) V2HistoryDetail(c *gin.Context) {
 
 	// 计算 diff：mode=current 对比当前文件，否则对比上一版本
 	var base []byte
+	mode := "last"
 	switch c.Query("mode") {
 	case "current":
+		mode = "current"
 		base = h.currentFileContent(vault.ID, row.FilePath)
 	default:
 		var prev models.FileHistory
@@ -308,6 +312,7 @@ func (h *Handler) V2HistoryDetail(c *gin.Context) {
 	if isText {
 		out.Diff = history.DiffLines(base, snapshot)
 	}
+	out.Mode = mode
 	c.JSON(http.StatusOK, out)
 }
 

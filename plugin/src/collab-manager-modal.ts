@@ -1,9 +1,10 @@
-import { App, Modal } from "obsidian";
+import { App, Modal, Notice, Setting } from "obsidian";
 import type { CollabEntry } from "./api";
 import { CollabCollaboratorsModal } from "./collab-collaborators-modal";
+import { localizeError } from "./localized-error";
 import type OSSPlugin from "./main";
 
-/** 协作管理弹窗；上半区为待回应的邀请，下半区按文件聚合已发出的邀请 */
+/** 协作管理弹窗；分「我发出的邀请」与「我收到的邀请」两个大类，互不混排 */
 export class CollabManagerModal extends Modal {
   private readonly selectedArticleKeys = new Set<string>();
 
@@ -21,26 +22,35 @@ export class CollabManagerModal extends Modal {
     this.contentEl.empty();
   }
 
-  /** 刷新协作关系并重渲染；收到的邀请与发出的邀请分组展示，发出的按 `vault_id:file_id` 聚合 */
+  /** 刷新协作关系并按发出方与接收方分区渲染，两者都为空时给出空态 */
   private async load(): Promise<void> {
     this.contentEl.empty();
     this.contentEl.createDiv({ cls: "oss-sidebar-empty", text: this.plugin.t("collab.loading") });
     await this.plugin.collabManager.refresh();
     this.contentEl.empty();
     const collaborations = this.plugin.collabManager.getCollaborations();
-    if (collaborations.length === 0) {
+    const username = this.plugin.settings.username;
+    const incoming = collaborations.filter((entry) => entry.collaborator_username === username);
+    const outgoing = collaborations.filter((entry) => entry.collaborator_username !== username);
+    if (incoming.length === 0 && outgoing.length === 0) {
       this.contentEl.createDiv({ cls: "oss-sidebar-empty", text: this.plugin.t("collab.empty") });
       return;
     }
-    // 收到的邀请：对方是当前用户且未被撤销
-    for (const entry of collaborations) {
-      if (entry.collaborator_username !== this.plugin.settings.username) continue;
-      if (entry.status === "revoked") continue;
-      this.renderIncoming(entry);
+    if (incoming.length > 0) {
+      this.contentEl.createDiv({ cls: "oss-collab-section-title", text: this.plugin.t("collab.sectionIncoming") });
+      for (const entry of incoming) this.renderIncoming(entry);
     }
+    if (outgoing.length > 0) {
+      this.contentEl.createDiv({ cls: "oss-collab-section-title", text: this.plugin.t("collab.sectionOutgoing") });
+      this.renderOutgoing(outgoing);
+    }
+  }
+
+  /** 渲染「我发出的邀请」：按 `vault_id:file_id` 聚合，含批量撤销与逐协作者的历史权限开关 */
+  private renderOutgoing(outgoing: readonly CollabEntry[]): void {
     const byArticle = new Map<string, CollabEntry[]>();
-    for (const entry of collaborations) {
-      if (entry.collaborator_username === this.plugin.settings.username || entry.status === "revoked") continue;
+    for (const entry of outgoing) {
+      if (entry.status === "revoked") continue;
       const key = `${entry.vault_id}:${entry.file_id}`;
       const entries = byArticle.get(key) ?? [];
       entries.push(entry);
@@ -52,6 +62,7 @@ export class CollabManagerModal extends Modal {
 
   /** 渲染单条收到的邀请；pending 提供接受与拒绝，accepted 提供退出 */
   private renderIncoming(entry: CollabEntry): void {
+    if (entry.status === "revoked") return;
     const row = this.contentEl.createDiv({ cls: "oss-sidebar-collab-row" });
     row.createDiv({ cls: "oss-manager-path", text: entry.file_path });
     row.createDiv({
@@ -107,6 +118,34 @@ export class CollabManagerModal extends Modal {
       cls: "oss-collab-cancel-article mod-warning",
       text: this.plugin.t("collab.cancelArticle"),
     }).addEventListener("click", () => void this.cancelArticle(entries));
+    for (const entry of entries) this.renderCollaboratorRow(entry);
+  }
+
+  /** 渲染单个协作者行，含是否允许其查看该文件修改记录的开关 */
+  private renderCollaboratorRow(entry: CollabEntry): void {
+    const row = this.contentEl.createDiv({ cls: "oss-sidebar-collab-row oss-collab-collaborator-row" });
+    row.createDiv({
+      cls: "oss-manager-meta",
+      text: this.plugin.t("collab.incomingMeta", { name: entry.collaborator_username, status: entry.status }),
+    });
+    new Setting(row)
+      .setName(this.plugin.t("collab.allowHistoryView"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(entry.allow_history_view)
+          .setDisabled(entry.status !== "accepted")
+          .onChange((value) => void this.setHistoryView(entry, value))
+      );
+  }
+
+  /** 切换协作者的历史查看权限；失败时保持原值并提示 */
+  private async setHistoryView(entry: CollabEntry, allow: boolean): Promise<void> {
+    try {
+      await this.plugin.collabManager.setHistoryView(entry, allow);
+    } catch (error) {
+      new Notice(this.plugin.t("collab.historyViewFailed", { error: errorMessage(error, this.plugin) }));
+      await this.load();
+    }
   }
 
   /** 勾选变更后整体重渲染 */
@@ -140,4 +179,9 @@ export class CollabManagerModal extends Modal {
     await this.plugin.collabManager.leave(entry);
     await this.load();
   }
+}
+
+/** 把错误本地化为用户可读文本 */
+function errorMessage(error: unknown, plugin: OSSPlugin): string {
+  return localizeError(error, plugin.t.bind(plugin), plugin.t("common.unknownError"));
 }

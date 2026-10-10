@@ -36,11 +36,11 @@ export class HistoryDetailModal extends Modal {
     this.contentEl.empty();
   }
 
-  /** 打开时默认加载上一版对比 */
+  /** 打开时默认加载当前文件对比 */
   private async loadSnapshot(): Promise<void> {
     try {
-      this.detail = await this.plugin.api.historyDetail(this.options.vaultID, this.options.entry.id, "last");
-      this.render(this.detail, "previous");
+      this.detail = await this.plugin.api.historyDetail(this.options.vaultID, this.options.entry.id, "current");
+      this.render(this.detail, "current");
     } catch (error) {
       this.renderFailure(error);
     }
@@ -68,7 +68,7 @@ export class HistoryDetailModal extends Modal {
       text: this.plugin.t("history.comparePrevious"),
     });
     previousButton.disabled = !previousAvailable;
-    previousButton.addEventListener("click", () => this.render(this.detail ?? detail, "previous"));
+    previousButton.addEventListener("click", () => void this.comparePrevious());
     const currentButton = actions.createEl("button", {
       cls: `oss-history-compare-current${mode === "current" ? " is-active" : ""}`,
       text: this.plugin.t("history.compareCurrent"),
@@ -108,10 +108,30 @@ export class HistoryDetailModal extends Modal {
     }
   }
 
-  /** 切换为与当前版本对比；请求失败时回落到已有内容并提示 */
+  /** 切换为与上一版对比；diff 已由服务端按 mode 计算，需重新请求 */
+  private async comparePrevious(): Promise<void> {
+    if (this.detail !== null && this.detail.mode === "last") {
+      this.render(this.detail, "previous");
+      return;
+    }
+    try {
+      const detail = await this.plugin.api.historyDetail(this.options.vaultID, this.options.entry.id, "last");
+      this.detail = detail;
+      this.render(detail, "previous");
+    } catch (error) {
+      this.renderFailure(error);
+    }
+  }
+
+  /** 切换为与当前版本对比；diff 已由服务端按 mode 计算，需重新请求 */
   private async compareCurrent(): Promise<void> {
+    if (this.detail !== null && this.detail.mode === "current") {
+      this.render(this.detail, "current");
+      return;
+    }
     try {
       const detail = await this.plugin.api.historyDetail(this.options.vaultID, this.options.entry.id, "current");
+      this.detail = detail;
       this.render(detail, "current");
     } catch (error) {
       this.renderFailure(error);
@@ -133,7 +153,7 @@ export class HistoryDetailModal extends Modal {
   /** 加载失败时保留已渲染内容，仅在详情末尾追加错误提示 */
   private renderFailure(error: unknown): void {
     if (this.detail) {
-      this.render(this.detail, "previous");
+      this.render(this.detail, "current");
     } else {
       this.contentEl.empty();
     }

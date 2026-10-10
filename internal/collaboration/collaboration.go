@@ -38,7 +38,8 @@ type Service struct {
 func New(db *gorm.DB) *Service { return &Service{DB: db} }
 
 // Invite 为 owner 或 manager 创建待接受的 Markdown 文件协作
-func (s *Service) Invite(ownerID uint, vaultID, filePath, username string) (*models.Collaboration, error) {
+// allowHistoryView 决定协作者接受后能否读取该文件的修改记录
+func (s *Service) Invite(ownerID uint, vaultID, filePath, username string, allowHistoryView bool) (*models.Collaboration, error) {
 	var vault models.Vault
 	if err := s.DB.Where("id = ?", vaultID).First(&vault).Error; err != nil {
 		return nil, ErrFileNotFound
@@ -81,6 +82,7 @@ func (s *Service) Invite(ownerID uint, vaultID, filePath, username string) (*mod
 	row := models.Collaboration{
 		VaultID: vaultID, FileID: file.ID, OwnerID: ownerID,
 		CollaboratorID: target.ID, Status: StatusPending,
+		AllowHistoryView: allowHistoryView,
 	}
 	if err := s.DB.Create(&row).Error; err != nil {
 		return nil, err
@@ -151,6 +153,20 @@ func (s *Service) Leave(collaboratorID uint, collabID uint) error {
 			return ErrInvalidStatus
 		}
 		return tx.Model(&row).Update("status", StatusRevoked).Error
+	})
+}
+
+// SetHistoryView 供 owner 或 manager 切换协作者对该文件修改记录的读取权限
+func (s *Service) SetHistoryView(ownerID uint, collabID uint, allow bool) error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var row models.Collaboration
+		if err := tx.Where("id = ?", collabID).First(&row).Error; err != nil {
+			return errors.New("协作关系不存在")
+		}
+		if !s.canManage(tx, ownerID, row.VaultID) {
+			return ErrNotOwnerOrManager
+		}
+		return tx.Model(&row).Update("allow_history_view", allow).Error
 	})
 }
 

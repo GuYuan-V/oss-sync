@@ -265,8 +265,10 @@ type Collaboration struct {
 	OwnerID        uint   `gorm:"index;not null"`
 	CollaboratorID uint   `gorm:"index;not null"`
 	Status         string `gorm:"size:16;not null;default:'pending'"` // 取值 pending / accepted
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// AllowHistoryView 协作者是否可读该文件的修改记录，默认不允许
+	AllowHistoryView bool `gorm:"not null;default:false"`
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // FileHistory 保存文件的修改记录；ContentKey 指向 gzip 快照，create 无快照

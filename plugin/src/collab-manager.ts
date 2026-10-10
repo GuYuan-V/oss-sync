@@ -264,11 +264,18 @@ export class CollabManager {
   private async applyRemoteChange(): Promise<void> {
     await Promise.all([this.refresh(), this.plugin.syncEngine.runOnce({ forceFull: false })]);
   }
+
+  /** 切换协作者对该文件修改记录的读取权限；owner 或 manager 才可调用 */
+  async setHistoryView(entry: CollabEntry, allow: boolean): Promise<void> {
+    await this.plugin.api.collabSetHistoryView(entry.vault_id, entry.id, allow);
+    await this.refresh();
+  }
 }
 
 /** 邀请协作者编辑指定 Markdown 文件的弹窗 */
 export class CollabInviteModal extends Modal {
   private username = "";
+  private allowHistoryView = false;
 
   constructor(app: App, private plugin: OSSPlugin, private filePath: string) {
     super(app);
@@ -286,6 +293,14 @@ export class CollabInviteModal extends Modal {
           .onChange((value) => {
             this.username = value.trim();
           })
+      );
+    new Setting(contentEl)
+      .setName(this.plugin.t("collab.allowHistoryView"))
+      .setDesc(this.plugin.t("collab.allowHistoryViewDesc"))
+      .addToggle((toggle) =>
+        toggle.setValue(this.allowHistoryView).onChange((value) => {
+          this.allowHistoryView = value;
+        })
       );
     new Setting(contentEl)
       .addButton((button) => button.setButtonText(this.plugin.t("common.cancel")).setWarning().onClick(() => this.close()))
@@ -308,7 +323,7 @@ export class CollabInviteModal extends Modal {
       return;
     }
     try {
-      await this.plugin.api.collabInvite(vaultID, this.filePath, this.username);
+      await this.plugin.api.collabInvite(vaultID, this.filePath, this.username, this.allowHistoryView);
       new Notice(this.plugin.t("collab.sent"));
       this.close();
     } catch (error) {

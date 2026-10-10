@@ -358,6 +358,22 @@
   background: var(--background-modifier-hover);
 }
 
+.oss-manager-modal .oss-collab-section-title {
+  margin-top: 12px;
+  margin-bottom: 4px;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+}
+
+.oss-manager-modal .oss-collab-section-title:first-child {
+  margin-top: 0;
+}
+
+.oss-manager-modal .oss-collab-collaborator-row {
+  padding-left: 16px;
+}
+
 .oss-manager-modal .oss-sidebar-share,
 .oss-manager-modal .oss-sidebar-collab-row,
 .oss-manager-modal .oss-sidebar-recycle-row {

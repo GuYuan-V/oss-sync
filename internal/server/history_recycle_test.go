@@ -231,6 +231,7 @@ func TestAcceptedCollaboratorCanReadOnlyCollaboratedFileHistory(t *testing.T) {
 	if err := db.Create(&models.Collaboration{
 		VaultID: vaultID, FileID: file.ID, OwnerID: owner.ID,
 		CollaboratorID: collaborator.ID, Status: collaboration.StatusAccepted,
+		AllowHistoryView: true,
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -257,5 +258,50 @@ func TestAcceptedCollaboratorCanReadOnlyCollaboratedFileHistory(t *testing.T) {
 	code, _ = doJSONAsDevice(t, router, http.MethodPost, restorePath, collabDev, "collab-device", "collab-pc", nil)
 	if code == http.StatusOK {
 		t.Fatal("collaborator must not restore owner history")
+	}
+}
+
+// 未授予 allow_history_view 的协作者读不到该文件历史，接口与不存在同样返回 404
+func TestCollaboratorWithoutHistoryGrantCannotReadHistory(t *testing.T) {
+	srv, db, _ := newTestServer(t)
+	router := srv.Router()
+	ownerDevToken := registerAndLogin(t, router, "history-nogrant-owner", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, ownerDevToken)
+	ownerUserToken := userOnlyToken(t, router, "history-nogrant-owner", "password123")
+	ownerDev := deviceTokenFor(t, router, "history-nogrant-owner", "password123", "nogrant-owner-device", ownerUserToken, []string{vaultID})
+	code, created := uploadV2(t, router, ownerDev, vaultID, "Shared.md", "first", 0, "nogrant-owner-device", "create-shared")
+	if code != http.StatusOK {
+		t.Fatalf("create shared file: %d %v", code, created)
+	}
+	code, collaboratorLogin := doJSON(t, router, http.MethodPost, "/api/auth/register", "", map[string]string{
+		"username": "history-nogrant-collaborator", "password": "password123",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("register collaborator: %d", code)
+	}
+	collabUserToken := collaboratorLogin["token"].(string)
+	collabDev := deviceTokenFor(t, router, "history-nogrant-collaborator", "password123", "nogrant-collab-device", collabUserToken, []string{})
+	var owner, collaborator models.User
+	var file models.File
+	if err := db.Where("username = ?", "history-nogrant-owner").First(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("username = ?", "history-nogrant-collaborator").First(&collaborator).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Where("vault_id = ? AND path = ?", vaultID, "Shared.md").First(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.Collaboration{
+		VaultID: vaultID, FileID: file.ID, OwnerID: owner.ID,
+		CollaboratorID: collaborator.ID, Status: collaboration.StatusAccepted,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	listPath := "/api/vaults/" + url.PathEscape(vaultID) + "/sync/history?path=Shared.md&client_id=nogrant-collab-device"
+	code, list := doJSONAsDevice(t, router, http.MethodGet, listPath, collabDev, "nogrant-collab-device", "collab-pc", nil)
+	if code != http.StatusNotFound {
+		t.Fatalf("collaborator history list without grant = %d, want 404: %v", code, list)
 	}
 }

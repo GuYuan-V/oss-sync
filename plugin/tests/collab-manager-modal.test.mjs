@@ -10,6 +10,7 @@ test("collaboration manager groups managed collaborators by article", async () =
   try {
     const respondCalls = [];
     const revokeCalls = [];
+    const historyViewCalls = [];
     const entries = [
       {
         id: 1,
@@ -46,6 +47,7 @@ test("collaboration manager groups managed collaborators by article", async () =
         getCollaborations: () => entries,
         respond: async (...args) => respondCalls.push(args),
         revoke: async (...args) => revokeCalls.push(args),
+        setHistoryView: async (...args) => historyViewCalls.push(args),
       },
       t: (key) => key,
     };
@@ -54,9 +56,14 @@ test("collaboration manager groups managed collaborators by article", async () =
     modal.onOpen();
     await new Promise((resolve) => setImmediate(resolve));
 
-    assert.equal(modal.contentEl.querySelectorAll(".oss-sidebar-collab-row").length, 2);
+    // 收到的邀请 1 行 + 文件行 1 行 + 每个协作者 1 行（该文件有 2 位协作者）
+    assert.equal(modal.contentEl.querySelectorAll(".oss-sidebar-collab-row").length, 4);
     assert.equal(modal.contentEl.querySelectorAll(".oss-collab-view").length, 1);
     assert.equal(modal.contentEl.querySelectorAll(".oss-collab-cancel-article").length, 1);
+    // 两个大类标题
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-section-title").length, 2);
+    // 每位协作者一行，行内带历史权限开关
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-collaborator-row").length, 2);
     modal.contentEl.querySelectorAll(".oss-collab-accept")[0].click();
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(respondCalls, [[entries[0], true]]);

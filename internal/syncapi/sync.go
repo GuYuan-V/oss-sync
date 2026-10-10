@@ -91,6 +91,7 @@ func (h *Handler) Register(r *gin.Engine) {
 		collab.POST("", h.CollabInvite)
 		collab.POST("/:collab_id/respond", h.CollabRespond)
 		collab.POST("/:collab_id/revoke", h.CollabRevoke)
+		collab.POST("/:collab_id/history-view", h.CollabSetHistoryView)
 		collab.POST("/:collab_id/leave", h.CollabLeave)
 		collab.GET("/files/:file_id/content", h.CollabContent)
 		collab.POST("/files/:file_id/upload", h.CollabUpload)

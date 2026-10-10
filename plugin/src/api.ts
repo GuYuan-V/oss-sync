@@ -171,6 +171,8 @@ export interface HistoryDetail extends HistoryEntry {
   content?: string;
   diff: string[];
   is_text: boolean;
+  /** 本次 diff 的对比基准，由服务端回显 */
+  mode: string;
 }
 
 /** 回收站条目 */
@@ -196,6 +198,8 @@ export interface CollabEntry {
   collaborator_id: number;
   collaborator_username: string;
   status: string;
+  /** 协作者是否可读该文件的修改记录，仅 owner 或 manager 可改 */
+  allow_history_view: boolean;
   created_at: string;
 }
 
@@ -709,11 +713,13 @@ export class OSSApiClient {
   async collabInvite(
     vaultID: string,
     filePath: string,
-    username: string
+    username: string,
+    allowHistoryView = false
   ): Promise<CollabEntry> {
     return this.doRequest<CollabEntry>("POST", `/api/vaults/${encodeURIComponent(vaultID)}/collaborations`, {
       file_path: filePath,
       username,
+      allow_history_view: allowHistoryView,
     });
   }
 
@@ -731,6 +737,15 @@ export class OSSApiClient {
     return this.doRequest<{ status: string }>(
       "POST",
       `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/${encodeURIComponent(String(collabID))}/revoke`
+    );
+  }
+
+  /** 切换协作者对该文件修改记录的读取权限（owner/manager）*/
+  async collabSetHistoryView(vaultID: string, collabID: number, allow: boolean): Promise<{ status: string }> {
+    return this.doRequest<{ status: string }>(
+      "POST",
+      `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/${encodeURIComponent(String(collabID))}/history-view`,
+      { allow_history_view: allow }
     );
   }
 
