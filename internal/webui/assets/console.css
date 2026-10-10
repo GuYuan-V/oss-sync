@@ -1106,6 +1106,14 @@ body.body--console .console {
   transition: width .12s linear;
 }
 .upload-progress__status { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+/* 文章原始 HTML 沙箱：iframe 独立源执行，样式随主题但脚本不接触父页 */
+.oss-article-sandbox {
+  width: 100%;
+  min-height: 320px;
+  border: 0;
+  background: transparent;
+  color-scheme: normal;
+}
 /* 插件体积：本体与已占分两行，hover 显示口径说明（移动端点击聚焦同样触发） */
 .plugin-size__row { display: flex; gap: 6px; align-items: baseline; white-space: nowrap; }
 .plugin-size__row em { color: var(--muted); font-size: 11px; font-style: normal; }
