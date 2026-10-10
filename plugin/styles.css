@@ -370,55 +370,14 @@
   margin-top: 0;
 }
 
-.oss-manager-modal .oss-collab-drawer-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  background: var(--background-secondary);
-  box-shadow: none;
-  color: var(--text-normal);
-  cursor: pointer;
-  font-size: 10px;
-  line-height: 1;
+/* 协作者行缩进显示在所属文件之下，并用分隔线与相邻行区分 */
+.oss-manager-modal .oss-collab-collaborator-row {
+  padding-left: 22px;
 }
 
-.oss-manager-modal .oss-collab-drawer-toggle:hover {
-  border-color: var(--background-modifier-border-hover);
-  background: var(--background-modifier-hover);
-  color: var(--text-accent);
-}
-
-.oss-manager-modal .oss-collab-article-row.is-expanded .oss-collab-drawer-toggle {
-  color: var(--text-accent);
-}
-
-.oss-manager-modal .oss-collab-article-name {
-  cursor: pointer;
-}
-
-.oss-manager-modal .oss-collab-article-name:hover {
-  color: var(--text-accent);
-  text-decoration: underline;
-}
-
-/* 抽屉：与文件行之间用边框分隔，协作者行整体内缩 */
-.oss-manager-modal .oss-collab-drawer {
-  margin-left: 18px;
-  padding-left: 10px;
-  border-left: 2px solid var(--background-modifier-border);
-}
-
-.oss-manager-modal .oss-collab-drawer-summary {
-  padding-block: 2px 4px;
+.oss-manager-modal .oss-collab-collaborator-row .oss-manager-path {
   color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-ui-small);
 }
 
 .oss-manager-modal .oss-collaborator-history-toggle {
@@ -622,15 +581,14 @@
   grid-template-columns: max-content minmax(0, 1fr) max-content max-content max-content;
 }
 
-/* 文件行 4 列：勾选框、抽屉箭头、文件名、按钮组 */
+/* 文件行 4 列：勾选框、文件名、协作者数、按钮组 */
 .oss-manager-modal .oss-sidebar-collab-row.oss-collab-article-row {
-  grid-template-columns: max-content max-content minmax(0, 1fr) max-content;
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
 }
 
-/* 抽屉内协作者行 3 列：用户名、状态、撤销 */
-.oss-manager-modal .oss-collab-drawer .oss-sidebar-collab-row {
+/* 平铺的协作者行 3 列：用户名、状态、撤销 */
+.oss-manager-modal .oss-sidebar-collab-row.oss-collab-collaborator-row {
   grid-template-columns: minmax(0, 1fr) max-content max-content;
-  padding-block: 4px;
 }
 
 .oss-manager-modal .oss-collab-article-bulk-actions {

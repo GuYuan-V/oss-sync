@@ -3,11 +3,9 @@ import type { CollabEntry } from "./api";
 import { CollabCollaboratorsModal } from "./collab-collaborators-modal";
 import type OSSPlugin from "./main";
 
-/** 协作管理弹窗；分「我发出的邀请」与「我收到的邀请」两个大类，协作者按文件折叠在抽屉内 */
+/** 协作管理弹窗；分「我发出的邀请」与「我收到的邀请」两个大类，协作者平铺在所属文件下方 */
 export class CollabManagerModal extends Modal {
   private readonly selectedArticleKeys = new Set<string>();
-  /** 当前展开抽屉的文件键，同时只展开一个 */
-  private expandedArticleKey: string | null = null;
 
   constructor(app: App, private readonly plugin: OSSPlugin) {
     super(app);
@@ -95,14 +93,11 @@ export class CollabManagerModal extends Modal {
     cancelSelected.addEventListener("click", () => void this.cancelArticles(byArticle));
   }
 
-  /** 渲染单个文件；箭头与文件名点击切换协作者抽屉，抽屉内逐协作者列出并可撤销 */
+  /** 渲染单个文件及其协作者；协作者直接平铺在文件行下方，各自带撤销按钮 */
   private renderArticle(key: string, entries: readonly CollabEntry[]): void {
     const article = entries[0];
     if (!article) return;
-    const expanded = this.expandedArticleKey === key;
-    const row = this.contentEl.createDiv({
-      cls: `oss-sidebar-collab-row oss-collab-article-row${expanded ? " is-expanded" : ""}`,
-    });
+    const row = this.contentEl.createDiv({ cls: "oss-sidebar-collab-row oss-collab-article-row" });
     const label = row.createEl("label", { cls: "oss-manager-select" });
     const checkbox = label.createEl("input", { attr: { type: "checkbox" } });
     checkbox.checked = this.selectedArticleKeys.has(key);
@@ -111,13 +106,8 @@ export class CollabManagerModal extends Modal {
       else this.selectedArticleKeys.delete(key);
       this.renderArticles();
     });
-    const toggle = row.createEl("button", { cls: "oss-collab-drawer-toggle" });
-    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
-    toggle.setText(expanded ? "▾" : "▸");
-    toggle.addEventListener("click", () => this.toggleDrawer(key));
-    const name = row.createEl("span", { cls: "oss-manager-path oss-collab-article-name" });
-    name.setText(article.file_path);
-    name.addEventListener("click", () => this.toggleDrawer(key));
+    label.createEl("span", { text: article.file_path });
+    row.createDiv({ cls: "oss-manager-meta", text: this.plugin.t("collab.collaboratorCount", { count: entries.length }) });
     const actions = row.createDiv({ cls: "oss-sidebar-actions" });
     actions.createEl("button", {
       cls: "oss-collab-view",
@@ -127,32 +117,19 @@ export class CollabManagerModal extends Modal {
       cls: "oss-collab-cancel-article mod-warning",
       text: this.plugin.t("collab.cancelArticle"),
     }).addEventListener("click", () => void this.cancelArticle(entries));
-    if (expanded) this.renderCollaboratorDrawer(entries);
+    for (const entry of entries) this.renderCollaboratorRow(entry);
   }
 
-  /** 切换文件抽屉；同一文件再次点击收起，同时只保留一个展开项 */
-  private toggleDrawer(key: string): void {
-    this.expandedArticleKey = this.expandedArticleKey === key ? null : key;
-    void this.load();
-  }
-
-  /** 协作者抽屉；头部显示协作者数，逐协作者一行并可单独撤销 */
-  private renderCollaboratorDrawer(entries: readonly CollabEntry[]): void {
-    const drawer = this.contentEl.createDiv({ cls: "oss-collab-drawer" });
-    drawer.createDiv({
-      cls: "oss-collab-drawer-summary",
-      text: this.plugin.t("collab.collaboratorCount", { count: entries.length }),
-    });
-    for (const entry of entries) {
-      const row = drawer.createDiv({ cls: "oss-sidebar-collab-row oss-collab-collaborator-row" });
-      row.createDiv({ cls: "oss-manager-path", text: entry.collaborator_username });
-      row.createDiv({ cls: "oss-manager-meta", text: entry.status });
-      row.createEl("button", { cls: "oss-collab-revoke mod-warning", text: this.plugin.t("collab.revoke") })
-        .addEventListener("click", async () => {
-          await this.plugin.collabManager.revoke(entry);
-          await this.load();
-        });
-    }
+  /** 渲染单个协作者行；用户名、状态与撤销按钮同行，缩进显示在所属文件之下 */
+  private renderCollaboratorRow(entry: CollabEntry): void {
+    const row = this.contentEl.createDiv({ cls: "oss-sidebar-collab-row oss-collab-collaborator-row" });
+    row.createDiv({ cls: "oss-manager-path", text: entry.collaborator_username });
+    row.createDiv({ cls: "oss-manager-meta", text: entry.status });
+    row.createEl("button", { cls: "oss-collab-revoke mod-warning", text: this.plugin.t("collab.revoke") })
+      .addEventListener("click", async () => {
+        await this.plugin.collabManager.revoke(entry);
+        await this.load();
+      });
   }
 
   /** 勾选变更后整体重渲染 */
