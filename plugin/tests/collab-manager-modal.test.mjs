@@ -56,14 +56,28 @@ test("collaboration manager groups managed collaborators by article", async () =
     modal.onOpen();
     await new Promise((resolve) => setImmediate(resolve));
 
-    // 收到的邀请 1 行 + 文件行 1 行 + 每个协作者 1 行（该文件有 2 位协作者）
-    assert.equal(modal.contentEl.querySelectorAll(".oss-sidebar-collab-row").length, 4);
+    // 抽屉默认收起：收到的邀请 1 行 + 文件行 1 行，协作者不占行
+    assert.equal(modal.contentEl.querySelectorAll(".oss-sidebar-collab-row").length, 2);
     assert.equal(modal.contentEl.querySelectorAll(".oss-collab-view").length, 1);
     assert.equal(modal.contentEl.querySelectorAll(".oss-collab-cancel-article").length, 1);
     // 两个大类标题
     assert.equal(modal.contentEl.querySelectorAll(".oss-collab-section-title").length, 2);
-    // 每位协作者一行，行内带历史权限开关
-    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-collaborator-row").length, 2);
+    // 折叠态不渲染抽屉
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-drawer").length, 0);
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-drawer-toggle").length, 1);
+
+    // 点击文件名展开抽屉，协作者行出现在带边框分隔的抽屉内
+    modal.contentEl.querySelectorAll(".oss-collab-article-name")[0].click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-drawer").length, 1);
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-drawer .oss-sidebar-collab-row").length, 2);
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-drawer .oss-collab-revoke").length, 2);
+
+    // 再次点击收起
+    modal.contentEl.querySelectorAll(".oss-collab-article-name")[0].click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-drawer").length, 0);
+
     modal.contentEl.querySelectorAll(".oss-collab-accept")[0].click();
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(respondCalls, [[entries[0], true]]);

@@ -1,12 +1,13 @@
-import { App, Modal, Notice, Setting } from "obsidian";
+import { App, Modal } from "obsidian";
 import type { CollabEntry } from "./api";
 import { CollabCollaboratorsModal } from "./collab-collaborators-modal";
-import { localizeError } from "./localized-error";
 import type OSSPlugin from "./main";
 
-/** 协作管理弹窗；分「我发出的邀请」与「我收到的邀请」两个大类，互不混排 */
+/** 协作管理弹窗；分「我发出的邀请」与「我收到的邀请」两个大类，协作者按文件折叠在抽屉内 */
 export class CollabManagerModal extends Modal {
   private readonly selectedArticleKeys = new Set<string>();
+  /** 当前展开抽屉的文件键，同时只展开一个 */
+  private expandedArticleKey: string | null = null;
 
   constructor(app: App, private readonly plugin: OSSPlugin) {
     super(app);
@@ -94,11 +95,14 @@ export class CollabManagerModal extends Modal {
     cancelSelected.addEventListener("click", () => void this.cancelArticles(byArticle));
   }
 
-  /** 渲染单个文件及其协作者；勾选状态跨重渲染保留在 selectedArticleKeys 中 */
+  /** 渲染单个文件；箭头与文件名点击切换协作者抽屉，抽屉内逐协作者列出并可撤销 */
   private renderArticle(key: string, entries: readonly CollabEntry[]): void {
     const article = entries[0];
     if (!article) return;
-    const row = this.contentEl.createDiv({ cls: "oss-sidebar-collab-row oss-collab-article-row" });
+    const expanded = this.expandedArticleKey === key;
+    const row = this.contentEl.createDiv({
+      cls: `oss-sidebar-collab-row oss-collab-article-row${expanded ? " is-expanded" : ""}`,
+    });
     const label = row.createEl("label", { cls: "oss-manager-select" });
     const checkbox = label.createEl("input", { attr: { type: "checkbox" } });
     checkbox.checked = this.selectedArticleKeys.has(key);
@@ -107,7 +111,13 @@ export class CollabManagerModal extends Modal {
       else this.selectedArticleKeys.delete(key);
       this.renderArticles();
     });
-    label.createEl("span", { text: article.file_path });
+    const toggle = row.createEl("button", { cls: "oss-collab-drawer-toggle" });
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    toggle.setText(expanded ? "▾" : "▸");
+    toggle.addEventListener("click", () => this.toggleDrawer(key));
+    const name = row.createEl("span", { cls: "oss-manager-path oss-collab-article-name" });
+    name.setText(article.file_path);
+    name.addEventListener("click", () => this.toggleDrawer(key));
     row.createDiv({ cls: "oss-manager-meta", text: this.plugin.t("collab.collaboratorCount", { count: entries.length }) });
     const actions = row.createDiv({ cls: "oss-sidebar-actions" });
     actions.createEl("button", {
@@ -118,33 +128,27 @@ export class CollabManagerModal extends Modal {
       cls: "oss-collab-cancel-article mod-warning",
       text: this.plugin.t("collab.cancelArticle"),
     }).addEventListener("click", () => void this.cancelArticle(entries));
-    for (const entry of entries) this.renderCollaboratorRow(entry);
+    if (expanded) this.renderCollaboratorDrawer(entries);
   }
 
-  /** 渲染单个协作者行，含是否允许其查看该文件修改记录的开关 */
-  private renderCollaboratorRow(entry: CollabEntry): void {
-    const row = this.contentEl.createDiv({ cls: "oss-sidebar-collab-row oss-collab-collaborator-row" });
-    row.createDiv({
-      cls: "oss-manager-meta",
-      text: this.plugin.t("collab.incomingMeta", { name: entry.collaborator_username, status: entry.status }),
-    });
-    new Setting(row)
-      .setName(this.plugin.t("collab.allowHistoryView"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(entry.allow_history_view)
-          .setDisabled(entry.status !== "accepted")
-          .onChange((value) => void this.setHistoryView(entry, value))
-      );
+  /** 切换文件抽屉；同一文件再次点击收起，同时只保留一个展开项 */
+  private toggleDrawer(key: string): void {
+    this.expandedArticleKey = this.expandedArticleKey === key ? null : key;
+    void this.load();
   }
 
-  /** 切换协作者的历史查看权限；失败时保持原值并提示 */
-  private async setHistoryView(entry: CollabEntry, allow: boolean): Promise<void> {
-    try {
-      await this.plugin.collabManager.setHistoryView(entry, allow);
-    } catch (error) {
-      new Notice(this.plugin.t("collab.historyViewFailed", { error: errorMessage(error, this.plugin) }));
-      await this.load();
+  /** 协作者抽屉；带边框分隔，逐协作者一行并可单独撤销 */
+  private renderCollaboratorDrawer(entries: readonly CollabEntry[]): void {
+    const drawer = this.contentEl.createDiv({ cls: "oss-collab-drawer" });
+    for (const entry of entries) {
+      const row = drawer.createDiv({ cls: "oss-sidebar-collab-row oss-collab-collaborator-row" });
+      row.createDiv({ cls: "oss-manager-path", text: entry.collaborator_username });
+      row.createDiv({ cls: "oss-manager-meta", text: entry.status });
+      row.createEl("button", { cls: "oss-collab-revoke mod-warning", text: this.plugin.t("collab.revoke") })
+        .addEventListener("click", async () => {
+          await this.plugin.collabManager.revoke(entry);
+          await this.load();
+        });
     }
   }
 
@@ -179,9 +183,4 @@ export class CollabManagerModal extends Modal {
     await this.plugin.collabManager.leave(entry);
     await this.load();
   }
-}
-
-/** 把错误本地化为用户可读文本 */
-function errorMessage(error: unknown, plugin: OSSPlugin): string {
-  return localizeError(error, plugin.t.bind(plugin), plugin.t("common.unknownError"));
 }

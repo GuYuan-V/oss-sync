@@ -370,8 +370,76 @@
   margin-top: 0;
 }
 
-.oss-manager-modal .oss-collab-collaborator-row {
-  padding-left: 16px;
+.oss-manager-modal .oss-collab-drawer-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1;
+}
+
+.oss-manager-modal .oss-collab-drawer-toggle:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.oss-manager-modal .oss-collab-article-name {
+  cursor: pointer;
+}
+
+.oss-manager-modal .oss-collab-article-name:hover {
+  color: var(--text-accent);
+  text-decoration: underline;
+}
+
+/* 抽屉：与文件行之间用边框分隔，协作者行整体内缩 */
+.oss-manager-modal .oss-collab-drawer {
+  margin-left: 18px;
+  padding-left: 10px;
+  border-left: 2px solid var(--background-modifier-border);
+}
+
+/* 抽屉内协作者行：用户名、状态、撤销按钮 */
+.oss-manager-modal .oss-collab-drawer .oss-sidebar-collab-row {
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
+  padding-block: 4px;
+}
+
+/* 文件行：勾选框、箭头、文件名、计数、按钮 */
+.oss-manager-modal .oss-collab-article-row {
+  grid-template-columns: max-content max-content minmax(0, 1fr) max-content max-content;
+}
+
+/* 协作者弹窗中的用户行：勾选框、用户名、状态、历史开关、撤销按钮同行 */
+.oss-manager-modal .oss-collaborator-row {
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content max-content;
+}
+
+.oss-manager-modal .oss-collaborator-history-toggle {
+  min-width: max-content;
+}
+
+/* Setting 在行内渲染时去掉自身的上下间距 */
+.oss-manager-modal .oss-collaborator-history-toggle .setting-item {
+  padding: 0;
+  border: none;
+}
+
+.oss-manager-modal .oss-collaborator-history-toggle .setting-item-info {
+  display: none;
+}
+
+.oss-manager-modal .oss-collaborator-history-toggle .setting-item-control {
+  justify-content: flex-end;
+  padding: 0;
 }
 
 .oss-manager-modal .oss-sidebar-share,
