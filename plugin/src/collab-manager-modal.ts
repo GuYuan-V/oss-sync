@@ -118,7 +118,6 @@ export class CollabManagerModal extends Modal {
     const name = row.createEl("span", { cls: "oss-manager-path oss-collab-article-name" });
     name.setText(article.file_path);
     name.addEventListener("click", () => this.toggleDrawer(key));
-    row.createDiv({ cls: "oss-manager-meta", text: this.plugin.t("collab.collaboratorCount", { count: entries.length }) });
     const actions = row.createDiv({ cls: "oss-sidebar-actions" });
     actions.createEl("button", {
       cls: "oss-collab-view",
@@ -137,9 +136,13 @@ export class CollabManagerModal extends Modal {
     void this.load();
   }
 
-  /** 协作者抽屉；带边框分隔，逐协作者一行并可单独撤销 */
+  /** 协作者抽屉；头部显示协作者数，逐协作者一行并可单独撤销 */
   private renderCollaboratorDrawer(entries: readonly CollabEntry[]): void {
     const drawer = this.contentEl.createDiv({ cls: "oss-collab-drawer" });
+    drawer.createDiv({
+      cls: "oss-collab-drawer-summary",
+      text: this.plugin.t("collab.collaboratorCount", { count: entries.length }),
+    });
     for (const entry of entries) {
       const row = drawer.createDiv({ cls: "oss-sidebar-collab-row oss-collab-collaborator-row" });
       row.createDiv({ cls: "oss-manager-path", text: entry.collaborator_username });
