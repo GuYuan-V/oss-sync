@@ -300,7 +300,7 @@ func validateHooks(hooks []HookSpec, dynamic bool) error {
 
 func validHookName(name string) bool {
 	switch name {
-	case "blog.content", "markdown.content", "theme.render", "blog.data", "admin.page", "editor.command", "comment.content":
+	case "blog.content", "markdown.content", "theme.render", "blog.data", "blog.home_posts", "admin.page", "editor.command", "comment.content":
 		return true
 	default:
 		return false

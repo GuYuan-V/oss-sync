@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -68,6 +70,12 @@ func startExecutablePlugin(
 		return nil, fmt.Errorf("resolve executable plugin directory: %w", err)
 	}
 	commandPath := filepath.Join(dir, filepath.FromSlash(entrypoint))
+	// Windows 上无后缀的可执行文件找不到，自动补 .exe
+	if runtime.GOOS == "windows" && !strings.HasSuffix(commandPath, ".exe") {
+		if _, err := os.Stat(commandPath + ".exe"); err == nil {
+			commandPath += ".exe"
+		}
+	}
 	cmd := exec.Command(commandPath, manifest.Args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),

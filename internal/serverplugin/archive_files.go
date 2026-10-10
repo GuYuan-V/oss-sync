@@ -7,8 +7,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 )
 
+// writePackage 把插件包写入暂存目录后整体改名为插件目录
+// 目标目录已存在返回 ErrPluginExists；失败时清理暂存目录
+// Windows 下为无后缀的可执行入口额外写入 .exe 副本
 func writePackage(root string, packageData Package) (target string, retErr error) {
 	if err := os.MkdirAll(root, 0o750); err != nil {
 		return "", fmt.Errorf("create plugin root: %w", err)
@@ -37,6 +42,14 @@ func writePackage(root string, packageData Package) (target string, retErr error
 		if err := os.WriteFile(path, content, mode); err != nil {
 			return "", fmt.Errorf("write plugin file: %w", err)
 		}
+		// Windows 需要 .exe 后缀才能启动可执行文件，为无后缀入口写入别名
+		if runtime.GOOS == "windows" && manifestRuntime(packageData.Manifest) == RuntimeExecutable {
+			if entrypoint, err := manifestEntrypoint(packageData.Manifest); err == nil && entrypoint == name && !strings.HasSuffix(name, ".exe") {
+				if err := os.WriteFile(path+".exe", content, 0o700); err != nil {
+					return "", fmt.Errorf("write plugin executable alias: %w", err)
+				}
+			}
+		}
 	}
 	target = filepath.Join(root, packageData.Manifest.ID)
 	if _, err := os.Stat(target); err == nil {
@@ -51,20 +64,31 @@ func writePackage(root string, packageData Package) (target string, retErr error
 	return target, nil
 }
 
+// executableEntrypoint 返回可执行运行时的入口文件名
+// WASM 或无入口时返回空串
 func executableEntrypoint(manifest Manifest) string {
 	entrypoint, _ := manifestEntrypoint(manifest)
 	return entrypoint
 }
 
+// manifestEntrypointFile 判断文件是否为运行时入口
+// Windows 上无后缀入口与补 .exe 后的副本都算入口；WASM 以 executableEntrypoint 为准
 func manifestEntrypointFile(manifest Manifest, name string) bool {
 	for _, entrypoint := range manifest.Entrypoints {
 		if entrypoint == name {
+			return true
+		}
+		// Windows 上无后缀的可执行文件会自动补 .exe，写入时也要匹配
+		if runtime.GOOS == "windows" && !strings.HasSuffix(entrypoint, ".exe") && entrypoint+".exe" == name {
 			return true
 		}
 	}
 	return manifestRuntime(manifest) == RuntimeWASM && name == executableEntrypoint(manifest)
 }
 
+// readInstalledPackage 从磁盘读取已安装插件包并重算哈希
+// 拒绝符号链接与越界路径，逐文件受大小上限约束，文件数与总量超限报错
+// WASM 的载荷哈希取 wasm 内容哈希，其余运行时取全量文件哈希
 func readInstalledPackage(root, id string) (Package, error) {
 	if !pluginIDPattern.MatchString(id) {
 		return Package{}, fmt.Errorf("%w: invalid plugin id", ErrPluginNotFound)
@@ -161,6 +185,8 @@ func readInstalledPackage(root, id string) (Package, error) {
 	}, nil
 }
 
+// readInstalledFile 读取单个插件文件
+// 仅接受不超过 maxBytes 的常规文件，符号链接一律拒绝
 func readInstalledFile(path string, maxBytes int64) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {

@@ -86,6 +86,46 @@ func (m *Manager) ApplyHook(ctx context.Context, hook string, payload blog.Plugi
 	return content, nil
 }
 
+// ApplyHomePostsHook 过滤或重排博客首页文章列表
+// payload 含 vault_id 与 posts 数组，插件返回修改后的 posts（或原样返回表示不过滤）
+func (m *Manager) ApplyHomePostsHook(ctx context.Context, payload blog.HomePostsHookPayload) ([]blog.HomePost, error) {
+	registrations := m.matchingHooks("blog.home_posts")
+	if len(registrations) == 0 {
+		return payload.Posts, nil
+	}
+	current := payload.Posts
+	for _, registration := range registrations {
+		response, err := m.invokeCallback(ctx, registration.PluginID, hookCallback(registration.Value.Hooks, "blog.home_posts"), PluginRequest{
+			Method: "HOOK",
+			Path:   "/hooks/blog.home_posts",
+			Hook:   "blog.home_posts",
+			Payload: map[string]any{
+				"vault_id": payload.VaultID,
+				"posts":    current,
+				"query":    payload.Query,
+			},
+			Settings: pluginSettings(m.db, payload.VaultID, registration.PluginID),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("plugin %s hook blog.home_posts: %w", registration.PluginID, err)
+		}
+		hookSpec, _ := m.registeredHook(registration.PluginID, "blog.home_posts")
+		if hookSpec.Kind == "action" {
+			continue
+		}
+		body, err := decodePluginBody(response)
+		if err != nil {
+			return nil, err
+		}
+		var next []blog.HomePost
+		if err := json.Unmarshal(body, &next); err != nil {
+			return nil, fmt.Errorf("decode plugin %s blog.home_posts result: %w", registration.PluginID, err)
+		}
+		current = next
+	}
+	return current, nil
+}
+
 // ApplyHookData 收集 blog.data 钩子的展示数据，以插件 ID 为键返回。
 // 只要插件注册了该钩子就写入对应键（失败或空则为空对象），保证模板对已装插件的字段访问不触发整页回退
 func (m *Manager) ApplyHookData(ctx context.Context, hook string, payload blog.PluginDataPayload) (map[string]any, error) {
@@ -156,6 +196,7 @@ func (m *Manager) RenderAdminPage(ctx context.Context, pluginID, slug string) (s
 	return "", fmt.Errorf("plugin %s admin page %s is not registered", pluginID, slug)
 }
 
+// pluginSettings 读取插件在某 vault 下的设置，缺失时返回空配置
 func pluginSettings(db *gorm.DB, vaultID, pluginID string) map[string]any {
 	settings := map[string]any{}
 	if vaultID == "" {
@@ -168,6 +209,7 @@ func pluginSettings(db *gorm.DB, vaultID, pluginID string) map[string]any {
 	return settings
 }
 
+// hookResponse 把任意值包装为 200 状态、Base64 编码的插件响应
 func hookResponse(value any) (PluginResponse, error) {
 	encoded, err := json.Marshal(value)
 	if err != nil {
