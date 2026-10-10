@@ -15,10 +15,13 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
+// collaborationUserTopic 返回账号级协作事件的订阅主题，按用户 ID 隔离
 func collaborationUserTopic(userID uint) string {
 	return "user:" + strconv.FormatUint(uint64(userID), 10)
 }
 
+// publishCollaborationEvent 广播协作事件，同时按用户主题与其所属仓库主题投递，
+// invited 事件在仓库主题上降级为 changed 以兼容旧客户端
 func (h *Handler) publishCollaborationEvent(event collaboration.Event, userIDs []uint) {
 	h.broker.Publish(event)
 	seenUsers := make(map[uint]struct{}, len(userIDs))
@@ -48,6 +51,8 @@ func (h *Handler) publishCollaborationEvent(event collaboration.Event, userIDs [
 	}
 }
 
+// collaborationEventUsers 返回参与该文件协作的所有用户，包含所有者与协作者，
+// 查询失败时返回 nil
 func (h *Handler) collaborationEventUsers(vaultID string, fileID uint) []uint {
 	var rows []models.Collaboration
 	if err := h.DB.Where("vault_id = ? AND file_id = ?", vaultID, fileID).Find(&rows).Error; err != nil {
@@ -60,6 +65,8 @@ func (h *Handler) collaborationEventUsers(vaultID string, fileID uint) []uint {
 	return userIDs
 }
 
+// CollabAccountSSE 以 SSE 长连接推送账号级协作事件，
+// 鉴权失败时由内部处理器直接返回状态码，连接期每 20 秒发送一次心跳
 func (h *Handler) CollabAccountSSE(c *gin.Context) {
 	user, ok := h.collabEventUser(c)
 	if !ok {
@@ -94,6 +101,8 @@ func (h *Handler) CollabAccountSSE(c *gin.Context) {
 	}
 }
 
+// CollabAccountPoll 长轮询账号级协作事件版本，wait 超出 0 到 30 秒范围时收敛为 30 秒，
+// after 非数字或为负数时返回 400
 func (h *Handler) CollabAccountPoll(c *gin.Context) {
 	user, _, ok := h.requireCollaborationDevice(c)
 	if !ok {
@@ -113,6 +122,9 @@ func (h *Handler) CollabAccountPoll(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"changed": changed, "version": version})
 }
 
+// collabEventUser 解析 SSE 请求的凭据，查询参数 token 仅允许出现在 TLS、
+// https 转发或本机回环链路，其余情况直接 403；
+// 依次校验身份令牌与设备审批状态，任一失败直接写响应并返回 false
 func (h *Handler) collabEventUser(c *gin.Context) (*models.User, bool) {
 	token := ""
 	if queryToken := c.Query("token"); queryToken != "" {
@@ -147,6 +159,8 @@ func (h *Handler) collabEventUser(c *gin.Context) (*models.User, bool) {
 	return identity.User, true
 }
 
+// requireCollaborationDevice 从已认证上下文取用户与设备 ID，
+// 并校验设备审批状态，失败时直接写响应并返回 false
 func (h *Handler) requireCollaborationDevice(c *gin.Context) (*models.User, string, bool) {
 	user, ok := auth.RequireUser(c)
 	if !ok {

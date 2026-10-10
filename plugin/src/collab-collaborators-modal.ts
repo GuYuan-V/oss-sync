@@ -2,6 +2,7 @@ import { App, Modal } from "obsidian";
 import type { CollabEntry } from "./api";
 import type OSSPlugin from "./main";
 
+/** 单文件协作者弹窗；支持逐条撤销与按勾选批量撤销 */
 export class CollabCollaboratorsModal extends Modal {
   private readonly selectedIDs = new Set<number>();
 
@@ -19,6 +20,7 @@ export class CollabCollaboratorsModal extends Modal {
     this.contentEl.empty();
   }
 
+  /** 渲染协作者列表与批量撤销按钮；空列表时只渲染按钮 */
   private render(): void {
     this.contentEl.empty();
     const actions = this.contentEl.createDiv({ cls: "oss-sidebar-actions oss-collaborators-actions" });
@@ -31,6 +33,7 @@ export class CollabCollaboratorsModal extends Modal {
     for (const entry of this.entries) this.renderEntry(entry, revokeSelected);
   }
 
+  /** 渲染单条协作者；勾选变更只就地刷新批量按钮，不重渲染整份列表 */
   private renderEntry(entry: CollabEntry, revokeSelected: HTMLButtonElement): void {
     const row = this.contentEl.createDiv({ cls: "oss-sidebar-collab-row" });
     const label = row.createEl("label", { cls: "oss-manager-select" });
@@ -48,11 +51,13 @@ export class CollabCollaboratorsModal extends Modal {
       .addEventListener("click", () => void this.revoke(entry));
   }
 
+  /** 撤销单条协作者 */
   private async revoke(entry: CollabEntry): Promise<void> {
     await this.plugin.collabManager.revoke(entry);
     this.close();
   }
 
+  /** 撤销勾选中的协作者 */
   private async revokeSelected(): Promise<void> {
     const selected = this.entries.filter((entry) => this.selectedIDs.has(entry.id));
     await Promise.all(selected.map((entry) => this.plugin.collabManager.revoke(entry)));

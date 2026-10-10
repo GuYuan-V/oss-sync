@@ -12,11 +12,15 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
+// selectedConsoleTheme 返回当前用户生效的服务器网页主题名
+// 读取失败或主题已不存在时回退为内置主题
 func (h *Handler) selectedConsoleTheme(userID uint) string {
 	name, _ := h.selectedConsoleThemeState(userID)
 	return name
 }
 
+// selectedConsoleThemeState 返回生效主题名与失效的已保存主题名
+// 第二个返回值非空表示用户此前选择的主题已不可用，供页面提示回退原因
 func (h *Handler) selectedConsoleThemeState(userID uint) (string, string) {
 	var setting models.UserSetting
 	if err := h.DB.Where("user_id = ?", userID).First(&setting).Error; err != nil {
@@ -32,6 +36,8 @@ func (h *Handler) selectedConsoleThemeState(userID uint) (string, string) {
 	return name, ""
 }
 
+// selectedWebLanguage 返回当前用户的网页界面语言
+// 用户设置缺失或取值不是 en 时一律回退为中文
 func (h *Handler) selectedWebLanguage(userID uint) string {
 	var setting models.UserSetting
 	if err := h.DB.Where("user_id = ?", userID).First(&setting).Error; err != nil || setting.WebLanguage != "en" {
@@ -40,6 +46,9 @@ func (h *Handler) selectedWebLanguage(userID uint) string {
 	return "en"
 }
 
+// saveConsoleTheme 保存用户的服务器网页主题：POST /dashboard/account/theme
+// 主题名必须来自已启用插件提供的主题，或存在于数据目录；插件管理器缺失时只校验数据目录
+// 校验或写库失败时重定向回个人中心并带上错误
 func (h *Handler) saveConsoleTheme(c *gin.Context) {
 	user := h.webUser(c)
 	name := strings.TrimSpace(c.PostForm("console_theme_name"))
@@ -66,6 +75,9 @@ func (h *Handler) saveConsoleTheme(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/account?theme_saved=1#console-theme")
 }
 
+// consoleThemeAsset 提供服务器主题的静态资源：GET /ui/themes/:theme/*filepath
+// 路径必须解析到该主题目录内，越界或主题不存在时返回 404
+// CSS 文件显式声明 Content-Type，并始终禁止 MIME 嗅探
 func (h *Handler) consoleThemeAsset(c *gin.Context) {
 	name := c.Param("theme")
 	rel := strings.TrimPrefix(c.Param("filepath"), "/")

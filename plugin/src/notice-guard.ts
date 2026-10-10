@@ -9,7 +9,7 @@ const DEFAULT_COOLDOWN_MS = 30_000;
 export class NoticeGuard {
   private lastShownAt = new Map<string, number>();
 
-  /** 返回 true 表示允许弹出，并在冷却期内抑制同 key 的后续通知 */
+  /** 同一 key 在 30 秒冷却期内只放行一次，放行时记录时间戳 */
   shouldShow(key: string, now: number = Date.now()): boolean {
     const previous = this.lastShownAt.get(key);
     if (previous !== undefined && now - previous < DEFAULT_COOLDOWN_MS) return false;

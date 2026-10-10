@@ -8,8 +8,11 @@ import (
 	"strings"
 )
 
+// executablePlatformPattern 匹配可执行插件的平台标识，形如 linux-amd64
 var executablePlatformPattern = regexp.MustCompile(`^[a-z0-9]+-[a-z0-9]+$`)
 
+// validateRuntime 按运行时校验 manifest 的入口、参数与平台约束
+// WASM 不允许声明入口与参数；可执行运行时入口数 1..16、参数不超过 32 个且单个不超过 1024 字节
 func validateRuntime(manifest Manifest) error {
 	switch manifestRuntime(manifest) {
 	case RuntimeWASM:
@@ -42,6 +45,8 @@ func validateRuntime(manifest Manifest) error {
 	return nil
 }
 
+// validPluginFilePath 判断是否为规范化的包内相对路径
+// 拒绝绝对路径、盘符、反斜杠、空字节与含 .. 的逃逸路径
 func validPluginFilePath(name string) bool {
 	return name != "" &&
 		!strings.Contains(name, "\\") &&

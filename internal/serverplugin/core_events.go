@@ -2,11 +2,14 @@ package serverplugin
 
 import "strings"
 
+// coreEvent 是核心 API 请求在插件钩子体系中的前后事件名
 type coreEvent struct {
 	Before string
 	After  string
 }
 
+// coreRequestEvent 将核心 API 的方法与路径映射为一对前后事件
+// 未命中任何规则时返回零值，表示该请求不触发插件钩子
 func coreRequestEvent(method, requestPath string) coreEvent {
 	switch {
 	case requestPath == "/api/auth/register" && method == "POST":
@@ -38,6 +41,8 @@ func coreRequestEvent(method, requestPath string) coreEvent {
 	}
 }
 
+// mutationEvent 按 HTTP 方法拼接某领域的增删改事件
+// GET、HEAD 等只读方法返回零值
 func mutationEvent(method, domain string) coreEvent {
 	switch method {
 	case "POST":

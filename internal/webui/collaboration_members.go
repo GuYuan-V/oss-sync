@@ -13,17 +13,20 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
+// collaborationArticleRow 是一条已接受协作授权的文章条目
 type collaborationArticleRow struct {
 	CollaborationID uint
 	Path            string
 }
 
+// collaborationMemberRow 汇总单个协作者的授权文章，文章按路径排序
 type collaborationMemberRow struct {
 	UserID   uint
 	Username string
 	Articles []collaborationArticleRow
 }
 
+// membersData 是仓库协作成员页的显示数据
 type membersData struct {
 	VaultID   string
 	VaultName string
@@ -33,6 +36,8 @@ type membersData struct {
 	Saved     bool
 }
 
+// membersPage 渲染仓库协作成员页：GET /dashboard/vaults/:vault_id/members
+// 只列出状态为已接受的协作授权，成员按用户名排序；协作者或文章记录查询失败返回 500
 func (h *Handler) membersPage(c *gin.Context) {
 	vault, role, ok := h.resolveVaultPage(c)
 	if !ok {
@@ -109,6 +114,9 @@ func (h *Handler) membersPage(c *gin.Context) {
 	h.renderVault(c, ld, "vault-members", h.t(c, "page.vault_members", vault.Name), d)
 }
 
+// revokeMemberCollaborations 取消协作者的授权：POST /dashboard/vaults/:vault_id/members/:user_id/collaborations/revoke
+// 表单 all=1 时取消该协作者在此仓库的全部已接受授权，否则只取消勾选的 collaboration_ids
+// 未勾选任何文章或写库失败时通过 query 参数回传错误
 func (h *Handler) revokeMemberCollaborations(c *gin.Context) {
 	vault, role, ok := h.resolveVaultPage(c)
 	if !ok {

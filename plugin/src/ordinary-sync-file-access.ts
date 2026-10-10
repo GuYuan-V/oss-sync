@@ -3,6 +3,7 @@ import type { Vault } from "obsidian";
 import { normalizePath } from "./baseline.js";
 import type { ExpectedLocalState } from "./ordinary-sync-actions.js";
 
+/** 本地读取快照；hash 为 SHA-256 十六进制 */
 export interface LocalReadResult {
   readonly bytes: Uint8Array;
   readonly hash: string;
@@ -10,27 +11,33 @@ export interface LocalReadResult {
   readonly size: number;
 }
 
+/** 新建结果；stale 表示写入前本地已不符合预期，actual 为当前真实状态 */
 export type CreateResult =
   | { readonly kind: "created"; readonly snapshot: LocalReadResult }
   | { readonly kind: "stale"; readonly actual: LocalReadResult | null };
 
+/** 覆盖结果；stale 表示写入前本地已被改动 */
 export type ReplaceResult =
   | { readonly kind: "replaced"; readonly snapshot: LocalReadResult }
   | { readonly kind: "stale"; readonly actual: LocalReadResult | null };
 
+/** 删除结果；目标本不存在时按已删除处理 */
 export type DeleteResult =
   | { readonly kind: "deleted" }
   | { readonly kind: "stale"; readonly actual: LocalReadResult | null };
 
+/** 规范化写入结果；reason 区分目标丢失与内容被改动 */
 export type WriteCanonicalResult =
   | { readonly kind: "written"; readonly snapshot: LocalReadResult }
   | { readonly kind: "stale"; readonly reason: "missing" | "mutated"; readonly actual?: LocalReadResult | null };
 
+/** 保留副本结果；collision 表示同秒级时间戳的副本已存在，需换名重试 */
 export type PreserveSiblingResult =
   | { readonly kind: "preserved"; readonly siblingPath: string; readonly snapshot: LocalReadResult }
   | { readonly kind: "stale"; readonly reason: "missing" | "mutated"; readonly actual?: LocalReadResult | null }
   | { readonly kind: "collision"; readonly siblingPath: string };
 
+/** 生成带 ISO 时间戳的冲突副本路径，保留原扩展名 */
 export function conflictCopyPath(path: string, now: number = Date.now()): string {
   const slash = path.lastIndexOf("/");
   const directory = slash >= 0 ? path.slice(0, slash + 1) : "";
@@ -54,6 +61,7 @@ export class OrdinarySyncFileAccess {
     this.now = now;
   }
 
+  /** 读取文件快照；路径不存在或不是普通文件时返回 null */
   async readExact(path: string): Promise<LocalReadResult | null> {
     const key = normalizePath(path);
     const file = this.vault.getAbstractFileByPath(key);
@@ -72,6 +80,7 @@ export class OrdinarySyncFileAccess {
     };
   }
 
+  /** 仅在目标不存在且符合预期时新建；已存在一律视为 stale */
   async create(path: string, expected: ExpectedLocalState, bytes: Uint8Array): Promise<CreateResult> {
     const key = normalizePath(path);
     await this.ensureParentFolders(key);
@@ -90,6 +99,7 @@ export class OrdinarySyncFileAccess {
     return { kind: "created", snapshot };
   }
 
+  /** 覆盖已存在文件；目标缺失或写入前已变动时返回 stale */
   async replace(path: string, expected: ExpectedLocalState, bytes: Uint8Array): Promise<ReplaceResult> {
     const key = normalizePath(path);
     await this.ensureParentFolders(key);
@@ -111,6 +121,7 @@ export class OrdinarySyncFileAccess {
     return { kind: "replaced", snapshot };
   }
 
+  /** 仅在内容符合预期时删除；目标已缺失按已删除处理 */
   async deleteExact(path: string, expected: ExpectedLocalState): Promise<DeleteResult> {
     const key = normalizePath(path);
     const actual = await this.readExact(key);
@@ -129,6 +140,7 @@ export class OrdinarySyncFileAccess {
     return { kind: "deleted" };
   }
 
+  /** 以哈希为预期条件覆盖写入；失败时区分目标丢失与内容被改动 */
   async writeCanonicalIfUnchanged(
     path: string,
     expectedHash: string,
@@ -146,6 +158,7 @@ export class OrdinarySyncFileAccess {
     return { kind: "stale", reason: "mutated", actual };
   }
 
+  /** 把本地正文另存为带时间戳的副本；副本路径已存在时返回 collision */
   async preserveSibling(
     canonicalPath: string,
     expected: ExpectedLocalState,
@@ -175,6 +188,7 @@ export class OrdinarySyncFileAccess {
     return { kind: "preserved", siblingPath, snapshot };
   }
 
+  /** 以哈希为预期条件保留副本 */
   async preserveSiblingIfUnchanged(
     canonicalPath: string,
     expectedHash: string,

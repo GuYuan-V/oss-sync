@@ -14,12 +14,16 @@ import (
 	"github.com/helantianshen/oss-sync/internal/vaultaccess"
 )
 
+// memberRow 是仓库成员列表一行的显示数据
 type memberRow struct {
 	UserID   uint
 	Username string
 	Role     string
 }
 
+// addMember 添加或更新仓库成员角色：POST /dashboard/vaults/:vault_id/members
+// 仅 owner 或 manager 可操作；角色只接受 manager 与 participant
+// 目标用户不存在、目标为所有者或写库失败时通过 query 参数回传错误
 func (h *Handler) addMember(c *gin.Context) {
 	vault, role, ok := h.resolveVaultPage(c)
 	if !ok {
@@ -58,6 +62,8 @@ func (h *Handler) addMember(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/members?saved=1")
 }
 
+// updateMemberRole 修改仓库成员角色：POST /dashboard/vaults/:vault_id/members/:user_id/role
+// 仅 owner 或 manager 可操作，不能修改所有者角色；成员不存在时同样视为失败
 func (h *Handler) updateMemberRole(c *gin.Context) {
 	vault, role, ok := h.resolveVaultPage(c)
 	if !ok {
@@ -86,6 +92,9 @@ func (h *Handler) updateMemberRole(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/members?saved=1")
 }
 
+// removeMember 移除仓库成员：POST /dashboard/vaults/:vault_id/members/:user_id/delete
+// 在事务内先删除该成员的设备-仓库绑定，再删除成员关系；不能移除所有者
+// 任一删除失败或成员不存在时整事务回滚并通过 query 参数回传错误
 func (h *Handler) removeMember(c *gin.Context) {
 	vault, role, ok := h.resolveVaultPage(c)
 	if !ok {

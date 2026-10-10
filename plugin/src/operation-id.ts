@@ -5,16 +5,19 @@
 
 const OPERATION_ID_RE = /^[A-Za-z0-9._-]{1,64}$/;
 
+/** 判断是否满足服务端 operationID 字符集与长度约束 */
 export function isValidOperationID(value: unknown): value is string {
   return typeof value === "string" && OPERATION_ID_RE.test(value);
 }
 
+/** 去掉首尾空白并校验，非法时返回 null */
 export function normalizeOperationID(value: string): string | null {
   const trimmed = value.trim();
   if (!isValidOperationID(trimmed)) return null;
   return trimmed;
 }
 
+/** 生成合法 operationID；crypto.randomUUID 不可用时以时间戳加随机串兜底 */
 export function createOperationID(): string {
   // crypto.randomUUID() 在 Obsidian/Electron 环境始终可用
   try {
@@ -32,6 +35,7 @@ export function createOperationID(): string {
   return "op-" + Math.random().toString(36).slice(2, 10);
 }
 
+/** 复用合法值，否则清洗，仍非法时调用 fallback 生成 */
 export function ensureOperationID(value: unknown, fallback: () => string = createOperationID): string {
   if (isValidOperationID(value)) return value;
   if (typeof value === "string") {
@@ -41,6 +45,7 @@ export function ensureOperationID(value: unknown, fallback: () => string = creat
   return fallback();
 }
 
+/** 服务端 revision 必须是非负安全整数 */
 export function isValidServerRevision(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }

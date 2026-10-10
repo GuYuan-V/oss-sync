@@ -10,6 +10,8 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
+// hostCall 按方法名分发插件发起的宿主服务调用
+// 未支持的方法返回 unsupported host method 错误
 func (m *Manager) hostCall(
 	ctx context.Context,
 	pluginID string,
@@ -66,6 +68,8 @@ func (m *Manager) hostCall(
 	}
 }
 
+// hostModelCreate 在指定模型表插入一行，返回影响行数
+// model 名须通过 validModelName 校验，values 必须是 JSON 对象
 func (m *Manager) hostModelCreate(ctx context.Context, params map[string]json.RawMessage) (map[string]int64, error) {
 	model, err := requiredStringParam(params, "model")
 	if err != nil {
@@ -85,6 +89,8 @@ func (m *Manager) hostModelCreate(ctx context.Context, params map[string]json.Ra
 	return map[string]int64{"rows_affected": result.RowsAffected}, nil
 }
 
+// hostModelUpdate 按 where 条件更新指定模型表，返回影响行数
+// where 与 values 必须是 JSON 对象
 func (m *Manager) hostModelUpdate(ctx context.Context, params map[string]json.RawMessage) (map[string]int64, error) {
 	model, err := requiredStringParam(params, "model")
 	if err != nil {
@@ -108,6 +114,8 @@ func (m *Manager) hostModelUpdate(ctx context.Context, params map[string]json.Ra
 	return map[string]int64{"rows_affected": result.RowsAffected}, nil
 }
 
+// hostModelDelete 按 where 条件删除指定模型表的行，返回影响行数
+// where 必须是 JSON 对象
 func (m *Manager) hostModelDelete(ctx context.Context, params map[string]json.RawMessage) (map[string]int64, error) {
 	model, err := requiredStringParam(params, "model")
 	if err != nil {
@@ -127,6 +135,7 @@ func (m *Manager) hostModelDelete(ctx context.Context, params map[string]json.Ra
 	return map[string]int64{"rows_affected": result.RowsAffected}, nil
 }
 
+// validModelName 限制表名为字母、数字与下划线，防止拼接进 SQL 的标识符越界
 func validModelName(name string) bool {
 	if name == "" {
 		return false
@@ -140,6 +149,8 @@ func validModelName(name string) bool {
 	return true
 }
 
+// hostHook 在宿主侧触发一个具名钩子
+// payload 缺省时按 null 处理
 func (m *Manager) hostHook(ctx context.Context, params map[string]json.RawMessage) (any, error) {
 	name, err := requiredStringParam(params, "name")
 	if err != nil {
@@ -154,6 +165,8 @@ func (m *Manager) hostHook(ctx context.Context, params map[string]json.RawMessag
 	return m.RunHook(ctx, name, payload)
 }
 
+// hostQuery 以参数化方式执行插件提供的查询，返回行集合
+// 参数来自 args 数组，按序绑定
 func (m *Manager) hostQuery(ctx context.Context, params map[string]json.RawMessage) ([]map[string]any, error) {
 	query, err := requiredStringParam(params, "query")
 	if err != nil {
@@ -170,6 +183,7 @@ func (m *Manager) hostQuery(ctx context.Context, params map[string]json.RawMessa
 	return rows, nil
 }
 
+// hostExec 以参数化方式执行插件提供的写语句，返回影响行数
 func (m *Manager) hostExec(ctx context.Context, params map[string]json.RawMessage) (map[string]int64, error) {
 	query, err := requiredStringParam(params, "query")
 	if err != nil {
@@ -186,6 +200,8 @@ func (m *Manager) hostExec(ctx context.Context, params map[string]json.RawMessag
 	return map[string]int64{"rows_affected": result.RowsAffected}, nil
 }
 
+// hostModelList 按模型名分页查询白名单内的表
+// limit 缺省 100，取值须在 1..10000；模型名不在白名单内报错
 func (m *Manager) hostModelList(ctx context.Context, params map[string]json.RawMessage) (any, error) {
 	name, err := requiredStringParam(params, "model")
 	if err != nil {
@@ -235,6 +251,7 @@ func (m *Manager) hostModelList(ctx context.Context, params map[string]json.RawM
 	}
 }
 
+// hostPluginList 返回插件清单，按 ID 升序，仅暴露少量公开字段
 func (m *Manager) hostPluginList(ctx context.Context) ([]map[string]any, error) {
 	rows := make([]models.ServerPlugin, 0)
 	if err := m.db.WithContext(ctx).Order("id asc").Find(&rows).Error; err != nil {
@@ -250,6 +267,8 @@ func (m *Manager) hostPluginList(ctx context.Context) ([]map[string]any, error) 
 	return result, nil
 }
 
+// hostSettingsGet 读取插件在某 vault 下的设置
+// 尚无记录时返回空配置而非报错
 func (m *Manager) hostSettingsGet(
 	ctx context.Context,
 	pluginID string,
@@ -269,6 +288,8 @@ func (m *Manager) hostSettingsGet(
 	return setting.Config, nil
 }
 
+// hostSettingsSet 覆盖写入插件在某 vault 下的设置
+// config 必须是 JSON 对象，按 vault 与插件主键整体保存
 func (m *Manager) hostSettingsSet(
 	ctx context.Context,
 	pluginID string,
@@ -289,6 +310,7 @@ func (m *Manager) hostSettingsSet(
 	return map[string]bool{"saved": true}, nil
 }
 
+// requiredStringParam 读取必填字符串参数，缺失或去空白后为空时报错
 func requiredStringParam(params map[string]json.RawMessage, name string) (string, error) {
 	var value string
 	if err := json.Unmarshal(params[name], &value); err != nil || strings.TrimSpace(value) == "" {
@@ -297,6 +319,7 @@ func requiredStringParam(params map[string]json.RawMessage, name string) (string
 	return value, nil
 }
 
+// optionalArgsParam 读取可选的 args 参数数组，缺省时返回空数组
 func optionalArgsParam(params map[string]json.RawMessage) ([]any, error) {
 	args := make([]any, 0)
 	if raw := params["args"]; len(raw) > 0 {
@@ -307,6 +330,7 @@ func optionalArgsParam(params map[string]json.RawMessage) ([]any, error) {
 	return args, nil
 }
 
+// hostModelNames 返回 host.models 方法暴露的模型白名单
 func hostModelNames() []string {
 	return []string{"users", "vaults", "files", "shares", "collaborations", "devices"}
 }

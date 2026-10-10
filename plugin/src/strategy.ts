@@ -1,6 +1,7 @@
 // 同步策略模块：拉取并缓存服务端仓库同步策略
 import type { OSSApiClient, SyncMode, SyncStrategyResponse } from "./api";
 
+/** 缓存服务端仓库同步策略，未拉取到时各项取保守默认值 */
 export class SyncStrategyManager {
   private strategy: SyncStrategyResponse | null = null;
 

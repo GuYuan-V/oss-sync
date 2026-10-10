@@ -3,10 +3,12 @@ import { diff3Merge } from "node-diff3";
 /** 三方文本合并允许的正文大小，单位为字节 */
 export const MAX_MERGE_BYTES = 2 * 1024 * 1024;
 
+/** 三方合并结果 */
 export type TextMergeResult =
   | { kind: "merged"; content: string }
   | { kind: "conflict" };
 
+/** 合并区域；resolved 为可自动采纳的行，conflict 需要人工排序 */
 export type MergeRegion =
   | { readonly kind: "resolved"; readonly lines: readonly string[] }
   | {
@@ -16,8 +18,10 @@ export type MergeRegion =
       readonly remoteLines: readonly string[];
     };
 
+/** 冲突块的先后顺序 */
 export type BlockOrder = "local_first" | "remote_first";
 
+/** 参与三方合并的扩展名白名单；其余一律按二进制处理 */
 const ALLOWED_EXTENSIONS: readonly string[] = [
   ".md",
   ".markdown",
@@ -77,6 +81,7 @@ function mergeIndependentReplacements(
   return merged;
 }
 
+/** 计算三方合并区域；diff3 报出的假冲突会再尝试按行独立替换加以消解 */
 export function buildMergeRegions(
   baseText: string,
   localText: string,
@@ -113,10 +118,12 @@ export function buildMergeRegions(
   return out;
 }
 
+/** 是否存在无法自动合并且需要人工排序的区域 */
 export function hasConflictRegion(regions: readonly MergeRegion[]): boolean {
   return regions.some((r) => r.kind === "conflict");
 }
 
+/** 按给定顺序拼接合并结果；未提供顺序时冲突块默认本地在前 */
 export function resolveOrderedMerge(
   regions: readonly MergeRegion[],
   orderForConflictIndex?: (conflictIndex: number) => BlockOrder,

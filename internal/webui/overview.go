@@ -11,6 +11,8 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
+// overviewData 是控制台首页的显示数据
+// 存储与内存字段以字节为单位，CPU 与内存占比为 0-100 的百分数
 type overviewData struct {
 	VaultCount         int64
 	PendingDevices     int64
@@ -28,12 +30,15 @@ type overviewData struct {
 	RecentDevices      []recentDeviceRow
 }
 
+// recentDeviceRow 是首页最近同步设备列表一行的显示数据
 type recentDeviceRow struct {
 	DeviceName string
 	VaultName  string
 	LastSyncAt time.Time
 }
 
+// overviewPage 渲染控制台首页：GET /dashboard
+// 统计数据读取失败时仍以 500 渲染已填充的部分数据
 func (h *Handler) overviewPage(c *gin.Context) {
 	data, err := h.loadOverviewData(h.webUser(c))
 	if err != nil {
@@ -43,6 +48,9 @@ func (h *Handler) overviewPage(c *gin.Context) {
 	h.render(c, http.StatusOK, "overview", h.t(c, "page.overview"), "", "overview", data)
 }
 
+// loadOverviewData 汇总当前账户的首页统计：自有与成员仓库、待批准设备、文件数与最近记录
+// 存储配额在遇到任一仓库未设上限时整体视为不限量
+// 用户没有任何仓库时提前返回，只保留设备与进程指标
 func (h *Handler) loadOverviewData(user *models.User) (overviewData, error) {
 	data := overviewData{CPUCores: runtime.NumCPU()}
 	metrics := readSystemMetrics(h.Cfg.Storage.DataDir, h.Cfg.Storage.MaxTotalSizeBytes())
@@ -143,6 +151,7 @@ func (h *Handler) loadOverviewData(user *models.User) (overviewData, error) {
 	return data, nil
 }
 
+// usagePercent 计算 used 占 total 的百分比，总量或用量非正时返回 0，用量达到或超过总量时返回 100
 func usagePercent(used, total float64) float64 {
 	if total <= 0 || used <= 0 {
 		return 0

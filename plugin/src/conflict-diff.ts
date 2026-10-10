@@ -1,11 +1,13 @@
 import { diff_match_patch } from "diff-match-patch";
 
+/** 差异行；omitted 为被折叠的上下文行数 */
 export type ConflictDiffRow =
   | { kind: "context"; text: string }
   | { kind: "removed"; text: string }
   | { kind: "added"; text: string }
   | { kind: "omitted"; count: number };
 
+/** 唯一行数超过单码元编码容量时抛出，调用方降级为不可用提示 */
 export class LineCapacityExceededError extends Error {
   constructor() {
     super("too many unique lines for single-code-unit line encoding");
@@ -77,7 +79,7 @@ class LineCodec {
   }
 }
 
-// 压缩连续 context 行：首段超过 2 行仅保留末尾 2 行，尾段超过 2 行仅保留开头 2 行，中段超过 4 行仅保留首尾各 2 行，其余完整保留
+// 压缩连续 context 行：首尾段保留靠外的 2 行，中段保留首尾各 2 行
 export function collapseContextRows(rows: ConflictDiffRow[]): ConflictDiffRow[] {
   const out: ConflictDiffRow[] = [];
   let i = 0;
@@ -111,6 +113,7 @@ export function collapseContextRows(rows: ConflictDiffRow[]): ConflictDiffRow[] 
   return out;
 }
 
+/** 生成本地与远端的行级差异；两侧完全一致时返回空数组 */
 export function buildConflictDiff(local: string, remote: string): ConflictDiffRow[] {
   const codec = new LineCodec();
   const encodedLocal = codec.encode(normalizeLines(local));

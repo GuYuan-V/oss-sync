@@ -3,6 +3,10 @@ import { Notice } from "obsidian";
 import type { ShareOut } from "./api";
 import type OSSPlugin from "./main";
 
+/**
+ * 在容器中渲染分享列表行
+ * 每行提供复制链接、打开、切换允许复制与删除操作；onChanged 缺失时回落到侧边栏刷新
+ */
 export function renderShareRows(
   section: HTMLElement,
   plugin: OSSPlugin,

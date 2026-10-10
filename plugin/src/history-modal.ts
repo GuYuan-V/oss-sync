@@ -4,6 +4,7 @@ import type OSSPlugin from "./main";
 import type { HistoryEntry } from "./api";
 import { HistoryDetailModal } from "./history-detail-modal";
 
+/** 文件修改记录弹窗；协作文件改用协作接口查询 */
 export class HistoryModal extends Modal {
   constructor(app: App, private plugin: OSSPlugin, private filePath: string) {
     super(app);
@@ -21,6 +22,7 @@ export class HistoryModal extends Modal {
     this.contentEl.empty();
   }
 
+  /** 拉取历史列表；协作文件从协作入口取 vault 与路径且不允许恢复 */
   private async load(): Promise<void> {
     const { contentEl } = this;
     const target = this.plugin.collabManager.getHistoryTarget(this.filePath) ?? {
@@ -54,6 +56,7 @@ export class HistoryModal extends Modal {
     }
   }
 
+  /** 渲染单条历史记录；时间按当前语言格式化 */
   private renderEntry(
     entry: HistoryEntry,
     target: { readonly vaultID: string; readonly canRestore: boolean }
@@ -81,9 +84,11 @@ export class HistoryModal extends Modal {
     });
   }
 
+/** 全量历史记录，供详情弹窗判断上一版是否可用 */
   private entries: readonly HistoryEntry[] = [];
 }
 
+/** 把错误本地化为用户可读文本 */
 function errorMessage(error: unknown, plugin: OSSPlugin): string {
   return plugin.localizedError(error);
 }

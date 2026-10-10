@@ -2,6 +2,7 @@ import type { BaselineEntry, PendingOperation } from "./baseline.js";
 import type { SyncFileMeta } from "./api.js";
 import type { ExpectedLocalState, OrdinarySyncAction, OrdinarySyncLocalMeta, OrdinarySyncPlannerInput, OrdinarySyncPlanResult } from "./ordinary-sync-actions.js";
 
+/** 候选路径输入；与规划器输入同源，但不需要本地元信息 */
 export type OrdinarySyncCandidatePathsInput = Pick<
   OrdinarySyncPlannerInput,
   "forceFull" | "remote" | "baseline" | "pending" | "conflicts" | "vaultPaths"
@@ -33,6 +34,7 @@ export function ordinarySyncCandidatePaths(
 
   for (const operation of input.pending) {
     if (operation.kind === "rename") {
+      // 重命名路径单独收集，整条链路都不参与普通动作规划
       renamePaths.add(operation.path);
       if (operation.oldPath) renamePaths.add(operation.oldPath);
     } else {
@@ -41,6 +43,7 @@ export function ordinarySyncCandidatePaths(
   }
   for (const path of input.remote.keys()) paths.add(path);
   if (input.forceFull) {
+    // 增量同步的 remote 只包含变更路径，本地与基线的全量路径仅在完整快照时纳入
     for (const path of input.baseline.keys()) paths.add(path);
     for (const path of input.vaultPaths) paths.add(path);
   }
@@ -71,6 +74,7 @@ export function planOrdinarySyncActions(input: OrdinarySyncPlannerInput): Ordina
     const base = baseline.get(path) ?? null;
     const local = localByPath.get(path) ?? null;
     const submitted = remote.get(path);
+    // 增量同步下 remote 不含未变更路径，用基线还原一份服务端视图；完整快照时不能补，否则会把已删除的远端当作存在
     const server = submitted ?? (!forceFull && base !== null ? remoteFromBaseline(path, base) : undefined);
     const operation = pendingByPath.get(path);
     if (base === null) {
@@ -98,6 +102,7 @@ export function planOrdinarySyncActions(input: OrdinarySyncPlannerInput): Ordina
       continue;
     }
     if (recoverySnapshot && submitted === undefined) {
+      // 服务端历史已压缩，未出现在快照中的路径无法判断远端是否仍存在
       if (base.serverDeleted) {
         removedSet.add(path);
         if (local !== null) actions.push({ kind: "upload", path, local, baseRevision: 0, operationID: operation?.id ?? createOperationId(), operation });
@@ -112,7 +117,9 @@ export function planOrdinarySyncActions(input: OrdinarySyncPlannerInput): Ordina
       }
       continue;
     }
+    // 删除态下本地只要存在即为变化；未变更判定同时比对 revision、hash 与删除标记
     const localChanged = base.serverDeleted ? local !== null : local === null || local.hash !== base.serverHash;
+    // remote 缺失时仅在完整快照下视为远端变化，增量同步下缺失表示未变更
     const remoteChanged = server !== undefined ? server.revision !== base.serverRevision || server.hash !== base.serverHash || server.deleted !== base.serverDeleted : forceFull;
     if (!localChanged && !remoteChanged) {
       if (operation !== undefined) obsoleteSet.add(operation.id);

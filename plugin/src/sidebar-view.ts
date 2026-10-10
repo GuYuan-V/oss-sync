@@ -2,8 +2,10 @@
 import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
 import type OSSPlugin from "./main";
 
+/** 侧边栏视图在 Obsidian 中的注册类型标识 */
 export const SIDEBAR_VIEW_TYPE = "oss-sync-sidebar";
 
+/** 侧边栏视图；按固定顺序渲染头部、状态、操作、管理入口、回收站、冲突与控制台链接 */
 export class SidebarView extends ItemView {
   constructor(leaf: WorkspaceLeaf, private plugin: OSSPlugin) {
     super(leaf);
@@ -31,7 +33,7 @@ export class SidebarView extends ItemView {
     this.contentEl.empty();
   }
 
-  /** 重新渲染整个侧边栏*/
+  /** 重新渲染整个侧边栏；渲染顺序固定，冲突区无内容时整段跳过 */
   refresh(): void {
     const { contentEl } = this;
     contentEl.empty();
@@ -44,10 +46,12 @@ export class SidebarView extends ItemView {
     this.renderConsoleLink();
   }
 
+  /** 分享数据变化后的外部刷新入口 */
   reloadShares(): void {
     this.refresh();
   }
 
+  /** 渲染标题区：图标、标题、摘要与关闭按钮 */
   private renderHeader(): void {
     const { contentEl, plugin } = this;
     const header = contentEl.createDiv({ cls: "oss-sidebar-header" });
@@ -67,6 +71,7 @@ export class SidebarView extends ItemView {
     closeButton.addEventListener("click", () => this.leaf.detach());
   }
 
+  /** 渲染状态区：用户、设备、仓库、协作连接与同步模式 */
   private renderStatus(): void {
     const { plugin, contentEl } = this;
     const status = this.createSection(plugin.t("sidebar.status"));
@@ -95,6 +100,7 @@ export class SidebarView extends ItemView {
     });
   }
 
+  /** 渲染操作区：全量同步与打开设置；未绑定仓库时同步按钮改为提示绑定 */
   private renderActions(): void {
     const { plugin, contentEl } = this;
     const actions = this.createSection(plugin.t("sidebar.actions"));
@@ -113,6 +119,7 @@ export class SidebarView extends ItemView {
       });
   }
 
+  /** 渲染管理入口：分享管理与协作管理；未绑定仓库或未登录时只给出不可用提示 */
   private renderManagers(): void {
     const { plugin } = this;
     const section = this.createSection(plugin.t("sidebar.management"));
@@ -131,6 +138,7 @@ export class SidebarView extends ItemView {
     }).addEventListener("click", () => plugin.openCollabManager());
   }
 
+  /** 渲染回收站入口；未绑定仓库或未登录时给出引导文案 */
   private renderRecycle(): void {
     const { plugin } = this;
     const section = this.createSection(plugin.t("sidebar.manageRecycle"));
@@ -144,6 +152,7 @@ export class SidebarView extends ItemView {
     }).addEventListener("click", () => plugin.openRecycleManager());
   }
 
+  /** 渲染冲突区；普通冲突与协作冲突都没有时整段不渲染 */
   private renderConflicts(): void {
     const { plugin, contentEl } = this;
     const conflicts = plugin.baseline.conflicts();
@@ -164,6 +173,7 @@ export class SidebarView extends ItemView {
     for (const entry of collabConflicts) {
       const row = section.createDiv({ cls: "oss-sidebar-conflict" });
       row.createDiv({ cls: "oss-sidebar-conflict-path", text: entry.localPath });
+      // 本地协作路径形如 协作目录/所有者/文件路径，所有者位于第二段
       const owner = entry.localPath.split("/")[1] ?? plugin.t("common.unknown");
       const rev = entry.conflict?.remoteRevision ?? 0;
       row.createDiv({
@@ -176,6 +186,7 @@ export class SidebarView extends ItemView {
     }
   }
 
+  /** 渲染控制台跳转链接；目标地址由 serverUrl 去掉末尾斜杠后拼上 /dashboard */
   private renderConsoleLink(): void {
     const { plugin, contentEl } = this;
     const url = plugin.settings.serverUrl.replace(/\/$/, "") + "/dashboard";
@@ -186,6 +197,7 @@ export class SidebarView extends ItemView {
     });
   }
 
+  /** 创建带标题的卡片分区，返回可继续填充内容的容器 */
   private createSection(title: string): HTMLElement {
     const section = this.contentEl.createEl("section", { cls: "oss-sidebar-card" });
     section.createEl("h4", { text: title });

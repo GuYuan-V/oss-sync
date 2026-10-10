@@ -9,6 +9,8 @@ import (
 	"io"
 )
 
+// processFrame 是插件进程与宿主之间的换行分隔 JSON 帧
+// Type 取值 ready、host_call、host_response、host_error、response、error
 type processFrame struct {
 	Type         string                 `json:"type"`
 	ID           string                 `json:"id,omitempty"`
@@ -22,6 +24,8 @@ type processFrame struct {
 	Result       json.RawMessage        `json:"result,omitempty"`
 }
 
+// readLoop 逐行读取插件 stdout 帧
+// 首帧必须是协议版本匹配的 ready 帧，可携带 registration；host_call 帧异步处理，其余帧按请求 ID 交付
 func (p *executablePlugin) readLoop(stdout io.ReadCloser) {
 	defer stdout.Close()
 	scanner := bufio.NewScanner(stdout)
@@ -87,6 +91,8 @@ func (p *executablePlugin) readLoop(stdout io.ReadCloser) {
 	p.protocolFailure(ErrPluginProcessExited)
 }
 
+// handleHostCall 执行插件发起的宿主调用并把结果回写成 host_response 或 host_error 帧
+// 单次调用受 maxExecution 限制，写回失败视为协议失败
 func (p *executablePlugin) handleHostCall(frame processFrame) error {
 	if p.hostCall == nil || frame.ID == "" || frame.Method == "" {
 		return errors.New("executable plugin host call is invalid")
@@ -121,6 +127,8 @@ func (p *executablePlugin) handleHostCall(frame processFrame) error {
 	return nil
 }
 
+// waitLoop 等待子进程退出并关闭等待通道
+// 退出原因统一包装为 ErrPluginProcessExited
 func (p *executablePlugin) waitLoop() {
 	defer close(p.waitDone)
 	err := p.cmd.Wait()
@@ -132,6 +140,7 @@ func (p *executablePlugin) waitLoop() {
 	p.fail(err)
 }
 
+// writeProcessLine 向进程 stdin 写入一帧并追加换行分隔符
 func writeProcessLine(writer io.Writer, frame []byte) error {
 	if _, err := writer.Write(frame); err != nil {
 		return err

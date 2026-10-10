@@ -1,5 +1,6 @@
 package webui
 
+// 本地化条目：个人中心页面文案
 func init() {
 	registerEntries(map[string][2]string{
 		"account.heading":                   {"个人中心", "Account"},

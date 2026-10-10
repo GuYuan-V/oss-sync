@@ -39,14 +39,17 @@ import { SyncStrategyManager } from "./strategy.js";
 import { TaskPool, type TaskResult } from "./task-pool.js";
 import { buildTransferNoticePlan, type TransferNotice } from "./sync-notices.js";
 
+/** 同步引擎对插件暴露的运行状态，用于状态栏展示 */
 export type SyncState = "idle" | "syncing" | "error";
 
+/** 单次运行拉取到的远端快照，files 以规范化路径为键，recoverySnapshot 表示该快照为历史压缩后的全量兜底 */
 type RemoteSnapshot = {
   readonly files: Map<string, SyncFileMeta>;
   readonly nextCursor: number;
   readonly recoverySnapshot: boolean;
 };
 
+/** 传输成功后生成基线条目的输入，bytesHash 为实际写入本地的内容哈希 */
 type LiveAcknowledgement = {
   readonly path: string;
   readonly server: SyncFileMeta;
@@ -74,6 +77,14 @@ export class SyncEngine {
   /** 同步失败提示的冷却抑制，成功一次后清零，使下一次失败能立即反馈 */
   private readonly errorNotices = new NoticeGuard();
 
+  /**
+   * 构造同步引擎，策略、文件访问与防抖句柄在此初始化，随后由 start 启动轮询
+   * @param app Obsidian 应用实例，仅取其 vault
+   * @param api 已配置凭据的服务端客户端
+   * @param baseline 持久化基线与操作队列
+   * @param plugin 插件实例，用于读取设置、输出提示与状态
+   * @param diagnostics 可选的诊断事件收集器
+   */
   constructor(
     app: App,
     api: OSSApiClient,
@@ -89,26 +100,31 @@ export class SyncEngine {
     this.debounceFn = this.createDebounce();
   }
 
+  /** 恢复同步：清除停止标记并按当前策略重建轮询 */
   start(): void {
     this.stopped = false;
     this.resetPolling();
   }
 
+  /** 停止同步：取消待触发防抖与进行中的长轮询，不影响已入队未落盘的 pending */
   stop(): void {
     this.stopped = true;
     this.debounceFn.cancel();
     this.stopCurrentPolling();
   }
 
+  /** 丢弃旧防抖句柄并以当前策略重建，用于间隔或服务端下发的防抖时长变化 */
   resetDebounce(): void {
     this.debounceFn.cancel();
     this.debounceFn = this.createDebounce();
   }
 
+  /** 等待入队链收敛，确保所有已捕获的本地变更都已写入基线后再执行后续操作 */
   async flushPendingQueue(): Promise<void> {
     await this.enqueueChain;
   }
 
+  /** 重建轮询：无令牌或未绑定 vault 时不启动，长轮询模式下直接进入长轮询 */
   resetPolling(): void {
     this.stopCurrentPolling();
     if (this.stopped || !this.plugin.settings.vaultId || !this.api.hasToken()) return;
@@ -121,10 +137,12 @@ export class SyncEngine {
     }, seconds * 1000);
   }
 
+  /** 重新拉取同步策略并按结果应用轮询模式，供设置页切换模式时调用 */
   async refreshPollingStrategy(): Promise<void> {
     await this.applyStrategy();
   }
 
+  /** 清理短轮询定时器与长轮询，两者互斥，stopCurrentPolling 保证不会并存 */
   private stopCurrentPolling(): void {
     if (this.pollTimer !== null) {
       window.clearInterval(this.pollTimer);
@@ -133,6 +151,7 @@ export class SyncEngine {
     this.stopLongPoll();
   }
 
+  /** 启动长轮询，用递增 generation 标识本次循环，旧循环因 generation 失配自行退出 */
   private startLongPoll(): void {
     const generation = ++this.longPollGen;
     const controller = new AbortController();
@@ -140,12 +159,14 @@ export class SyncEngine {
     void this.longPollLoop(generation, controller);
   }
 
+  /** 递增 generation 并中断在途请求，双保险确保旧长轮询不会继续处理结果 */
   private stopLongPoll(): void {
     this.longPollGen += 1;
     this.longPollController?.abort();
     this.longPollController = null;
   }
 
+  /** 长轮询主循环：凭据失效时静默退出；每轮失败休眠 3 秒后重试，提示按 key 冷却 */
   private async longPollLoop(generation: number, controller: AbortController): Promise<void> {
     const wait = this.strategy.getLongPollWaitSec();
     while (!this.stopped && !controller.signal.aborted && generation === this.longPollGen) {
@@ -182,6 +203,10 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * 拉取服务端同步策略并应用；仅防抖或轮询参数变化时才重建对应句柄
+   * OSSApiError 视为策略协商失败，保留既有配置继续同步
+   */
   private async applyStrategy(): Promise<void> {
     const vaultID = this.plugin.settings.vaultId;
     if (!this.api.hasToken() || !vaultID) return;
@@ -201,22 +226,30 @@ export class SyncEngine {
     }
   }
 
+  /** 路径当前是否处于抑制窗口，抑制由本引擎自身写入触发，避免自产变更再次入队 */
   isSuppressed(path: string): boolean {
     return this.suppressed.has(normalizePath(path));
   }
 
+  /** 当前生效轮询模式的本地化名称，供侧边栏展示 */
   getEffectiveModeLabel(): string {
     return this.plugin.t(this.effectiveMode === "long_poll" ? "common.longPoll" : "common.shortPoll");
   }
 
+  /** 记录一次文件创建或修改，path 为 vault 相对路径 */
   enqueueUpsert(path: string): void {
     this.enqueue({ id: operationID(), kind: "upsert", path, createdAt: Date.now() });
   }
 
+  /** 记录一次文件删除 */
   enqueueDelete(path: string): void {
     this.enqueue({ id: operationID(), kind: "delete", path, createdAt: Date.now() });
   }
 
+  /**
+   * 记录一次文件夹删除，展开为目录下全部基线与待办路径的删除操作
+   * 直接追加到入队链末尾而非复用 enqueue，避免逐个路径重复触发基线 load/save
+   */
   enqueueDeleteTree(folderPath: string): void {
     const root = normalizePath(folderPath).replace(/\/+$/, "");
     if (!root || !shouldSync(root, this.plugin.settings.syncPoisonObsidianFiles)) return;
@@ -250,10 +283,15 @@ export class SyncEngine {
     });
   }
 
+  /** 记录一次文件重命名，oldPath 为原路径，path 为新路径 */
   enqueueRename(oldPath: string, newPath: string): void {
     this.enqueue({ id: operationID(), kind: "rename", path: newPath, oldPath, createdAt: Date.now() });
   }
 
+  /**
+   * 串行化入队：黑名单与抑制窗口内的操作直接丢弃
+   * 入队失败仅提示，不让后续本地事件因一次持久化失败而丢失
+   */
   private enqueue(operation: PendingOperation): void {
     if (!shouldSync(operation.path, this.plugin.settings.syncPoisonObsidianFiles)) return;
     if (operation.oldPath && !shouldSync(operation.oldPath, this.plugin.settings.syncPoisonObsidianFiles)) return;
@@ -279,6 +317,10 @@ export class SyncEngine {
     });
   }
 
+  /**
+   * 执行一轮同步，返回是否全部动作成功
+   * 并发调用由 runCoordinator 合并，同刻只有一个 executeRun 在跑，避免重复应用同一批 pending
+   */
   async runOnce(opts: { readonly forceFull: boolean }): Promise<boolean> {
     let succeeded = true;
     await this.runCoordinator.run(opts.forceFull, async (forceFull) => {
@@ -287,6 +329,10 @@ export class SyncEngine {
     return succeeded;
   }
 
+  /**
+   * 单轮同步主流程：协商策略、加载基线、拉远端快照、应用重命名与同步动作、确认游标
+   * 任何未处理异常都收敛为 error 状态与一次冷却提示，不向调用方抛出
+   */
   private async executeRun(forceFull: boolean): Promise<boolean> {
     const vaultID = this.plugin.settings.vaultId;
     if (!this.api.hasToken() || !vaultID) {
@@ -317,10 +363,12 @@ export class SyncEngine {
         });
       }
       let full = forceFull || !this.plugin.settings.incrementalCheck;
+      // 首次绑定或切换 vault 时基线为空，必须全量对齐后才能安全做增量
       if (this.baseline.bindVault(vaultID)) {
         full = true;
         await this.baseline.save();
       }
+      // 待办删除但基线无对应条目，说明该文件从未同步过，只有全量快照能判断远端是否已不存在
       if (this.needsFullSnapshotForDeletes(this.baseline.pending())) full = true;
       const remote = await this.fetchRemote(vaultID, full);
       let pending = this.baseline.pending();
@@ -363,6 +411,7 @@ export class SyncEngine {
         this.reportActionFailures(results);
         return false;
       }
+      // 先向服务端确认游标再落库：确认失败时基线保持旧游标，下一轮重新拉取同一批变更
       await this.api.acknowledge(vaultID, remote.nextCursor);
       this.baseline.setCursor(remote.nextCursor);
       await this.baseline.save();
@@ -401,16 +450,19 @@ export class SyncEngine {
     }
   }
 
+  /** 把任意异常转为当前语言的可读文案，同步链路与提示统一走此入口 */
   private localizedError(error: unknown): string {
     return localizeError(error, this.plugin.t.bind(this.plugin), this.plugin.t("common.unknownError"));
   }
 
+  /** 存在失败或待重试动作时置 error 状态，动作本身的明细由 reportTransferNotifications 输出 */
   private reportActionFailures(results: readonly TaskResult<OrdinarySyncActionOutcome>[]): void {
     const count = results.filter((result) => !result.ok || result.result?.kind === "deferred_retry").length;
     const message = this.plugin.t("notice.syncFailures", { count });
     this.plugin.setSyncState("error", message);
   }
 
+  /** 按 actions 与 results 的同序对应关系归类上传、下载与失败路径，交由 notice plan 合并条数 */
   private reportTransferNotifications(
     actions: readonly OrdinarySyncAction[],
     results: readonly TaskResult<OrdinarySyncActionOutcome>[],
@@ -441,6 +493,7 @@ export class SyncEngine {
     }
   }
 
+  /** 按合并后的通知类别输出单条 Notice，失败提示停留更久 */
   private showTransferNotice(notice: TransferNotice): void {
     switch (notice.kind) {
       case "uploaded":
@@ -455,6 +508,11 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * 分页拉取远端快照，forceFull 时从 manifest 全量拉取，否则从基线游标增量拉取
+   * 增量游标被服务端压缩（410 history_compacted）时清空重来并标记 recoverySnapshot，
+   * 让上层按首次全量对齐处理，而非当作普通增量差异
+   */
   private async fetchRemote(vaultID: string, forceFull: boolean): Promise<RemoteSnapshot> {
     const files = new Map<string, SyncFileMeta>();
     let useManifest = forceFull;
@@ -481,6 +539,10 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * 恢复快照前置处理：源路径在基线与远端都已不存在时，重命名降级为新路径上传
+   * 避免把一条指向已消失文件的 rename 发给服务端而必然失败
+   */
   private async prepareRecoveryRenames(operations: readonly PendingOperation[], remote: Map<string, SyncFileMeta>): Promise<void> {
     for (const operation of operations) {
       if (operation.kind !== "rename" || !operation.oldPath) continue;
@@ -493,6 +555,10 @@ export class SyncEngine {
     await this.baseline.save();
   }
 
+  /**
+   * 逐条应用待办重命名，并把远端快照推进到 rename 结果
+   * 目标或源端在服务端已变化时走冲突或保留双方分支，不用本地修订号覆盖远端新版本
+   */
   private async processRenames(vaultID: string, operations: readonly PendingOperation[], remote: Map<string, SyncFileMeta>): Promise<void> {
     for (const operation of operations) {
       if (operation.kind !== "rename" || !operation.oldPath) continue;
@@ -551,6 +617,10 @@ export class SyncEngine {
     await this.baseline.save();
   }
 
+  /**
+   * 重命名源文件被远端并发修改时，先把远端最新版本落到本地原路径，再把本地改动改为新路径上传
+   * 两条历史都保留，rename 待办随之改写为 upsert
+   */
   private async preserveBothAfterRenameSourceConflict(vaultID: string, operation: PendingOperation, source: SyncFileMeta, remote: Map<string, SyncFileMeta>): Promise<void> {
     remote.set(source.path, source);
     const expected = expectedFromSnapshot(await this.ordinaryFileAccess.readExact(source.path));
@@ -561,6 +631,10 @@ export class SyncEngine {
     new Notice(this.plugin.t("sync.remoteRenameConflict", { path: operation.oldPath ?? operation.path }), 8000);
   }
 
+  /**
+   * 生成本轮同步计划：先按不含冲突的候选集读取本地元数据，再交给纯规划器产出动作
+   * 已标记冲突的路径在第二轮被排除，避免读到冲突现场之外的脏状态
+   */
   private async planOrdinaryActions(forceFull: boolean, remote: Map<string, SyncFileMeta>, pending: readonly PendingOperation[], recoverySnapshot = false): Promise<OrdinarySyncPlanResult> {
     const baseline = this.baselineSnapshot();
     const vaultPaths = this.vaultPaths(forceFull);
@@ -583,10 +657,12 @@ export class SyncEngine {
     });
   }
 
+  /** 只取计划中的动作列表，供不需要计划副作用的调用方使用 */
   private async planActions(forceFull: boolean, remote: Map<string, SyncFileMeta>, pending: readonly PendingOperation[], recoverySnapshot = false): Promise<readonly OrdinarySyncAction[]> {
     return (await this.planOrdinaryActions(forceFull, remote, pending, recoverySnapshot)).actions;
   }
 
+  /** 把基线拍成普通 Map 快照，规划器按此只读视图计算，不触碰 BaselineStore 内部状态 */
   private baselineSnapshot(): Map<string, BaselineEntry> {
     const entries = new Map<string, BaselineEntry>();
     for (const path of this.baseline.paths()) {
@@ -596,6 +672,7 @@ export class SyncEngine {
     return entries;
   }
 
+  /** 全量模式下返回参与同步的本地文件清单，增量模式下为空集由规划器自行推导 */
   private vaultPaths(forceFull: boolean): readonly string[] {
     if (!forceFull) return [];
     return this.vault.getFiles()
@@ -603,16 +680,22 @@ export class SyncEngine {
       .map((file) => normalizePath(file.path));
   }
 
+  /** 落盘计划副作用：清理过期待办与被移除的基线条目，保证动作执行前基线已反映计划 */
   private async applyPlanEffects(plan: OrdinarySyncPlanResult): Promise<void> {
     for (const id of plan.obsoletePendingIds) this.baseline.removePending(id);
     for (const path of plan.removedBaselinePaths) this.baseline.remove(path);
     await this.baseline.save();
   }
 
+  /** 待办删除但基线无条目时必须全量拉取，否则无法区分远端已删除与本地新增 */
   private needsFullSnapshotForDeletes(pending: readonly PendingOperation[]): boolean {
     return pending.some((operation) => operation.kind === "delete" && this.baseline.get(operation.path) === null);
   }
 
+  /**
+   * 执行单个同步动作，异常在此统一兜底
+   * 409 冲突转由冲突处理器结算，其余异常上抛给 TaskPool 记为该动作失败
+   */
   private async applyAction(vaultID: string, action: OrdinarySyncAction): Promise<OrdinarySyncActionOutcome> {
     try {
       switch (action.kind) {
@@ -631,6 +714,7 @@ export class SyncEngine {
     }
   }
 
+  /** 上传遇 409 走冲突解决器，其余动作直接按远端当前版本登记冲突 */
   private async handleActionFailure(vaultID: string, action: OrdinarySyncAction, error: unknown): Promise<OrdinarySyncActionOutcome> {
     if (!isOrdinarySyncConflict409(error)) throw error;
     if (action.kind === "upload") {
@@ -641,6 +725,10 @@ export class SyncEngine {
     return { kind: "conflicted" };
   }
 
+  /**
+   * 上传本地文件；执行前重读校验内容未变
+   * 若读取结果与计划时的哈希不一致，返回 deferred_retry 由下一轮重新规划，不把旧内容推上去
+   */
   private async applyUpload(vaultID: string, action: Extract<OrdinarySyncAction, { readonly kind: "upload" }>): Promise<OrdinarySyncActionOutcome> {
     const snapshot = await this.ordinaryFileAccess.readExact(action.path);
     if (!snapshot || snapshot.hash !== action.local.hash) return { kind: "deferred_retry", reason: "stale_local" };
@@ -661,6 +749,7 @@ export class SyncEngine {
     return { kind: "resolved" };
   }
 
+  /** 请求服务端删除；删除后本地又出现同名文件时补一条 upsert 待办，下一轮重新上传 */
   private async applyRemoteDeleteRequest(vaultID: string, action: Extract<OrdinarySyncAction, { readonly kind: "delete_remote" }>): Promise<OrdinarySyncActionOutcome> {
     const server = await this.api.deleteV2(vaultID, {
       path: action.path,
@@ -675,6 +764,10 @@ export class SyncEngine {
     return { kind: "resolved" };
   }
 
+  /**
+   * 下载远端版本写入本地；写入前按 expected 做本地状态校验
+   * 校验失败（stale）说明写入期间本地已变更，转为冲突交给用户处理，不覆盖本地新内容
+   */
   private async applyDownload(vaultID: string, remote: SyncFileMeta, expected: ExpectedLocalState): Promise<OrdinarySyncActionOutcome> {
     let downloaded;
     try {
@@ -703,6 +796,7 @@ export class SyncEngine {
     return { kind: "resolved" };
   }
 
+  /** 删除本地文件以镜像远端删除，同样先做 expected 校验，失败转冲突 */
   private async applyRemoteDelete(remote: SyncFileMeta, expected: ExpectedLocalState): Promise<OrdinarySyncActionOutcome> {
     const deleted = await this.ordinaryFileAccess.deleteExact(remote.path, expected);
     if (deleted.kind === "stale") {
@@ -716,6 +810,10 @@ export class SyncEngine {
     return { kind: "resolved" };
   }
 
+  /**
+   * 本地文件缺失时的删除动作，远端元数据由路径推导
+   * 历史压缩后远端已无该文件记录，无法比对修订号，直接移除基线与待办
+   */
   private async applyCompactedDelete(action: Extract<OrdinarySyncAction, { readonly kind: "delete_local_absent" }>): Promise<OrdinarySyncActionOutcome> {
     const remote = compactedDeleteMeta(action.path);
     const deleted = await this.ordinaryFileAccess.deleteExact(action.path, action.expectedLocal);
@@ -728,6 +826,7 @@ export class SyncEngine {
     return { kind: "resolved" };
   }
 
+  /** 远端已同步但本地无基线记录时，校验本地内容一致后直接采纳为基线，不产生传输 */
   private async applyAdopt(action: Extract<OrdinarySyncAction, { readonly kind: "adopt" }>): Promise<OrdinarySyncActionOutcome> {
     const local = await this.ordinaryFileAccess.readExact(action.path);
     if (!matchesExpected(local, action.expectedLocal)) return this.conflictOutcome(action.path, local, action.remote);
@@ -748,14 +847,17 @@ export class SyncEngine {
     return { kind: "resolved" };
   }
 
+  /** 规划阶段已判定为冲突的动作，执行时按本地当前状态登记冲突 */
   private async applyConflict(action: Extract<OrdinarySyncAction, { readonly kind: "conflict" }>): Promise<OrdinarySyncActionOutcome> {
     return this.conflictOutcome(action.path, await this.ordinaryFileAccess.readExact(action.path), action.remote);
   }
 
+  /** 需按远端最新版本重新计算的动作，交给冲突解决器在计划期读取的期望哈希上结算 */
   private resolveReconciliation(vaultID: string, action: Extract<OrdinarySyncAction, { readonly kind: "reconcile" }>): Promise<OrdinarySyncActionOutcome> {
     return this.createResolver().resolve({ vaultId: vaultID, path: action.path, expectedHash: action.local.hash, remote: action.remote });
   }
 
+  /** 构造冲突解决器，统一注入基线与文件访问，冲突登记回调指回本引擎 */
   private createResolver(): OrdinarySyncConflictResolver {
     return new OrdinarySyncConflictResolver({
       baseline: this.baseline,
@@ -767,11 +869,16 @@ export class SyncEngine {
     });
   }
 
+  /** 登记冲突并返回 conflicted 结果，供各动作分支统一收敛 */
   private async conflictOutcome(path: string, local: LocalReadResult | null, remote: SyncFileMeta): Promise<OrdinarySyncActionOutcome> {
     await this.recordConflict(path, local, remote);
     return { kind: "conflicted" };
   }
 
+  /**
+   * 生成传输成功后的基线条目
+   * 服务端返回的哈希与实际上传内容不一致时不写入 baseText，只保留修订号与哈希
+   */
   private async liveAcknowledgement(input: LiveAcknowledgement): Promise<BaselineEntry> {
     if (input.server.hash !== input.bytesHash) {
       return {
@@ -795,6 +902,7 @@ export class SyncEngine {
     });
   }
 
+  /** 生成删除确认后的基线条目，标记该路径在服务端已不存在 */
   private deletedAcknowledgement(remote: SyncFileMeta, local: LocalReadResult | null): BaselineEntry {
     return baselineFromAcknowledgement({
       kind: "deleted",
@@ -807,6 +915,10 @@ export class SyncEngine {
     });
   }
 
+  /**
+   * 传输期间本地又发生变化时补一条待办，下一轮重新同步
+   * sent 为传输时的快照，current 为传输后重读结果，据此判断该文件是被删除还是被改写
+   */
   private queueCurrentLocalChange(path: string, sent: LocalReadResult | null, current: LocalReadResult | null): void {
     if (!current && sent) {
       this.baseline.putPending({ id: operationID(), kind: "delete", path, createdAt: Date.now() });
@@ -815,6 +927,10 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * 登记冲突并落盘；首次发现的 markdown 冲突直接弹出解决窗口
+   * 二进制或已删除场景只提示，因为无法做文本合并
+   */
   private async recordConflict(path: string, local: LocalReadResult | null, remote: SyncFileMeta): Promise<void> {
     const existed = this.baseline.getConflict(path) !== null;
     this.baseline.putConflict({
@@ -836,6 +952,10 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * 应用用户在冲突窗口选择的解决方案，成功后移除冲突记录
+   * 附件在两侧内容一致时走解决器的保留双方路径；有序合并仅适用于文本
+   */
   async resolveConflict(path: string, resolution: ConflictResolution): Promise<void> {
     const vaultID = this.plugin.settings.vaultId;
     const conflict = this.baseline.getConflict(path);
@@ -877,6 +997,10 @@ export class SyncEngine {
     await this.baseline.save();
   }
 
+  /**
+   * 有序合并方案：先落一条 upsert 待办再写本地，保证合并结果即使在上传前崩溃也会被重传
+   * 上传以冲突时的远端修订号为基准，期间远端再变则退回冲突
+   */
   private async orderedMergeConflict(vaultID: string, conflict: ConflictEntry, expected: ExpectedLocalState, mergedContent: string): Promise<OrdinarySyncActionOutcome> {
     const local = await this.ordinaryFileAccess.readExact(conflict.path);
     if (!matchesExpected(local, expected)) return this.conflictOutcome(conflict.path, local, conflictToMeta(conflict));
@@ -926,6 +1050,7 @@ export class SyncEngine {
     return { kind: "resolved" };
   }
 
+  /** 强制本地方案：本地文件不存在时请求服务端删除，存在时以冲突时的远端修订号为基准上传 */
   private async forceLocalConflict(vaultID: string, conflict: ConflictEntry, expected: ExpectedLocalState): Promise<OrdinarySyncActionOutcome> {
     const local = await this.ordinaryFileAccess.readExact(conflict.path);
     if (!matchesExpected(local, expected)) return this.conflictOutcome(conflict.path, local, conflictToMeta(conflict));
@@ -967,6 +1092,7 @@ export class SyncEngine {
     }
   }
 
+  /** 保留双方方案：本地内容另存为同目录副本，原路径再下载远端版本 */
   private async keepBothConflict(vaultID: string, conflict: ConflictEntry, expected: ExpectedLocalState): Promise<OrdinarySyncActionOutcome> {
     const local = await this.ordinaryFileAccess.readExact(conflict.path);
     if (!local || !matchesExpected(local, expected)) return this.conflictOutcome(conflict.path, local, conflictToMeta(conflict));
@@ -984,34 +1110,41 @@ export class SyncEngine {
     return outcome;
   }
 
+  /** 读取指定路径的冲突记录，供冲突窗口与侧边栏展示 */
   getConflict(path: string): ConflictEntry | null {
     return this.baseline.getConflict(path);
   }
 
+  /** 读取指定路径的基线条目，含合并所需的 baseText */
   getBaseline(path: string): BaselineEntry | null {
     return this.baseline.get(path);
   }
 
+  /** 用户忽略该冲突，直接移除记录不改变任何文件内容 */
   dismissConflict(path: string): void {
     this.baseline.removeConflict(path);
     void this.baseline.save();
   }
 
+  /** 读取路径的本地元数据，文件不存在时返回 null */
   private async readLocalMeta(path: string): Promise<OrdinarySyncLocalMeta | null> {
     return localMeta(path, await this.ordinaryFileAccess.readExact(path));
   }
 
+  /** 写入路径进入抑制窗口 1.5 秒，覆盖本引擎自身触发 vault 事件的典型延迟 */
   private suppress(path: string): void {
     const normalized = normalizePath(path);
     this.suppressed.add(normalized);
     window.setTimeout(() => this.suppressed.delete(normalized), 1500);
   }
 
+  /** 防抖触发一次增量同步，实际间隔取服务端策略与本地设置中的较大值 */
   private createDebounce(): (() => void) & { cancel: () => void } {
     return debounce(() => void this.runOnce({ forceFull: false }), Math.max(this.strategy.getMinDebounceSec(), this.plugin.settings.syncIntervalSec) * 1000);
   }
 }
 
+/** 结果中任一动作异常、无结果或待重试时判定本轮未完成，据此跳过游标确认 */
 function hasUnresolvedAction(results: readonly TaskResult<OrdinarySyncActionOutcome>[]): boolean {
   for (const result of results) {
     if (!result.ok || result.result === undefined) return true;
@@ -1028,22 +1161,27 @@ function hasUnresolvedAction(results: readonly TaskResult<OrdinarySyncActionOutc
   return false;
 }
 
+/** 把本地读取结果折算为规划器使用的元数据，文件不存在时返回 null */
 function localMeta(path: string, local: LocalReadResult | null): OrdinarySyncLocalMeta | null {
   return local ? { path, hash: local.hash, mtime: local.mtime, size: local.size } : null;
 }
 
+/** 由本地快照推导期望状态，缺失即期望文件不存在 */
 function expectedFromSnapshot(local: LocalReadResult | null): ExpectedLocalState {
   return local ? { kind: "hash", hash: local.hash } : { kind: "absent" };
 }
 
+/** 由哈希推导期望状态，空哈希表示期望文件不存在 */
 function expectedFromHash(hash: string): ExpectedLocalState {
   return hash ? { kind: "hash", hash } : { kind: "absent" };
 }
 
+/** 校验本地读取结果是否仍与期望状态一致，是各方案执行前的统一前置检查 */
 function matchesExpected(local: LocalReadResult | null, expected: ExpectedLocalState): boolean {
   return expected.kind === "absent" ? local === null : local !== null && local.hash === expected.hash;
 }
 
+/** 把冲突记录还原为服务端元数据，供冲突方案按远端修订号提交 */
 function conflictToMeta(conflict: ConflictEntry): SyncFileMeta {
   return {
     path: conflict.path,
@@ -1056,44 +1194,53 @@ function conflictToMeta(conflict: ConflictEntry): SyncFileMeta {
   };
 }
 
+/** 历史压缩后构造删除元数据，修订号为 0 表示无可比对版本 */
 function compactedDeleteMeta(path: string): SyncFileMeta {
   return { path, type: classifyPath(path), hash: "", size: 0, mtime: 0, revision: 0, deleted: true };
 }
 
+/** 按扩展名与路径前缀判定文件类型，决定冲突时能否做文本合并 */
 function classifyPath(path: string): "markdown" | "attachment" | "config" {
   if (path.toLowerCase().endsWith(".md")) return "markdown";
   return path.toLowerCase().startsWith(".obsidian/") ? "config" : "attachment";
 }
 
+/** 拷贝为独立 ArrayBuffer，避免把可能被复用的底层缓冲区交给传输层 */
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   return copy.buffer;
 }
 
+/** 计算内容的 SHA-256 十六进制摘要，用于基线与服务端哈希比对 */
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", bytes.slice());
   return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+/** 生成本次操作的幂等标识，优先使用 crypto.randomUUID，不可用时退化为时间加随机数 */
 function operationID(): string {
   return typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+/** 提取异常的可读文案，非 Error 值回退到调用方提供的兜底文案 */
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+/** 穷尽校验占位，SyncEngine 内新增动作类型未处理时在编译期暴露 */
 function assertNeverOutcome(value: never): never {
   throw new Error(`Unhandled ordinary sync outcome: ${String(value)}`);
 }
 
+/** 穷尽校验占位，新增冲突解决方案未处理时在编译期暴露 */
 function assertNeverResolution(value: never): never {
   throw new Error(`Unhandled conflict resolution: ${String(value)}`);
 }
 
+/** 长轮询失败后的固定退避，避免服务端异常时高频重试 */
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }

@@ -1,13 +1,14 @@
 // 插件文件原子替换与无感重载
 //
-// 流程：备份现有三件套 → 先写临时文件再 rename 覆盖目标（每步失败都回滚）→
-// disablePlugin/enablePlugin 重载 → 校验新版本实例已加载，失败则恢复备份并重新启用旧版本
+// 流程：备份现有三件套 -> 先写临时文件再 rename 覆盖目标（每步失败都回滚）->
+// disablePlugin/enablePlugin 重载 -> 校验新版本实例已加载，失败则恢复备份并重新启用
 
 import {
   manifestVersionFromText,
   type UpdateFile,
 } from "./plugin-update";
 
+/** 插件目录文件操作抽象；rename 为跨临时文件到目标文件的原子替换原语*/
 export interface PluginFileAdapter {
   read(path: string): Promise<string | null>;
   write(path: string, data: string | ArrayBuffer): Promise<void>;
@@ -15,6 +16,7 @@ export interface PluginFileAdapter {
   remove(path: string): Promise<void>;
 }
 
+/** 插件重载控制；isLoaded 用于确认目标版本实例已生效*/
 export interface ReloadController {
   disablePlugin(id: string): Promise<void>;
   enablePlugin(id: string): Promise<void>;
@@ -22,6 +24,7 @@ export interface ReloadController {
   isLoaded(id: string, expectedVersion?: string | null): boolean;
 }
 
+/** 原子替换与重载所需的输入*/
 export interface ApplyUpdateOptions {
   adapter: PluginFileAdapter;
   reload: ReloadController;
@@ -30,6 +33,7 @@ export interface ApplyUpdateOptions {
   files: readonly UpdateFile[];
 }
 
+/** 写入目标文件前使用的临时文件名后缀，替换结束后清理*/
 const TEMP_SUFFIX = ".oss-update-tmp";
 
 function joinPath(dir: string, name: string): string {
@@ -69,6 +73,7 @@ export async function applyPluginUpdate(options: ApplyUpdateOptions): Promise<vo
   }
 }
 
+/** 恢复备份文件并重新启用旧版本；恢复过程中的失败被吞掉，不掩盖原始错误*/
 async function rollbackAndReload(
   options: ApplyUpdateOptions,
   backup: ReadonlyMap<string, string | null>
@@ -82,10 +87,11 @@ async function rollbackAndReload(
   try {
     await options.reload.enablePlugin(options.pluginID);
   } catch {
-    // 旧版本也可能加载失败，不掩盖原始错误
+    // 重新启用也可能失败，此时不覆盖原始错误
   }
 }
 
+/** 读取目标文件当前内容作为备份；读取失败记为 null，表示原文件不存在*/
 async function readBackup(
   adapter: PluginFileAdapter,
   dir: string,
@@ -146,6 +152,7 @@ async function restoreTargets(
   }
 }
 
+/** 恢复全部目标文件的备份内容*/
 async function restoreFiles(
   adapter: PluginFileAdapter,
   dir: string,
@@ -155,6 +162,7 @@ async function restoreFiles(
   await restoreTargets(adapter, dir, files, backup, files.length);
 }
 
+/** 写回单个目标文件；content 为 null 表示原本不存在，改为删除该文件*/
 async function restoreOne(
   adapter: PluginFileAdapter,
   dir: string,
@@ -169,6 +177,7 @@ async function restoreOne(
   }
 }
 
+/** 并发删除指定路径；单个删除失败被忽略，保证清理路径自身不抛错*/
 async function removePaths(
   adapter: PluginFileAdapter,
   dir: string,

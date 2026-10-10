@@ -1,12 +1,14 @@
 import type { CollaborationBaselineEntry } from "./collaboration-state.js";
 import { decodeMergeableText, mergeText } from "./text-merge.js";
 
+/** 参与对账的本地或远端正文 */
 export interface CollaborationContent {
   readonly path: string;
   readonly bytes: Uint8Array;
   readonly hash: string;
 }
 
+/** 对账输入；ancestorText 为 null 表示无可用祖先 */
 export interface CollaborationReconcileInput {
   readonly path: string;
   readonly baseline: CollaborationBaselineEntry;
@@ -15,6 +17,7 @@ export interface CollaborationReconcileInput {
   readonly remote: CollaborationContent;
 }
 
+/** 对账决策；pending 或 conflict 未清空时一律 keep_local，等待已有流程收尾 */
 export type CollaborationReconcileDecision =
   | { readonly kind: "adopt_remote" }
   | { readonly kind: "keep_local" }

@@ -189,7 +189,7 @@ func TestConsoleModalHeadingsRemainH2(t *testing.T) {
 	}
 	adminSession, adminCSRF := webLogin(t, router, "root", "admin-password-123")
 
-	// 非最后管理员 → 渲染重置密码模态框
+	// 非最后管理员 -> 渲染重置密码模态框
 	users := doForm(t, router, http.MethodGet, "/dashboard/admin", nil, adminSession, adminCSRF)
 	if !strings.Contains(users.Body.String(), `<h2 id="reset-title-`) {
 		t.Error("admin users reset modal must keep its h2 title")

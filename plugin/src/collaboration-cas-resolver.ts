@@ -14,10 +14,12 @@ import type { ConflictResolution } from "./conflict-modal.js";
 function hasStatus(error: unknown): error is { status: unknown } {
   return typeof error === "object" && error !== null && "status" in error;
 }
+/** 判断错误是否为协作 409 冲突 */
 export function isCollaborationConflictError(error: unknown): boolean {
   if (!hasStatus(error)) return false;
   return error.status === 409;
 }
+/** 生成协作冲突副本路径，与普通同步的命名规则一致 */
 export function collabConflictCopyPath(path: string, now: number): string {
   const key = normalizePath(path);
   const slash = key.lastIndexOf("/");
@@ -29,18 +31,22 @@ export function collabConflictCopyPath(path: string, now: number): string {
   const ts = new Date(now).toISOString().replace(/[:.]/g, "-");
   return `${dir}${stem}_conflict_${ts}${ext}`;
 }
+/** 409 处理所需的基线读写能力 */
 export interface CollaborationCasBaseline {
   readonly getCollaboration: (vaultId: string, fileId: number) => CollaborationBaselineEntry | null;
   readonly setCollaboration: (vaultId: string, fileId: number, entry: CollaborationBaselineEntry) => void;
   readonly save: () => Promise<void>;
 }
+/** 409 处理所需的协作 API 能力 */
 export interface CollaborationCasApi {
   readonly downloadCollabContent: (vaultId: string, fileId: number) => Promise<{ content: ArrayBuffer; meta: SyncFileMeta } | null>;
   readonly collabUpload: (vaultId: string, fileId: number, input: CollaborationUploadInput) => Promise<SyncFileMeta>;
 }
+/** 翻译能力 */
 export interface CollaborationCasPlugin {
   readonly t: (key: TranslationKey, params?: TranslationParams) => string;
 }
+/** 409 处理依赖 */
 export interface CollaborationCasDeps {
   readonly baseline: CollaborationCasBaseline;
   readonly vault: CollaborationFileVault;
@@ -50,18 +56,22 @@ export interface CollaborationCasDeps {
   readonly createOperationID: () => string;
   readonly onChange: () => void;
 }
+/** 409 处理输入；entry 为冲突前的本地基线 */
 export interface Resolve409Input {
   readonly accepted: AcceptedCollaborationFile;
   readonly entry: CollaborationBaselineEntry;
 }
+/** 穷尽检查；新增决策类型未处理时应抛错 */
 function assertNever(value: never): never {
   throw new Error(`unhandled ${String(value)}`);
 }
+/** 记录待重试的上传，避免本地编辑在失败后丢失 */
 async function stashPending(deps: CollaborationCasDeps, entry: CollaborationBaselineEntry, hash: string): Promise<void> {
   const id = deps.createOperationID();
   deps.baseline.setCollaboration(entry.vaultId, entry.fileId, { ...entry, localHash: hash, pending: { id, createdAt: deps.now() } });
   await deps.baseline.save();
 }
+/** 落地远端正文并清空 pending 与 conflict */
 async function advanceToRemote(deps: CollaborationCasDeps, accepted: AcceptedCollaborationFile, bytes: Uint8Array, hash: string, rev: number): Promise<void> {
   await deps.vault.writeCanonical(accepted.localPath, bytes);
   const baseText = decodeMergeableText(accepted.localPath, bytes) ?? "";
@@ -73,9 +83,11 @@ async function advanceToRemote(deps: CollaborationCasDeps, accepted: AcceptedCol
   new Notice(deps.plugin.t("collab.downloaded", { path: accepted.localPath }));
   deps.onChange();
 }
+/** 以指定 revision 为 base 上传正文 */
 async function tryUpload(deps: CollaborationCasDeps, accepted: AcceptedCollaborationFile, content: string, rev: number, op: string): Promise<SyncFileMeta> {
   return deps.api.collabUpload(accepted.vaultId, accepted.fileId, { content, baseRevision: rev, operationID: op });
 }
+/** 上传遇到 409 时拉取最新远端并按对账决策收尾 */
 export async function resolveCollaboration409(deps: CollaborationCasDeps, input: Resolve409Input): Promise<void> {
   const { accepted, entry } = input;
   let fetched: { content: ArrayBuffer; meta: SyncFileMeta } | null = null;
@@ -100,6 +112,7 @@ export async function resolveCollaboration409(deps: CollaborationCasDeps, input:
   const fresh = await deps.vault.readExact(accepted.localPath);
   const freshLocal = fresh ? { path: accepted.localPath, bytes: fresh.bytes, hash: fresh.hash } : null;
   const remoteContent = { path: accepted.localPath, bytes: remoteBytes, hash: remoteHash };
+  // 合成把本地视为未改动的基线，让对账决策只反映远端差异
   const synthetic: CollaborationBaselineEntry = {
     vaultId: entry.vaultId, fileId: entry.fileId, localPath: entry.localPath,
     serverRevision: entry.serverRevision, serverHash: entry.serverHash, localHash: entry.serverHash,
@@ -236,6 +249,7 @@ export async function resolveCollaboration409(deps: CollaborationCasDeps, input:
   }
 }
 
+/** 应用用户在冲突弹窗中选择的解决方式 */
 export async function resolvePersistedCollaborationConflict(
   deps: CollaborationCasDeps,
   vaultId: string,

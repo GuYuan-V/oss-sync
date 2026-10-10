@@ -3,6 +3,7 @@ import type { Diagnostics } from "./diagnostics";
 const COLLAB_POLL_WAIT_SEC = 30;
 const COLLAB_INBOX_REFRESH_MS = 30_000;
 
+/** 协作事件传输状态 */
 export type CollaborationTransportStatus =
   | "disconnected"
   | "sse"
@@ -10,6 +11,7 @@ export type CollaborationTransportStatus =
   | "sse_unavailable"
   | "long_poll";
 
+/** 传输层依赖；api 只取所需方法，便于测试替换 */
 export interface CollaborationTransportDeps {
   readonly api: {
     readonly hasToken: () => boolean;
@@ -37,14 +39,17 @@ export class CollaborationTransport {
 
   constructor(private readonly deps: CollaborationTransportDeps) {}
 
+  /** 是否已启动 */
   isRunning(): boolean {
     return this.started;
   }
 
+  /** 当前传输方式 */
   getStatus(): CollaborationTransportStatus {
     return this.status;
   }
 
+  /** 启动收件箱轮询并选择 SSE 或长轮询；已启动时重复调用无效 */
   start(): void {
     if (this.started) return;
     this.started = true;
@@ -64,6 +69,7 @@ export class CollaborationTransport {
     this.startLongPoll();
   }
 
+  /** 停止全部通道并清理计时器 */
   stop(): void {
     this.started = false;
     this.pollGen++;
@@ -107,6 +113,7 @@ export class CollaborationTransport {
       });
     }
     source.onerror = () => {
+      // 旧的 EventSource 在替换后仍可能报错，按身份比对丢弃
       if (!this.started || this.eventSource !== source) return;
       source.close();
       this.eventSource = null;
@@ -140,6 +147,7 @@ export class CollaborationTransport {
 
   private async pollLoop(gen: number, controller: AbortController): Promise<void> {
     while (this.started && !controller.signal.aborted && gen === this.pollGen) {
+      // 轮询代次与 abort 信号双重校验，确保重启后旧循环不会继续写入
       const vaultId = this.deps.getVaultId();
       if (!vaultId || !this.deps.api.hasToken()) return;
       const startedAt = Date.now();

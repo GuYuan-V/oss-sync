@@ -12,8 +12,10 @@ export type {
   CollaborationPendingOperation,
 } from "./collaboration-state.js";
 
+/** 同步基线文件名，位于 vault 根目录并被黑名单忽略 */
 export const BASELINE_FILENAME = ".oss-sync-state.json";
 
+/** 单文件基线；baseText 仅在正文可参与三方合并时保留 */
 export interface BaselineEntry {
   serverRevision: number;
   serverHash: string;
@@ -24,6 +26,7 @@ export interface BaselineEntry {
   baseText?: string;
 }
 
+/** 待传输操作；rename 的 oldPath 为来源路径 */
 export interface PendingOperation {
   id: string;
   kind: "upsert" | "delete" | "rename";
@@ -32,6 +35,7 @@ export interface PendingOperation {
   createdAt: number;
 }
 
+/** 未解决冲突记录；remoteType 决定是否可做文本处理 */
 export interface ConflictEntry {
   path: string;
   localHash: string;
@@ -77,6 +81,7 @@ export class BaselineStore {
 
   constructor(private vault: Vault) {}
 
+  /** 加载基线；重复调用复用同一次加载，读取失败按空状态处理 */
   async load(): Promise<void> {
     if (this.loaded) return;
     if (!this.loadPromise) {
@@ -85,6 +90,7 @@ export class BaselineStore {
     await this.loadPromise;
   }
 
+  /** 从 adapter 读取并兼容 version 2 与 3；不认识的版本整体按空状态处理 */
   private async loadFromAdapter(): Promise<void> {
     try {
       if (!(await this.vault.adapter.exists(BASELINE_FILENAME))) {
@@ -123,6 +129,7 @@ export class BaselineStore {
     }
   }
 
+  /** 序列化当前状态并串行写入，避免并发保存互相覆盖 */
   async save(): Promise<void> {
     await this.load();
     const raw = JSON.stringify(this.data);
@@ -133,6 +140,7 @@ export class BaselineStore {
     await pending;
   }
 
+  /** 切换绑定仓库；协作基线按账户隔离，跨仓库保留 */
   bindVault(vaultID: string): boolean {
     if (this.data.vaultId === vaultID) return false;
     const { collaborationAccount: account, collaborationFiles: files } = this.data;
@@ -143,6 +151,7 @@ export class BaselineStore {
     return true;
   }
 
+  /** 切换协作账户并清空该账户下的协作基线 */
   bindCollaborationAccount(account: string): boolean {
     if (this.data.collaborationAccount === account) return false;
     this.data.collaborationAccount = account;
@@ -158,6 +167,7 @@ export class BaselineStore {
     return this.data.cursor;
   }
 
+  /** 推进游标；只增不减，避免乱序响应把进度回退 */
   setCursor(cursor: number): void {
     this.data.cursor = Math.max(this.data.cursor, cursor);
   }
@@ -186,14 +196,17 @@ export class BaselineStore {
     return [...this.data.conflicts];
   }
 
+  /** 写入待传输操作；同路径只保留最新，重命名链折叠为一次操作 */
   putPending(operation: PendingOperation): void {
     const path = normalizePath(operation.path);
     const oldPath = operation.oldPath ? normalizePath(operation.oldPath) : undefined;
     if (operation.kind === "upsert") {
+      // 已有 rename 等待时忽略后续 upsert，rename 会带上最新内容
       const rename = this.data.pending.find((item) => item.kind === "rename" && item.path === path);
       if (rename) return;
     }
     if (operation.kind === "delete") {
+      // 删除已排在 rename 之后时改写为删除来源路径，保留净效果
       const rename = this.data.pending.find((item) => item.kind === "rename" && item.path === path);
       if (rename?.oldPath) {
         this.data.pending = this.data.pending.filter((item) => item.id !== rename.id);
@@ -202,6 +215,7 @@ export class BaselineStore {
       }
     }
     if (operation.kind === "rename" && oldPath) {
+      // 连续 rename 折叠为一次，来源取最早的一条
       const previousRename = this.data.pending.find(
         (item) => item.kind === "rename" && item.path === oldPath
       );
@@ -211,6 +225,7 @@ export class BaselineStore {
       }
     }
     this.data.pending = this.data.pending.filter((item) => {
+      // rename 会同时占用来源与目标路径，需清掉两条路径上的旧操作
       if (operation.kind === "rename") {
         return item.path !== path && item.path !== operation.oldPath;
       }
@@ -234,6 +249,7 @@ export class BaselineStore {
     );
   }
 
+  /** 记录冲突；同路径只保留最新一条 */
   putConflict(conflict: ConflictEntry): void {
     this.data.conflicts = this.data.conflicts.filter((item) => item.path !== conflict.path);
     this.data.conflicts.push({ ...conflict, path: normalizePath(conflict.path) });
@@ -248,19 +264,23 @@ export class BaselineStore {
     return this.data.conflicts.find((item) => item.path === normalizePath(path)) ?? null;
   }
 
+  /** 读取协作基线副本，防止调用方直接改动内部状态 */
   getCollaboration(vaultId: string, fileId: number): CollaborationBaselineEntry | null {
     const entry = this.data.collaborationFiles[collaborationKey(vaultId, fileId)];
     return entry ? cloneCollaborationEntry(entry) : null;
   }
+  /** 写入协作基线；存入前克隆以隔离调用方引用 */
   setCollaboration(vaultId: string, fileId: number, entry: CollaborationBaselineEntry): void {
     this.data.collaborationFiles[collaborationKey(vaultId, fileId)] = cloneCollaborationEntry(entry);
   }
+  /** 删除协作基线；不存在时返回 false */
   removeCollaboration(vaultId: string, fileId: number): boolean {
     const key = collaborationKey(vaultId, fileId);
     if (!(key in this.data.collaborationFiles)) return false;
     delete this.data.collaborationFiles[key];
     return true;
   }
+  /** 按本地路径删除协作基线，返回删除条数；同一路径可能命中多个仓库 */
   removeCollaborationByLocalPath(localPath: string): number {
     const normalized = normalizePath(localPath);
     let removed = 0;
@@ -272,15 +292,18 @@ export class BaselineStore {
     }
     return removed;
   }
+  /** 返回全部协作基线副本 */
   collaborationEntries(): CollaborationBaselineEntry[] {
     return Object.values(this.data.collaborationFiles).map(cloneCollaborationEntry);
   }
 }
 
+/** 统一路径分隔符为 / 并去掉前导 ./，作为所有基线与查询的键 */
 export function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\.\/+/, "");
 }
 
+/** 清洗持久化的协作基线，键一律按内容重建以防篡改 */
 function sanitizeCollaborationFiles(raw: unknown): Record<string, CollaborationBaselineEntry> {
   if (!raw || typeof raw !== "object") return {};
   const out: Record<string, CollaborationBaselineEntry> = {};
