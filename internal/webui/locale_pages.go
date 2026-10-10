@@ -1,5 +1,6 @@
 package webui
 
+// 注册各页面标题的中英文案，%s 占位符由调用方填入仓库名或文件名
 func init() {
 	registerEntries(map[string][2]string{
 		"page.overview":             {"首页", "Home"},
