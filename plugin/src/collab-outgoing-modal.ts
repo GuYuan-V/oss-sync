@@ -25,6 +25,8 @@ export class CollabOutgoingModal extends Modal {
 
   /** 刷新协作关系并重渲染；撤销的条目不显示 */
   private async load(): Promise<void> {
+    this.contentEl.empty();
+    this.contentEl.createDiv({ cls: "oss-sidebar-empty", text: this.plugin.t("collab.loading") });
     await this.plugin.collabManager.refresh();
     const username = this.plugin.settings.username;
     const keys = new Set(this.entries.map((entry) => `${entry.vault_id}:${entry.file_id}`));
@@ -129,6 +131,8 @@ export class CollabCollaboratorsModal extends Modal {
 
   /** 刷新协作关系并重渲染；撤销的条目不显示 */
   private async load(): Promise<void> {
+    this.contentEl.empty();
+    this.contentEl.createDiv({ cls: "oss-sidebar-empty", text: this.plugin.t("collab.loading") });
     await this.plugin.collabManager.refresh();
     const ids = new Set(this.entries.map((entry) => entry.id));
     this.entries = this.plugin.collabManager.getCollaborations().filter((entry) => ids.has(entry.id) && entry.status !== "revoked");
@@ -165,7 +169,6 @@ export class CollabCollaboratorsModal extends Modal {
       revokeSelected.setText(this.plugin.t("collab.revokeSelected", { count: this.selectedIDs.size }));
     });
     label.createEl("span", { text: entry.collaborator_username });
-    row.createDiv({ cls: "oss-manager-meta", text: entry.status });
     const toggleHost = row.createDiv({ cls: "oss-collaborator-history-toggle" });
     new Setting(toggleHost)
       .setName(this.plugin.t("collab.historyView"))

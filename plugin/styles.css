@@ -378,17 +378,19 @@
   font-weight: var(--font-semibold);
 }
 
+/* 数量徽章：小字号、深灰底，紧贴标题右侧 */
 .oss-manager-modal .oss-collab-section-count {
-  min-width: 20px;
-  padding: 1px 6px;
-  border-radius: var(--radius-s);
-  background: var(--background-secondary);
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: #333333;
+  color: #b0b0b0;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
-  text-align: center;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
+/* 查看按钮推到行尾，与弹窗右边距贴合 */
 .oss-manager-modal .oss-collab-section-header .oss-collab-view {
   margin-left: auto;
 }
@@ -609,9 +611,9 @@
   grid-template-columns: minmax(0, 1fr) max-content max-content;
 }
 
-/* 协作者详情行 4 列：勾选框与名称、状态、历史开关、撤销 */
+/* 协作者详情行 3 列：勾选框与名称、修改记录开关、撤回按钮 */
 .oss-manager-modal .oss-sidebar-collab-row.oss-collaborator-row {
-  grid-template-columns: minmax(0, 1fr) max-content max-content max-content;
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
 }
 
 .oss-manager-modal .oss-collab-article-bulk-actions {

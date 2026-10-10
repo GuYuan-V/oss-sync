@@ -23,6 +23,8 @@ export class CollabIncomingModal extends Modal {
 
   /** 刷新协作关系并重渲染；撤销的条目不显示 */
   private async load(): Promise<void> {
+    this.contentEl.empty();
+    this.contentEl.createDiv({ cls: "oss-sidebar-empty", text: this.plugin.t("collab.loading") });
     await this.plugin.collabManager.refresh();
     const username = this.plugin.settings.username;
     this.entries = this.plugin.collabManager.getCollaborations()
@@ -48,7 +50,7 @@ export class CollabIncomingModal extends Modal {
     name.setAttribute("title", entry.file_path);
     row.createDiv({
       cls: "oss-manager-meta",
-      text: this.plugin.t("collab.incomingMeta", { name: entry.owner_username, status: entry.status }),
+      text: this.plugin.t("collab.incomingFrom", { name: entry.owner_username }),
     });
     const actions = row.createDiv({ cls: "oss-sidebar-actions" });
     if (entry.status === "pending") {

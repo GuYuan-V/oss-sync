@@ -36,12 +36,12 @@ export class CollabManagerModal extends Modal {
       return;
     }
     if (incoming.length > 0) {
-      this.renderSectionHeader("collab.sectionIncoming", this.incomingCountLabel(incoming), () =>
+      this.renderSectionHeader("collab.sectionIncoming", "incoming", this.incomingCountLabel(incoming), () =>
         new CollabIncomingModal(this.app, this.plugin, incoming).open()
       );
     }
     if (outgoing.length > 0) {
-      this.renderSectionHeader("collab.sectionOutgoing", this.outgoingCountLabel(outgoing), () =>
+      this.renderSectionHeader("collab.sectionOutgoing", "outgoing", this.outgoingCountLabel(outgoing), () =>
         new CollabOutgoingModal(this.app, this.plugin, outgoing).open()
       );
     }
@@ -60,8 +60,8 @@ export class CollabManagerModal extends Modal {
   }
 
   /** 渲染分区标题行：标题、数量与打开对应窗口的查看按钮 */
-  private renderSectionHeader(titleKey: TranslationKey, count: string, openDetail: () => void): void {
-    const header = this.contentEl.createDiv({ cls: "oss-collab-section-header" });
+  private renderSectionHeader(titleKey: TranslationKey, variant: string, count: string, openDetail: () => void): void {
+    const header = this.contentEl.createDiv({ cls: `oss-collab-section-header oss-collab-section-header--${variant}` });
     header.createEl("span", { cls: "oss-collab-section-title", text: this.plugin.t(titleKey) });
     header.createEl("span", { cls: "oss-collab-section-count", text: count });
     header.createEl("button", { cls: "oss-collab-view", text: this.plugin.t("collab.view") })

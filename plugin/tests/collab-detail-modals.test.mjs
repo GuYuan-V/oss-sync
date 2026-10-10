@@ -33,7 +33,7 @@ function makePlugin(entries, calls) {
         "collab.leave": "退出协作",
         "sidebar.accept": "接受",
         "sidebar.reject": "拒绝",
-        "collab.incomingMeta": `来自 ${params.name} · ${params.status}`,
+        "collab.incomingFrom": `来自 ${params.name}`,
         "collab.collaboratorCount": `${params.count} 位协作者`,
         "collab.collaboratorsTitle": `协作者：${params.path}`,
       };
