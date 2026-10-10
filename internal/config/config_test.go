@@ -97,6 +97,44 @@ sync: {max_concurrency: 6}
 	if cfg.Auth.EffectiveDeviceJWTTTLHours() != 360 {
 		t.Errorf("device jwt ttl not overridden: %d", cfg.Auth.EffectiveDeviceJWTTTLHours())
 	}
+	if cfg.Sync.AllowInsecureQueryToken {
+		t.Error("insecure query token should stay off by default")
+	}
+}
+
+// 反代在内网以明文 http 转发 SSE 时，需要显式打开查询参数令牌
+func TestLoad_InsecureQueryTokenEnv(t *testing.T) {
+	writeConfig(t, "config.prod.yaml", `
+server: {host: "0.0.0.0", port: 8080, mode: "release"}
+database: {driver: "sqlite", dsn: "data/oss.db"}
+storage: {data_dir: "data"}
+auth: {jwt_secret: "from-file", jwt_ttl_hours: 72}
+sync: {max_concurrency: 6}
+`)
+	t.Setenv("OSS_ENV", "prod")
+	t.Setenv("OSS_ALLOW_INSECURE_QUERY_TOKEN", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !cfg.Sync.AllowInsecureQueryToken {
+		t.Error("insecure query token should be enabled by env override")
+	}
+}
+
+func TestLoad_InvalidInsecureQueryTokenEnv(t *testing.T) {
+	writeConfig(t, "config.prod.yaml", `
+server: {host: "0.0.0.0", port: 8080, mode: "release"}
+database: {driver: "sqlite", dsn: "data/oss.db"}
+storage: {data_dir: "data"}
+auth: {jwt_secret: "from-file", jwt_ttl_hours: 72}
+sync: {max_concurrency: 6}
+`)
+	t.Setenv("OSS_ENV", "prod")
+	t.Setenv("OSS_ALLOW_INSECURE_QUERY_TOKEN", "enabled")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid insecure query token value should fail config load")
+	}
 }
 
 func TestAuthConfig_LegacyConfigUsesScopedSessionDefaults(t *testing.T) {

@@ -128,7 +128,7 @@ func (h *Handler) CollabAccountPoll(c *gin.Context) {
 func (h *Handler) collabEventUser(c *gin.Context) (*models.User, bool) {
 	token := ""
 	if queryToken := c.Query("token"); queryToken != "" {
-		if !collabQueryTokenAllowed(c.Request, c.GetHeader("X-Forwarded-Proto")) {
+		if !h.collabQueryTokenAllowed(c.Request, c.GetHeader("X-Forwarded-Proto")) {
 			c.AbortWithStatus(http.StatusForbidden)
 			return nil, false
 		}

@@ -875,20 +875,20 @@ export class OSSApiClient {
     return this.buildCollabEventStreamURL("/api/collaborations/stream");
   }
 
-  /** 构造事件流地址；非 HTTPS 且非本机回环时返回 null，避免令牌经明文传输 */
+  /**
+   * 构造事件流地址
+   * EventSource 无法携带 Authorization 头，令牌只能走查询参数；
+   * 非 HTTPS 时仍放行，由使用方自行评估明文传输风险
+   */
   private buildCollabEventStreamURL(path: string): string | null {
     if (!this.token) {
       return null;
     }
-    let serverURL: URL;
     try {
-      serverURL = new URL(this.settings.serverUrl);
+      new URL(this.settings.serverUrl);
     } catch {
       return null;
     }
-    const secure = serverURL.protocol === "https:";
-    const loopbackHTTP = serverURL.protocol === "http:" && isLoopbackHostname(serverURL.hostname);
-    if (!secure && !loopbackHTTP) return null;
     return this.url(
       `${path}?token=${encodeURIComponent(this.token)}` +
         `&client_id=${encodeURIComponent(this.settings.clientId)}`
@@ -1153,15 +1153,6 @@ function header(headers: Record<string, string>, name: string): string {
     if (key.toLowerCase() === target) return value;
   }
   return "";
-}
-
-/** 判断主机名是否指向本机，含 localhost、IPv4 回环与 IPv6 回环 */
-export function isLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (normalized === "localhost" || normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") {
-    return true;
-  }
-  return /^127(?:\.\d{1,3}){3}$/.test(normalized);
 }
 
 /** 按路径推断文件类型；.obsidian 下的文件归为配置 */

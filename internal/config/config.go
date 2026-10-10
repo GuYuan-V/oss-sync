@@ -61,6 +61,8 @@ type SyncConfig struct {
 	ReconcileIntervalHours int `yaml:"reconcile_interval_hours"`
 	TempFileMaxAgeHours    int `yaml:"temp_file_max_age_hours"`
 	OrphanFileGraceHours   int `yaml:"orphan_file_grace_hours"`
+	// AllowInsecureQueryToken 允许查询参数携带 JWT，用于反代在内网以明文 http 转发 SSE
+	AllowInsecureQueryToken bool `yaml:"allow_insecure_query_token"`
 }
 
 // UpdateConfig 控制管理员触发的版本检查与更新
@@ -170,6 +172,19 @@ func (c *Config) applyEnvOverrides() error {
 	if v := os.Getenv("OSS_DEVICE_STALE_DAYS"); v != "" {
 		if days, err := strconv.Atoi(v); err == nil {
 			c.Sync.DeviceStaleDays = days
+		}
+	}
+	if v, ok := os.LookupEnv("OSS_ALLOW_INSECURE_QUERY_TOKEN"); ok && v != "" {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "true":
+			c.Sync.AllowInsecureQueryToken = true
+		case "false":
+			c.Sync.AllowInsecureQueryToken = false
+		default:
+			return fmt.Errorf(
+				"OSS_ALLOW_INSECURE_QUERY_TOKEN 必须为 true 或 false，收到 %q",
+				v,
+			)
 		}
 	}
 	if v := os.Getenv("OSS_RECONCILE_INTERVAL_HOURS"); v != "" {
