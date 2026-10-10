@@ -3,9 +3,9 @@ import type { CollabEntry } from "./api";
 import { localizeError } from "./localized-error";
 import type OSSPlugin from "./main";
 
-/** 发出的邀请详情窗口；按协作者列出，支持多选撤销与逐个切换历史查看权限 */
+/** 发出的邀请详情窗口；按文章列出，每行可进入协作者列表或整篇取消 */
 export class CollabOutgoingModal extends Modal {
-  private readonly selectedIDs = new Set<number>();
+  private readonly selectedArticleKeys = new Set<string>();
   private entries: readonly CollabEntry[];
 
   constructor(app: App, private readonly plugin: OSSPlugin, entries: readonly CollabEntry[]) {
@@ -16,7 +16,7 @@ export class CollabOutgoingModal extends Modal {
   onOpen(): void {
     this.modalEl.addClass("oss-manager-modal", "oss-collab-detail-modal");
     this.titleEl.setText(this.plugin.t("collab.sectionOutgoing"));
-    this.render();
+    void this.load();
   }
 
   onClose(): void {
@@ -27,14 +27,115 @@ export class CollabOutgoingModal extends Modal {
   private async load(): Promise<void> {
     await this.plugin.collabManager.refresh();
     const username = this.plugin.settings.username;
-    const all = this.plugin.collabManager.getCollaborations()
-      .filter((entry) => entry.collaborator_username !== username && entry.status !== "revoked");
     const keys = new Set(this.entries.map((entry) => `${entry.vault_id}:${entry.file_id}`));
-    this.entries = all.filter((entry) => keys.has(`${entry.vault_id}:${entry.file_id}`));
+    this.entries = this.plugin.collabManager.getCollaborations()
+      .filter((entry) => entry.collaborator_username !== username && entry.status !== "revoked" && keys.has(`${entry.vault_id}:${entry.file_id}`));
     this.render();
   }
 
-  /** 渲染协作者列表与批量撤销按钮；空列表只给出空态 */
+  /** 渲染文章列表与批量取消按钮；空列表给出空态 */
+  private render(): void {
+    this.contentEl.empty();
+    const byArticle = this.groupByArticle();
+    if (byArticle.length === 0) {
+      this.contentEl.createDiv({ cls: "oss-sidebar-empty", text: this.plugin.t("collab.empty") });
+      return;
+    }
+    this.renderBulkActions(byArticle);
+    for (const group of byArticle) this.renderArticle(group.key, group.entries);
+  }
+
+  /** 按 `vault_id:file_id` 聚合文章，保持服务端返回顺序 */
+  private groupByArticle(): { key: string; entries: CollabEntry[] }[] {
+    const groups = new Map<string, CollabEntry[]>();
+    for (const entry of this.entries) {
+      const key = `${entry.vault_id}:${entry.file_id}`;
+      const list = groups.get(key) ?? [];
+      list.push(entry);
+      groups.set(key, list);
+    }
+    return [...groups].map(([key, entries]) => ({ key, entries }));
+  }
+
+  /** 渲染批量取消按钮；随勾选数量更新可用性与文案 */
+  private renderBulkActions(byArticle: readonly { key: string; entries: CollabEntry[] }[]): void {
+    const actions = this.contentEl.createDiv({ cls: "oss-sidebar-actions oss-collab-article-bulk-actions" });
+    const cancelSelected = actions.createEl("button", {
+      cls: "oss-collab-cancel-selected mod-warning",
+      text: this.plugin.t("collab.cancelSelectedArticles", { count: this.selectedArticleKeys.size }),
+    });
+    cancelSelected.disabled = this.selectedArticleKeys.size === 0;
+    cancelSelected.addEventListener("click", () => void this.cancelArticles(byArticle));
+  }
+
+  /** 渲染单篇文章；勾选、文章名、协作者数、查看协作者与取消同行 */
+  private renderArticle(key: string, entries: readonly CollabEntry[]): void {
+    const article = entries[0];
+    if (!article) return;
+    const row = this.contentEl.createDiv({ cls: "oss-sidebar-collab-row oss-collab-article-row" });
+    const label = row.createEl("label", { cls: "oss-manager-select" });
+    const checkbox = label.createEl("input", { attr: { type: "checkbox" } });
+    checkbox.checked = this.selectedArticleKeys.has(key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) this.selectedArticleKeys.add(key);
+      else this.selectedArticleKeys.delete(key);
+      this.render();
+    });
+    const name = label.createEl("span", { cls: "oss-ellipsis" });
+    name.setText(article.file_path);
+    name.setAttribute("title", article.file_path);
+    row.createDiv({ cls: "oss-manager-meta", text: this.plugin.t("collab.collaboratorCount", { count: entries.length }) });
+    const actions = row.createDiv({ cls: "oss-sidebar-actions" });
+    actions.createEl("button", { cls: "oss-collab-view", text: this.plugin.t("collab.viewCollaborators") })
+      .addEventListener("click", () => new CollabCollaboratorsModal(this.app, this.plugin, entries).open());
+    actions.createEl("button", { cls: "oss-collab-cancel-article mod-warning", text: this.plugin.t("collab.cancelArticle") })
+      .addEventListener("click", () => void this.cancelArticle(entries));
+  }
+
+  /** 撤销该文章的全部协作者 */
+  private async cancelArticle(entries: readonly CollabEntry[]): Promise<void> {
+    await Promise.all(entries.map((entry) => this.plugin.collabManager.revoke(entry)));
+    await this.load();
+  }
+
+  /** 撤销勾选中的全部文章，完成后清空勾选 */
+  private async cancelArticles(byArticle: readonly { key: string; entries: CollabEntry[] }[]): Promise<void> {
+    const selected = byArticle.filter((group) => this.selectedArticleKeys.has(group.key));
+    await Promise.all(selected.flatMap((group) => group.entries).map((entry) => this.plugin.collabManager.revoke(entry)));
+    this.selectedArticleKeys.clear();
+    await this.load();
+  }
+}
+
+/** 单篇文章的协作者列表窗口；多选撤销，并在同一行切换协作者的历史查看权限 */
+export class CollabCollaboratorsModal extends Modal {
+  private readonly selectedIDs = new Set<number>();
+  private entries: readonly CollabEntry[];
+
+  constructor(app: App, private readonly plugin: OSSPlugin, entries: readonly CollabEntry[]) {
+    super(app);
+    this.entries = entries;
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("oss-manager-modal", "oss-collab-detail-modal");
+    this.titleEl.setText(this.plugin.t("collab.collaboratorsTitle", { path: this.entries[0]?.file_path ?? "" }));
+    void this.load();
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+
+  /** 刷新协作关系并重渲染；撤销的条目不显示 */
+  private async load(): Promise<void> {
+    await this.plugin.collabManager.refresh();
+    const ids = new Set(this.entries.map((entry) => entry.id));
+    this.entries = this.plugin.collabManager.getCollaborations().filter((entry) => ids.has(entry.id) && entry.status !== "revoked");
+    this.render();
+  }
+
+  /** 渲染协作者列表与批量撤销按钮；空列表给出空态 */
   private render(): void {
     this.contentEl.empty();
     if (this.entries.length === 0) {
@@ -67,7 +168,7 @@ export class CollabOutgoingModal extends Modal {
     row.createDiv({ cls: "oss-manager-meta", text: entry.status });
     const toggleHost = row.createDiv({ cls: "oss-collaborator-history-toggle" });
     new Setting(toggleHost)
-      .setName(this.plugin.t("collab.allowHistoryView"))
+      .setName(this.plugin.t("collab.historyView"))
       .addToggle((toggle) =>
         toggle
           .setValue(entry.allow_history_view)

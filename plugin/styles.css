@@ -401,15 +401,18 @@
   white-space: nowrap;
 }
 
-/* 行内历史开关容器 */
+/* 行内历史开关容器；Setting 收起为单个开关控件，避免挤占同行其他元素 */
 .oss-manager-modal .oss-collaborator-history-toggle {
+  display: flex;
+  align-items: center;
   min-width: max-content;
 }
 
-/* Setting 在行内渲染时去掉自身的上下间距 */
+/* Setting 在行内渲染时去掉自身的上下间距与内边距 */
 .oss-manager-modal .oss-collaborator-history-toggle .setting-item {
   padding: 0;
   border: none;
+  background: none;
 }
 
 .oss-manager-modal .oss-collaborator-history-toggle .setting-item-info {
@@ -417,8 +420,10 @@
 }
 
 .oss-manager-modal .oss-collaborator-history-toggle .setting-item-control {
+  flex: 0 0 auto;
   justify-content: flex-end;
   padding: 0;
+  width: auto;
 }
 
 .oss-manager-modal .oss-sidebar-share,
