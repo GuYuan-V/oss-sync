@@ -1,6 +1,8 @@
 import { App, Modal } from "obsidian";
 import type { CollabEntry } from "./api";
-import { CollabCollaboratorsModal } from "./collab-collaborators-modal";
+import { CollabIncomingModal } from "./collab-incoming-modal";
+import { CollabOutgoingModal } from "./collab-outgoing-modal";
+import type { TranslationKey } from "./i18n";
 import type OSSPlugin from "./main";
 
 /** 协作管理弹窗；分「我发出的邀请」与「我收到的邀请」两个大类，协作者平铺在所属文件下方 */
@@ -29,27 +31,39 @@ export class CollabManagerModal extends Modal {
     this.contentEl.empty();
     const collaborations = this.plugin.collabManager.getCollaborations();
     const username = this.plugin.settings.username;
-    const incoming = collaborations.filter((entry) => entry.collaborator_username === username);
-    const outgoing = collaborations.filter((entry) => entry.collaborator_username !== username);
+    const incoming = collaborations.filter((entry) => entry.collaborator_username === username && entry.status !== "revoked");
+    const outgoing = collaborations.filter((entry) => entry.collaborator_username !== username && entry.status !== "revoked");
     if (incoming.length === 0 && outgoing.length === 0) {
       this.contentEl.createDiv({ cls: "oss-sidebar-empty", text: this.plugin.t("collab.empty") });
       return;
     }
     if (incoming.length > 0) {
-      this.contentEl.createDiv({ cls: "oss-collab-section-title", text: this.plugin.t("collab.sectionIncoming") });
+      this.renderSectionHeader("collab.sectionIncoming", incoming.length, () =>
+        new CollabIncomingModal(this.app, this.plugin, incoming).open()
+      );
       for (const entry of incoming) this.renderIncoming(entry);
     }
     if (outgoing.length > 0) {
-      this.contentEl.createDiv({ cls: "oss-collab-section-title", text: this.plugin.t("collab.sectionOutgoing") });
+      this.renderSectionHeader("collab.sectionOutgoing", outgoing.length, () =>
+        new CollabOutgoingModal(this.app, this.plugin, outgoing).open()
+      );
       this.renderOutgoing(outgoing);
     }
   }
 
-  /** 渲染「我发出的邀请」：按 `vault_id:file_id` 聚合，含批量撤销与逐协作者的历史权限开关 */
+  /** 渲染分区标题行：标题、条目数量与打开对应窗口的查看按钮 */
+  private renderSectionHeader(titleKey: TranslationKey, count: number, openDetail: () => void): void {
+    const header = this.contentEl.createDiv({ cls: "oss-collab-section-header" });
+    header.createEl("span", { cls: "oss-collab-section-title", text: this.plugin.t(titleKey) });
+    header.createEl("span", { cls: "oss-collab-section-count", text: String(count) });
+    header.createEl("button", { cls: "oss-collab-view", text: this.plugin.t("collab.viewCollaborators") })
+      .addEventListener("click", openDetail);
+  }
+
+  /** 渲染「我发出的邀请」：按 `vault_id:file_id` 聚合，含批量撤销 */
   private renderOutgoing(outgoing: readonly CollabEntry[]): void {
     const byArticle = new Map<string, CollabEntry[]>();
     for (const entry of outgoing) {
-      if (entry.status === "revoked") continue;
       const key = `${entry.vault_id}:${entry.file_id}`;
       const entries = byArticle.get(key) ?? [];
       entries.push(entry);
@@ -61,9 +75,10 @@ export class CollabManagerModal extends Modal {
 
   /** 渲染单条收到的邀请；pending 提供接受与拒绝，accepted 提供退出 */
   private renderIncoming(entry: CollabEntry): void {
-    if (entry.status === "revoked") return;
     const row = this.contentEl.createDiv({ cls: "oss-sidebar-collab-row" });
-    row.createDiv({ cls: "oss-manager-path", text: entry.file_path });
+    const name = row.createDiv({ cls: "oss-manager-path oss-ellipsis" });
+    name.setText(entry.file_path);
+    name.setAttribute("title", entry.file_path);
     row.createDiv({
       cls: "oss-manager-meta",
       text: this.plugin.t("collab.incomingMeta", { name: entry.owner_username, status: entry.status }),
@@ -93,7 +108,7 @@ export class CollabManagerModal extends Modal {
     cancelSelected.addEventListener("click", () => void this.cancelArticles(byArticle));
   }
 
-  /** 渲染单个文件及其协作者；协作者直接平铺在文件行下方，各自带撤销按钮 */
+  /** 渲染单个文件；勾选、协作者数、查看与取消同行，协作者不再平铺在主弹窗 */
   private renderArticle(key: string, entries: readonly CollabEntry[]): void {
     const article = entries[0];
     if (!article) return;
@@ -106,30 +121,19 @@ export class CollabManagerModal extends Modal {
       else this.selectedArticleKeys.delete(key);
       this.renderArticles();
     });
-    label.createEl("span", { text: article.file_path });
+    const name = label.createEl("span", { cls: "oss-ellipsis" });
+    name.setText(article.file_path);
+    name.setAttribute("title", article.file_path);
     row.createDiv({ cls: "oss-manager-meta", text: this.plugin.t("collab.collaboratorCount", { count: entries.length }) });
     const actions = row.createDiv({ cls: "oss-sidebar-actions" });
     actions.createEl("button", {
       cls: "oss-collab-view",
       text: this.plugin.t("collab.viewCollaborators"),
-    }).addEventListener("click", () => new CollabCollaboratorsModal(this.app, this.plugin, entries).open());
+    }).addEventListener("click", () => new CollabOutgoingModal(this.app, this.plugin, entries).open());
     actions.createEl("button", {
       cls: "oss-collab-cancel-article mod-warning",
       text: this.plugin.t("collab.cancelArticle"),
     }).addEventListener("click", () => void this.cancelArticle(entries));
-    for (const entry of entries) this.renderCollaboratorRow(entry);
-  }
-
-  /** 渲染单个协作者行；用户名、状态与撤销按钮同行，缩进显示在所属文件之下 */
-  private renderCollaboratorRow(entry: CollabEntry): void {
-    const row = this.contentEl.createDiv({ cls: "oss-sidebar-collab-row oss-collab-collaborator-row" });
-    row.createDiv({ cls: "oss-manager-path", text: entry.collaborator_username });
-    row.createDiv({ cls: "oss-manager-meta", text: entry.status });
-    row.createEl("button", { cls: "oss-collab-revoke mod-warning", text: this.plugin.t("collab.revoke") })
-      .addEventListener("click", async () => {
-        await this.plugin.collabManager.revoke(entry);
-        await this.load();
-      });
   }
 
   /** 勾选变更后整体重渲染 */

@@ -56,15 +56,16 @@ test("collaboration manager groups managed collaborators by article", async () =
     modal.onOpen();
     await new Promise((resolve) => setImmediate(resolve));
 
-    // 收到的邀请 1 行 + 文件行 1 行 + 每个协作者 1 行（该文件有 2 位协作者）
-    assert.equal(modal.contentEl.querySelectorAll(".oss-sidebar-collab-row").length, 4);
-    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-view").length, 1);
+    // 收到的邀请 1 行 + 文件行 1 行；协作者改由查看按钮打开详情窗口
+    assert.equal(modal.contentEl.querySelectorAll(".oss-sidebar-collab-row").length, 2);
+    // 分区查看按钮 2 个 + 文件行查看按钮 1 个
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-view").length, 3);
     assert.equal(modal.contentEl.querySelectorAll(".oss-collab-cancel-article").length, 1);
-    // 两个大类标题
-    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-section-title").length, 2);
-    // 协作者平铺在文件行下方，各自带撤销按钮，不再有抽屉容器与折叠箭头
-    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-collaborator-row").length, 2);
-    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-collaborator-row .oss-collab-revoke").length, 2);
+    // 两个分区标题各带数量
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-section-header").length, 2);
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-section-count").length, 2);
+    // 协作者不再平铺，也不再有抽屉容器与折叠箭头
+    assert.equal(modal.contentEl.querySelectorAll(".oss-collab-collaborator-row").length, 0);
     assert.equal(modal.contentEl.querySelectorAll(".oss-collab-drawer").length, 0);
     assert.equal(modal.contentEl.querySelectorAll(".oss-collab-drawer-toggle").length, 0);
     modal.contentEl.querySelectorAll(".oss-collab-accept")[0].click();

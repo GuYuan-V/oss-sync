@@ -358,28 +358,50 @@
   background: var(--background-modifier-hover);
 }
 
-.oss-manager-modal .oss-collab-section-title {
+/* 分区标题行：标题、数量与查看按钮同行 */
+.oss-manager-modal .oss-collab-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 12px;
   margin-bottom: 4px;
+}
+
+.oss-manager-modal .oss-collab-section-header:first-child {
+  margin-top: 0;
+}
+
+.oss-manager-modal .oss-collab-section-header .oss-collab-section-title {
+  margin: 0;
   color: var(--text-normal);
   font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
 }
 
-.oss-manager-modal .oss-collab-section-title:first-child {
-  margin-top: 0;
-}
-
-/* 协作者行缩进显示在所属文件之下，并用分隔线与相邻行区分 */
-.oss-manager-modal .oss-collab-collaborator-row {
-  padding-left: 22px;
-}
-
-.oss-manager-modal .oss-collab-collaborator-row .oss-manager-path {
+.oss-manager-modal .oss-collab-section-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
   color: var(--text-muted);
-  font-weight: var(--font-ui-small);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
+.oss-manager-modal .oss-collab-section-header .oss-collab-view {
+  margin-left: auto;
+}
+
+/* 文件名与协作者名过长时省略，完整内容由 title 悬停展示 */
+.oss-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 行内历史开关容器 */
 .oss-manager-modal .oss-collaborator-history-toggle {
   min-width: max-content;
 }
@@ -572,23 +594,19 @@
   text-overflow: ellipsis;
 }
 
-/* 含勾选框的行沿用 3 列基础布局；协作者弹窗用户行为 5 列 */
+/* 含勾选框的行沿用 3 列基础布局；协作者详情行由前面的规则覆盖为 5 列 */
 .oss-manager-modal .oss-sidebar-collab-row:has(.oss-manager-select) {
   grid-template-columns: minmax(0, 1fr) max-content auto;
 }
 
-.oss-manager-modal .oss-sidebar-collab-row.oss-collaborator-row {
-  grid-template-columns: max-content minmax(0, 1fr) max-content max-content max-content;
-}
-
-/* 文件行 4 列：勾选框、文件名、协作者数、按钮组 */
+/* 文件行 3 列：勾选框与文件名、协作者数、按钮组 */
 .oss-manager-modal .oss-sidebar-collab-row.oss-collab-article-row {
-  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
 }
 
-/* 平铺的协作者行 3 列：用户名、状态、撤销 */
-.oss-manager-modal .oss-sidebar-collab-row.oss-collab-collaborator-row {
-  grid-template-columns: minmax(0, 1fr) max-content max-content;
+/* 协作者详情行 4 列：勾选框与名称、状态、历史开关、撤销 */
+.oss-manager-modal .oss-sidebar-collab-row.oss-collaborator-row {
+  grid-template-columns: minmax(0, 1fr) max-content max-content max-content;
 }
 
 .oss-manager-modal .oss-collab-article-bulk-actions {
@@ -596,7 +614,7 @@
   margin-block-end: 6px;
 }
 
-.oss-collaborators-modal .oss-collaborators-actions {
+.oss-collab-detail-modal .oss-collaborators-actions {
   justify-content: flex-end;
   margin-block-end: 6px;
 }
