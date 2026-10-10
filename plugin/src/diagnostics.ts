@@ -28,6 +28,14 @@ export type DiagnosticEvent =
       readonly durationMs: number;
     }
   | {
+      readonly kind: "api_failed";
+      readonly at: number;
+      readonly method: "GET" | "POST" | "PATCH" | "DELETE";
+      readonly path: string;
+      readonly status?: number;
+      readonly message: string;
+    }
+  | {
       readonly kind: "transfer";
       readonly at: number;
       readonly scope: "upload" | "download" | "collab_upload" | "collab_download";
@@ -95,6 +103,7 @@ export class Diagnostics {
     private readonly capacity = 200
   ) {}
 
+  /** 记录事件；字段不合法时丢弃，超出容量时淘汰最旧一条 */
   record(event: DiagnosticEvent): void {
     const safeEvent = sanitizeEvent(event);
     if (!safeEvent) return;
@@ -103,15 +112,18 @@ export class Diagnostics {
     this.sink?.(safeEvent);
   }
 
+  /** 返回事件快照副本，调用方无法改动内部缓冲 */
   snapshot(): readonly DiagnosticEvent[] {
     return [...this.events];
   }
 
+  /** 清空全部记录 */
   clear(): void {
     this.events.length = 0;
   }
 }
 
+/** 按事件类型逐项校验并脱敏，返回 null 表示该事件应丢弃 */
 function sanitizeEvent(event: DiagnosticEvent): DiagnosticEvent | null {
   switch (event.kind) {
     case "sse_state":
@@ -146,6 +158,16 @@ function sanitizeEvent(event: DiagnosticEvent): DiagnosticEvent | null {
         method: event.method,
         ...(typeof event.status === "number" ? { status: finiteNumber(event.status) } : {}),
         durationMs: finiteNumber(event.durationMs),
+      };
+    case "api_failed":
+      if (!isHTTPMethod(event.method)) return null;
+      return {
+        kind: "api_failed",
+        at: finiteNumber(event.at),
+        method: event.method,
+        path: truncate(event.path, 200),
+        ...(typeof event.status === "number" ? { status: finiteNumber(event.status) } : {}),
+        message: truncate(event.message, 300),
       };
     case "transfer":
       if (!isTransferScope(event.scope)) return null;
@@ -235,10 +257,18 @@ function sanitizeEvent(event: DiagnosticEvent): DiagnosticEvent | null {
   }
 }
 
+/** 非有限数归一为 0，保证记录中不出现 NaN 或 Infinity */
 function finiteNumber(value: number): number {
   return Number.isFinite(value) ? value : 0;
 }
 
+/** 限制脱敏字段长度，避免诊断记录持有超长正文或 URL */
+function truncate(value: string, maxLength: number): string {
+  const text = typeof value === "string" ? value : "";
+  return text.length <= maxLength ? text : text.slice(0, maxLength);
+}
+
+/** 归一时间戳为 ISO 字符串；无法解析时丢弃该可选字段 */
 function normalizedTimestamp(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const timestamp = Date.parse(value);

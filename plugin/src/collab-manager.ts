@@ -20,6 +20,7 @@ import { NoticeGuard } from "./notice-guard.js";
 
 export { COLLAB_DIR, collabLocalPath, isCollabPath };
 
+/** 协作管理入口：编排文件同步、远端同步与事件传输 */
 export class CollabManager {
   private collabs: CollabEntry[] = [];
   private readonly vaultAccess: CollaborationFileVault;
@@ -60,6 +61,7 @@ export class CollabManager {
       createOperationID: () => createOperationID(),
       onChange: () => this.onChange(),
       coordinator: this.coordinator,
+      noticeGuard: this.plugin.syncErrorNotices,
     });
     this.transport = new CollaborationTransport({
       api: this.api,
@@ -72,20 +74,24 @@ export class CollabManager {
     });
   }
 
+  /** 启动事件传输 */
   start(): void {
     this.transport.start();
   }
 
+  /** 停止事件传输与文件同步，并清除失败提示的冷却状态 */
   stop(): void {
     this.transport.stop();
     this.fileSync.stop();
     this.loadNotices.reset();
   }
 
+  /** 事件传输是否在运行 */
   isRunning(): boolean {
     return this.transport.isRunning();
   }
 
+  /** 传输状态的中文或英文标签 */
   getTransportStatus(): string {
     const status = this.transport.getStatus();
     if (status === "sse") return this.plugin.t("sidebar.collabSSE");
@@ -95,16 +101,19 @@ export class CollabManager {
     return this.plugin.t("sidebar.collabDisconnected");
   }
 
+  /** 等待当前用户回应的邀请 */
   getPendingCollabs(): CollabEntry[] {
     return this.collabs.filter(
       (entry) => entry.status === "pending" && entry.collaborator_username === this.plugin.settings.username
     );
   }
 
+  /** 当前持有的全部协作关系，含 revoked */
   getCollaborations(): readonly CollabEntry[] {
     return this.collabs;
   }
 
+  /** 定位本地路径对应的服务端仓库与文件路径；协作文件不可从普通历史接口恢复 */
   getHistoryTarget(path: string): { vaultID: string; path: string; canRestore: boolean } | null {
     const normalized = normalizePath(path);
     for (const entry of this.collabs) {
@@ -115,6 +124,7 @@ export class CollabManager {
     return null;
   }
 
+  /** 重新拉取仓库内与跨仓库的协作关系并去重 */
   async refresh(): Promise<void> {
     const vaultID = this.plugin.settings.vaultId;
     if (!this.api.hasToken() || !vaultID) {
@@ -169,6 +179,7 @@ export class CollabManager {
     }
   }
 
+  /** 清理已失效协作的本地文件与基线，避免残留条目继续展示 */
   private pruneStaleCollaborationBaselines(): void {
     const baseline: any = this.plugin.baseline as any;
     if (typeof baseline.collaborationEntries !== "function" || typeof baseline.removeCollaboration !== "function") return;
@@ -189,10 +200,12 @@ export class CollabManager {
     if (changed) void baseline.save();
   }
 
+  /** 本地协作文件被编辑，转交文件同步防抖上传 */
   handleLocalEdit(path: string): void {
     this.fileSync.handleLocalEdit(path);
   }
 
+  /** 接受或拒绝邀请 */
   async respond(entry: CollabEntry, accept: boolean): Promise<void> {
     try {
       await this.api.collabRespond(entry.vault_id, entry.id, accept);
@@ -203,6 +216,7 @@ export class CollabManager {
     }
   }
 
+  /** 撤回邀请或解除协作，同时清理本地文件与基线 */
   async revoke(entry: CollabEntry): Promise<void> {
     try {
       await this.api.collabRevoke(entry.vault_id, entry.id);
@@ -218,6 +232,7 @@ export class CollabManager {
     }
   }
 
+  /** 主动退出协作，同时清理本地文件与基线 */
   async leave(entry: CollabEntry): Promise<void> {
     try {
       await this.api.collabLeave(entry.vault_id, entry.id);
@@ -232,6 +247,7 @@ export class CollabManager {
     }
   }
 
+  /** 当前用户已接受的协作文件列表 */
   private getAcceptedFiles(): readonly AcceptedCollaborationFile[] {
     return this.collabs
       .filter(
@@ -244,11 +260,13 @@ export class CollabManager {
       }));
   }
 
+  /** 远端事件到达时同时刷新协作列表与普通同步，确保本地与远端一致 */
   private async applyRemoteChange(): Promise<void> {
     await Promise.all([this.refresh(), this.plugin.syncEngine.runOnce({ forceFull: false })]);
   }
 }
 
+/** 邀请协作者编辑指定 Markdown 文件的弹窗 */
 export class CollabInviteModal extends Modal {
   private username = "";
 
@@ -278,6 +296,7 @@ export class CollabInviteModal extends Modal {
     this.contentEl.empty();
   }
 
+  /** 提交邀请；未填用户名或未绑定仓库时给出对应提示 */
   private async invite(): Promise<void> {
     if (!this.username) {
       new Notice(this.plugin.t("collab.usernameRequired"));
@@ -298,10 +317,12 @@ export class CollabInviteModal extends Modal {
   }
 }
 
+/** 把错误本地化为用户可读文本 */
 function errorMessage(error: unknown, plugin: OSSPlugin): string {
   return localizeError(error, plugin.t.bind(plugin), plugin.t("common.unknownError"));
 }
 
+/** 取列表中最新创建时间，ISO 字符串可直接按字典序比较 */
 function newestCreatedAt(entries: readonly CollabEntry[]): string | undefined {
   let newest: string | undefined;
   for (const entry of entries) {

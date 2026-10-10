@@ -23,12 +23,19 @@ function makeApp(captured) {
 }
 function seedPluginData(overrides = {}) {
   return {
-    token: "persisted-token", serverUrl: "http://localhost:9090", username: "tester", password: "",
+    // 合法 JWT：loadSettings 会校验 exp，过期或畸形令牌会被丢弃
+    token: makeToken(3600), serverUrl: "http://localhost:9090", username: "tester", password: "",
     syncIntervalSec: 3, maxConcurrency: 6, syncPoisonObsidianFiles: false, incrementalCheck: true,
     keepDirectoryTree: true, vaultId: "vault-1", vaultName: "Vault", clientId: "client-1",
     deviceName: "device-1", remotePollIntervalSec: 30, forceSSE: false, diagnosticsEnabled: false,
     vaultSyncMode: "short_poll", language: "en", role: "", updateRepo: "owner/repo", ...overrides,
   };
+}
+
+function makeToken(expOffsetSec) {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ uid: 1, exp: Math.floor(Date.now() / 1000) + expOffsetSec })).toString("base64url");
+  return `${header}.${payload}.signature`;
 }
 function installWindow() {
   const origWindow = globalThis.window; const origFake = globalThis.FakeElement; const origNotices = globalThis.__ossNotices;
@@ -233,5 +240,91 @@ test("opens one resolver for a remote deletion conflict and releases the path wh
     plugin.openConflictModal("note.md");
     await flushTicks(2);
     assert.equal(globalThis.__ossOpenedModals.length, 2);
+  } finally { await plugin.onunload(); await cleanup(); restore(); }
+});
+
+test("ensureVaultBinding falls back to the default vault when unbound", async () => {
+  const restore = installWindow();
+  const captured = { cb: null };
+  const { plugin, cleanup } = await createPlugin(captured);
+  try {
+    plugin.settings.vaultId = "";
+    plugin.settings.vaultName = "";
+    const saved = [];
+    plugin.saveSettings = async () => { saved.push({ vaultId: plugin.settings.vaultId, vaultName: plugin.settings.vaultName }); };
+    plugin.refreshVaults = async () => [
+      { id: "vault-other", name: "Other", is_default: false },
+      { id: "vault-default", name: "Default", is_default: true },
+    ];
+    await plugin.ensureVaultBinding();
+    assert.equal(plugin.settings.vaultId, "vault-default");
+    assert.equal(plugin.settings.vaultName, "Default");
+    assert.deepEqual(saved, [{ vaultId: "vault-default", vaultName: "Default" }]);
+  } finally { await plugin.onunload(); await cleanup(); restore(); }
+});
+
+test("ensureVaultBinding falls back to the first vault when none is default", async () => {
+  const restore = installWindow();
+  const captured = { cb: null };
+  const { plugin, cleanup } = await createPlugin(captured);
+  try {
+    plugin.settings.vaultId = "";
+    plugin.settings.vaultName = "";
+    plugin.saveSettings = async () => {};
+    plugin.refreshVaults = async () => [
+      { id: "vault-a", name: "A", is_default: false },
+      { id: "vault-b", name: "B", is_default: false },
+    ];
+    await plugin.ensureVaultBinding();
+    assert.equal(plugin.settings.vaultId, "vault-a");
+    assert.equal(plugin.settings.vaultName, "A");
+  } finally { await plugin.onunload(); await cleanup(); restore(); }
+});
+
+test("ensureVaultBinding keeps a stale vault unbound when the list is empty", async () => {
+  const restore = installWindow();
+  const captured = { cb: null };
+  const { plugin, cleanup } = await createPlugin(captured);
+  try {
+    plugin.settings.vaultId = "vault-gone";
+    plugin.settings.vaultName = "Gone";
+    let collabStopped = 0;
+    plugin.collabManager.stop = () => { collabStopped += 1; };
+    plugin.refreshVaults = async () => [];
+    await plugin.ensureVaultBinding();
+    assert.equal(plugin.settings.vaultId, "");
+    assert.equal(plugin.settings.vaultName, "");
+    assert.equal(collabStopped, 1);
+  } finally { await plugin.onunload(); await cleanup(); restore(); }
+});
+
+test("loadSettings drops an expired persisted token", async () => {
+  const restore = installWindow();
+  const captured = { cb: null };
+  const { module, cleanup } = await loadMain();
+  const app = makeApp(captured);
+  const manifest = { id: "oss-sync", version: "0.1.0", dir: ".obsidian/plugins/oss-sync" };
+  const plugin = new module.default(app, manifest);
+  plugin.loadData = async () => seedPluginData({ token: makeToken(-60) });
+  const writes = [];
+  plugin.saveData = async (data) => { writes.push(data); };
+  try {
+    await plugin.loadSettings();
+    assert.equal(plugin.isLoggedIn(), false);
+  } finally { await cleanup(); restore(); }
+});
+
+test("loadSettings keeps a valid persisted token and wires it to the api client", async () => {
+  const restore = installWindow();
+  const captured = { cb: null };
+  const { module, cleanup } = await loadMain();
+  const app = makeApp(captured);
+  const manifest = { id: "oss-sync", version: "0.1.0", dir: ".obsidian/plugins/oss-sync" };
+  const plugin = new module.default(app, manifest);
+  plugin.loadData = async () => seedPluginData({ token: makeToken(3600) });
+  plugin.saveData = async () => {};
+  try {
+    await plugin.onload();
+    assert.equal(plugin.isLoggedIn(), true);
   } finally { await plugin.onunload(); await cleanup(); restore(); }
 });

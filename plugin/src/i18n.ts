@@ -1,7 +1,11 @@
+/** 插件支持的语言 */
 export type PluginLanguage = "zh" | "en";
+/** 界面语言偏好；auto 跟随 Obsidian */
 export type LanguagePreference = "auto" | PluginLanguage;
+/** 翻译参数；值会插入到消息的 {name} 占位符 */
 export type TranslationParams = Readonly<Record<string, string | number>>;
 
+/** 中文文案表，作为翻译键的唯一定义来源 */
 const ZH = {
   "common.unknownError": "未知错误",
   "notice.pluginCapabilitiesFailed": "插件能力加载失败：{error}",
@@ -20,6 +24,8 @@ const ZH = {
   "common.longPoll": "长轮询",
   "common.noVaultSync": "尚未同步任何仓库",
   "network.connectionRefused": "无法连接到服务器，请确认服务端已启动且地址正确",
+  "network.tooManyRedirects": "连接失败：请求被反复重定向，通常是代理或网关设置导致，请检查代理软件后重试",
+  "network.invalidResponseBody": "连接失败：服务器返回了无法解析的响应，可能是服务端故障，请稍后重试",
   "network.connectionTimedOut": "连接服务器超时，请检查网络和服务端地址",
   "network.nameNotResolved": "无法解析服务器地址，请检查服务端地址",
   "network.disconnected": "网络连接已断开，请检查网络后重试",
@@ -398,8 +404,10 @@ const ZH = {
   "sync.mkdirFailed": "无法创建目录：{path}",
 } as const;
 
+/** 翻译键，取中文表的键；新增键必须同时补全英文表 */
 export type TranslationKey = keyof typeof ZH;
 
+/** 英文文案表，键集合由类型约束与中文表一致 */
 const EN: Record<TranslationKey, string> = {
   "common.unknownError": "Unknown error",
   "notice.pluginCapabilitiesFailed": "Failed to load plugin capabilities: {error}",
@@ -418,6 +426,8 @@ const EN: Record<TranslationKey, string> = {
   "common.longPoll": "Long polling",
   "common.noVaultSync": "No vault has been synced",
   "network.connectionRefused": "Unable to connect to the server. Check that it is running and the address is correct",
+  "network.tooManyRedirects": "Connection failed: the request was redirected in a loop. This is usually caused by a proxy or gateway; check your proxy software and retry",
+  "network.invalidResponseBody": "Connection failed: the server returned an unparsable response. This may be a server-side error; please retry later",
   "network.connectionTimedOut": "Connection to the server timed out. Check the network and server address",
   "network.nameNotResolved": "Unable to resolve the server address. Check the server address",
   "network.disconnected": "Network connection was interrupted. Check the network and retry",
@@ -796,6 +806,7 @@ const EN: Record<TranslationKey, string> = {
   "sync.mkdirFailed": "Unable to create folder: {path}",
 };
 
+/** 按语言索引的文案表 */
 export const TRANSLATIONS = { zh: ZH, en: EN } as const;
 
 /** 自动模式按宿主语言选择中文或英文，显式选择优先 */
@@ -804,6 +815,7 @@ export function resolveLanguage(preference: LanguagePreference, hostLanguage: st
   return hostLanguage.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
 
+/** 取文案并替换 {name} 占位符；未提供的参数保留原样占位 */
 export function translate(
   language: PluginLanguage,
   key: TranslationKey,

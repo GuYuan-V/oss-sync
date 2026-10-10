@@ -107,11 +107,26 @@ test("network connection refusal is localized without replacing server error det
   }
 });
 
-test("redirect loops from unauthenticated requests are reported as connection failures", async () => {
+test("a JSON parse failure is reported as an unparsable server response", async () => {
   const { localizeError, cleanup } = await loadLocalizedError();
   try {
-    const t = (key) => ({ "auth.unauthorized": "连接失败" })[key] ?? key;
-    assert.equal(localizeError(new Error("net::ERR_TOO_MANY_REDIRECTS"), t, "未知错误"), "连接失败");
+    const t = (key) => ({ "network.invalidResponseBody": "响应无法解析" })[key] ?? key;
+    // requestUrl 对 HTML 错误页抛出的 SyntaxError
+    assert.equal(
+      localizeError(new SyntaxError("Unexpected token '#', \"#\" 数据局平台#\"... is not valid JSON"), t, "未知错误"),
+      "响应无法解析"
+    );
+    assert.equal(localizeError(new SyntaxError("Unexpected end of JSON input"), t, "未知错误"), "响应无法解析");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("redirect loops are reported as a proxy or gateway problem", async () => {
+  const { localizeError, cleanup } = await loadLocalizedError();
+  try {
+    const t = (key) => ({ "network.tooManyRedirects": "重定向" })[key] ?? key;
+    assert.equal(localizeError(new Error("net::ERR_TOO_MANY_REDIRECTS"), t, "未知错误"), "重定向");
   } finally {
     await cleanup();
   }
