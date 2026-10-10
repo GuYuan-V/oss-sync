@@ -105,7 +105,7 @@
                 <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
                 <button class="text-button text-button--primary" type="submit">{{$.Layout.T "admin.plugin_update_available" $update.Latest}}</button>
               </form>
-              {{else}}
+              {{else if and .Enabled .UpdateURL}}
               <form method="post" action="/dashboard/admin/plugins/{{.ID}}/update-check">
                 <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">
                 <button class="text-button" type="submit">{{$.Layout.T "admin.plugin_check_update"}}</button>

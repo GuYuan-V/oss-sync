@@ -2,6 +2,7 @@ package serverplugin
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -138,8 +139,50 @@ func TestCheckPluginUpdatesIgnoresUnreachableEndpoint(t *testing.T) {
 	if len(updates) != 1 {
 		t.Fatalf("updates = %#v, want one placeholder entry", updates)
 	}
-	if updates[0].HasUpdate {
-		t.Fatalf("entry = %#v, want no update from a failing endpoint", updates[0])
+	if updates[0].HasUpdate || !updates[0].CheckFailed {
+		t.Fatalf("entry = %#v, want an explicit failed check", updates[0])
+	}
+}
+
+func TestValidPluginUpdateURL(t *testing.T) {
+	t.Parallel()
+	cases := map[string]bool{
+		"https://example.com/plugin.json":   true,
+		"http://localhost:8080/plugin.json": true,
+		"http://127.0.0.1/plugin.json":      true,
+		"http://[::1]/plugin.json":          true,
+		"http://example.com/plugin.json":    false,
+		"file:///tmp/plugin.json":           false,
+		"//example.com/plugin.json":         false,
+	}
+	for raw, want := range cases {
+		if got := validPluginUpdateURL(raw); got != want {
+			t.Errorf("validPluginUpdateURL(%q) = %v, want %v", raw, got, want)
+		}
+	}
+}
+
+func TestPluginUpdateRejectsPackageForAnotherPlugin(t *testing.T) {
+	manifest, err := json.Marshal(Manifest{
+		ID: "other-plugin", Name: "Other plugin", Version: "2.0.0", APIVersion: CurrentAPIVersion,
+		Runtime: RuntimeExecutable, Entrypoints: map[string]string{"any": "bin/plugin"},
+		Routes: []RouteSpec{{Method: http.MethodGet, Path: "/hello", Public: true}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := makePackageArchive(t, map[string][]byte{
+		"manifest.json": manifest,
+		"bin/plugin":    []byte("not executed"),
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+
+	_, err = (&Manager{}).PluginUpdateFromURL(t.Context(), "expected-plugin", "2.0.0", server.URL)
+	if err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("PluginUpdateFromURL() error = %v, want plugin id mismatch", err)
 	}
 }
 

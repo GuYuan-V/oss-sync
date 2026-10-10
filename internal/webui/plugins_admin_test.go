@@ -254,6 +254,13 @@ func TestPluginNavHiddenUntilBlogThemeSelected(t *testing.T) {
 	if err := db.Create(&themePlugin).Error; err != nil {
 		t.Fatal(err)
 	}
+	defaultVault := models.Vault{ID: "vault-shirone-default", OwnerID: user.ID, Name: "Default Vault"}
+	if err := db.Create(&defaultVault).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.VaultSetting{VaultID: defaultVault.ID, ThemeName: "default"}).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	ld := layoutData{}
 	h.setPluginNavigationForUser(&ld, user)
@@ -272,6 +279,10 @@ func TestPluginNavHiddenUntilBlogThemeSelected(t *testing.T) {
 	h.setPluginNavigationForUser(&ld, user)
 	if len(ld.PluginSettings) != 1 || ld.PluginSettings[0].ID != "shirone-plugin" {
 		t.Fatalf("navigation after selecting the theme = %#v, want the shirone entry", ld.PluginSettings)
+	}
+	options := h.pluginSettingVaults(user, "shirone-plugin")
+	if len(options) != 1 || options[0].ID != vault.ID {
+		t.Fatalf("plugin setting Vaults = %#v, want only the Vault using the theme", options)
 	}
 }
 
@@ -431,6 +442,42 @@ func TestAdminPluginsHTTPUploadAndLifecycle(t *testing.T) {
 	}
 	if len(plugins) != 1 || plugins[0].ID != "hello-world" || !plugins[0].Enabled {
 		t.Fatalf("installed plugins = %+v, want automatically enabled plugin", plugins)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/dashboard/admin/plugins", nil)
+	response = serveAdminPluginRequest(t, h, request, session, csrf)
+	if strings.Contains(response.Body.String(), "/dashboard/admin/plugins/hello-world/update-check") {
+		t.Fatal("plugin without update_url unexpectedly shows an update check action")
+	}
+	const guideMarker = `<script type="text/plain" data-guide-source>`
+	guideStart := strings.Index(response.Body.String(), guideMarker)
+	if guideStart < 0 {
+		t.Fatal("plugin guide source is missing")
+	}
+	guideSource := response.Body.String()[guideStart+len(guideMarker):]
+	if !strings.HasPrefix(guideSource, "# ") {
+		t.Fatalf("plugin guide source is not raw Markdown: %.80s", guideSource)
+	}
+	var record models.ServerPlugin
+	if err := db.Where("id = ?", "hello-world").First(&record).Error; err != nil {
+		t.Fatal(err)
+	}
+	var manifest serverplugin.Manifest
+	if err := json.Unmarshal([]byte(record.ManifestJSON), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest.UpdateURL = "https://example.com/plugin.json"
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&record).Update("manifest_json", string(manifestJSON)).Error; err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest(http.MethodGet, "/dashboard/admin/plugins?update=hello-world&latest=2.0.0", nil)
+	response = serveAdminPluginRequest(t, h, request, session, csrf)
+	if !strings.Contains(response.Body.String(), "/dashboard/admin/plugins/hello-world/update") || !strings.Contains(response.Body.String(), "2.0.0") {
+		t.Fatalf("checked plugin does not show its update action: %s", response.Body.String())
 	}
 
 	for _, action := range []string{"enable", "disable"} {
