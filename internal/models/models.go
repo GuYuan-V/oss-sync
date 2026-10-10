@@ -129,6 +129,8 @@ type VaultSetting struct {
 	RecycleBinDays int `gorm:"not null;default:0"`
 	// IsPublicBlog 控制 /b/:vault_id 访问与根目录发现
 	IsPublicBlog bool `gorm:"not null;default:false"`
+	// AllowRawHTML 控制文章内是否允许原始 HTML 标签（默认禁用，防止注入）
+	AllowRawHTML bool `gorm:"not null;default:false"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -213,9 +215,9 @@ type UserSetting struct {
 	CustomFooter          string  `gorm:"type:text"`
 	KeepDirectoryTree     bool    `gorm:"not null;default:true"`
 	// PageSize 是控制台列表每页条数，0 表示使用默认值
-	PageSize    int       `gorm:"not null;default:0"`
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	PageSize  int `gorm:"not null;default:0"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // File 存放 Vault 维度的文件元数据与同步墓碑
@@ -240,15 +242,19 @@ type File struct {
 
 // Share 保存文章或文件夹的公开分享信息
 type Share struct {
-	ShareID    string    `gorm:"primaryKey;size:32"`
-	UserID     uint      `gorm:"index;not null"`
-	VaultID    string    `gorm:"index;size:36"`
-	TargetPath string    `gorm:"size:512;not null"`
-	IsFolder   bool      `gorm:"not null;default:false"`
-	AllowCopy  bool      `gorm:"not null;default:false"`
-	Views      int       `gorm:"not null;default:0"`
-	CreatedAt  time.Time `gorm:"index"`
-	UpdatedAt  time.Time
+	ShareID    string `gorm:"primaryKey;size:32"`
+	UserID     uint   `gorm:"index;not null"`
+	VaultID    string `gorm:"index;size:36"`
+	TargetPath string `gorm:"size:512;not null"`
+	IsFolder   bool   `gorm:"not null;default:false"`
+	AllowCopy  bool   `gorm:"not null;default:false"`
+	// Visibility 控制访问范围：public 任何人可看，password 需输入密码，login 需登录账号
+	Visibility string `gorm:"size:16;not null;default:'public'"`
+	// SharePassword 是 password 可见性的访问密码哈希，public/login 时为空
+	SharePassword string    `gorm:"size:128"`
+	Views         int       `gorm:"not null;default:0"`
+	CreatedAt     time.Time `gorm:"index"`
+	UpdatedAt     time.Time
 }
 
 // Collaboration 保存文件协作关系

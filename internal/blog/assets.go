@@ -52,6 +52,9 @@ func (h *Handler) handleSharedAsset(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
+	if !h.shareVisible(c, share) {
+		return
+	}
 	reference := strings.TrimSpace(c.Query("ref"))
 	if reference == "" || isRemoteReference(reference) {
 		c.Status(http.StatusNotFound)
@@ -65,6 +68,8 @@ func (h *Handler) handleSharedAsset(c *gin.Context) {
 	abs := filestore.DiskPath(h.Cfg.Storage.DataDir, file)
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("Content-Security-Policy", "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:")
+	// 沙箱文章以不透明源加载正文图片，需要 CORS 授权
+	c.Header("Access-Control-Allow-Origin", "*")
 	c.File(abs)
 }
 

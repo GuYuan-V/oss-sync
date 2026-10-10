@@ -246,6 +246,15 @@ func (h *Handler) handleVaultBlog(c *gin.Context) {
 		return
 	}
 	posts := h.homePosts(vault.OwnerID, vaultID)
+	if h.pluginHooks != nil {
+		if filtered, err := h.pluginHooks.ApplyHomePostsHook(c.Request.Context(), HomePostsHookPayload{
+			VaultID: vaultID,
+			Posts:   posts,
+			Query:   c.Request.URL.Query(),
+		}); err == nil {
+			posts = filtered
+		}
+	}
 	config := h.publicThemeConfig(vs.VaultID, vs.ThemeName, vs.ThemeConfig)
 	cfg := ParseBlogThemeConfig(config)
 	customEnabled := settingspolicy.CustomFragmentsEnabled(h.DB)

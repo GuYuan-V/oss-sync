@@ -65,6 +65,9 @@ func (c *Cleanup) CompactTombstones() error {
 	return nil
 }
 
+// compactTombstonesForVault 清理单个仓库的墓碑，以所有活跃设备中最小的同步游标作为安全删除线，
+// 低于该线的墓碑删除正文与记录；回收站正文在保留期内跳过，
+// 墓碑 revision 高于安全线时只删正文，等设备追上新版本后再删除记录
 func (c *Cleanup) compactTombstonesForVault(userID uint, vaultID string, now time.Time) error {
 	safeCursor := int64(0)
 	var state models.VaultSyncState
@@ -180,6 +183,8 @@ func (c *Cleanup) PurgeOrphanAttachments() error {
 	return nil
 }
 
+// purgeOrphansForVault 清理单个仓库中未被任何 Markdown 引用、
+// 修改时间超过 24 小时宽限期且未进入 revision 协议的附件文件与记录
 func (c *Cleanup) purgeOrphansForVault(userID uint, vaultID string, now time.Time) error {
 	var mdFiles []models.File
 	if err := c.DB.Where(
@@ -272,10 +277,14 @@ func extractAttachmentRefs(content, mdPath string) []string {
 }
 
 var (
-	mdImageRe       = regexp.MustCompile(`!\[.*?\]\((.+?)\)`)
+	// mdImageRe 匹配 Markdown 图片语法 ![alt](path)
+	mdImageRe = regexp.MustCompile(`!\[.*?\]\((.+?)\)`)
+	// obsidianImageRe 匹配 Obsidian 图片语法 ![[path|别名]]
 	obsidianImageRe = regexp.MustCompile(`!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]`)
-	htmlImgRe       = regexp.MustCompile(`<img[^>]+src=["'](.+?)["']`)
-	yamlImageRe     = regexp.MustCompile(`(?m)^\s*(?:cover|image|banner|thumbnail)\s*:\s*(\S+)`)
+	// htmlImgRe 匹配 HTML img 标签的 src 属性
+	htmlImgRe = regexp.MustCompile(`<img[^>]+src=["'](.+?)["']`)
+	// yamlImageRe 匹配 frontmatter 中 cover、image、banner、thumbnail 字段
+	yamlImageRe = regexp.MustCompile(`(?m)^\s*(?:cover|image|banner|thumbnail)\s*:\s*(\S+)`)
 )
 
 // splitFrontmatter 分离文档开头的 frontmatter
@@ -306,6 +315,7 @@ func resolveRel(dir, ref string) string {
 	return combined
 }
 
+// normalizeRel 将反斜杠路径统一为斜杠并清理为规范的库内相对路径
 func normalizeRel(p string) string {
 	p = strings.ReplaceAll(p, "\\", "/")
 	p = strings.TrimPrefix(p, "./")

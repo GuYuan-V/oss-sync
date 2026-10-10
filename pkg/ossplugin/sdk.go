@@ -88,6 +88,8 @@ type SettingField struct {
 	Label     string `json:"label"`
 	Type      string `json:"type"`
 	MaxLength int    `json:"max_length,omitempty"`
+	// Section 声明字段所属的二级分组，多个字段可共享同一 section 形成子菜单
+	Section string `json:"section,omitempty"`
 }
 
 // Task 声明宿主调度器执行的定时任务
