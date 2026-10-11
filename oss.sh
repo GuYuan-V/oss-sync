@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 fail() { printf '[OSS] 错误: %s\n' "$*" >&2; exit 1; }
 info() { printf '[OSS] %s\n' "$*"; }
+warn() { printf '[OSS] 警告: %s\n' "$*" >&2; }
 prompt() {
   local value=""
   if [[ -r /dev/tty ]] && { exec 3</dev/tty; } 2>/dev/null; then
@@ -400,7 +401,22 @@ print_menu() {
 
 acquire_lock() {
   exec 9>/run/lock/oss-sync-deploy.lock
-  flock -n 9 || fail '已有部署操作正在运行'
+  flock -n 9 && return 0
+  # 锁被占用时只报告持锁进程，由用户决定是否终止
+  # 不自动 kill：部署可能正在写二进制或改 systemd 单元，强杀会留下半成品状态
+  local holders
+  holders="$(fuser /run/lock/oss-sync-deploy.lock 2>/dev/null | tr -dc '0-9 ')"
+  local pid reported=0
+  for pid in $holders; do
+    [[ "$pid" == "$$" ]] && continue
+    [[ -r "/proc/$pid/cmdline" ]] || continue
+    warn "进程 $pid 持有锁：$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)"
+    reported=1
+  done
+  if [[ "$reported" == 1 ]]; then
+    fail '已有部署操作正在运行。确认无部署在跑可执行：fuser -k /run/lock/oss-sync-deploy.lock'
+  fi
+  fail '锁被占用但找不到持有进程，可执行：rm -f /run/lock/oss-sync-deploy.lock 后重试'
 }
 
 manage_update() {
