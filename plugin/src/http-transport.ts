@@ -6,8 +6,8 @@
 // 该失败只出现在 Obsidian 进程内，外部无法复现，因此以降级方式规避。
 
 import { requestUrl } from "obsidian";
-import * as https from "https";
-import * as http from "http";
+import type * as httpsType from "https";
+import type * as httpType from "http";
 
 /** 请求描述；body 为字符串或二进制 */
 export interface HttpRequest {
@@ -24,6 +24,19 @@ export interface HttpResponse {
   readonly text: string;
   readonly arrayBuffer: ArrayBuffer;
   readonly headers: Record<string, string>;
+}
+
+/**
+ * 按需取得 Node 内置模块
+ * 移动端没有这些模块，顶层导入会让插件在初始化阶段直接失败；
+ * 只有桌面端降级路径才会走到这里，取不到时抛错由调用方转为普通请求错误
+ */
+function nodeModule(name: "https" | "http"): typeof httpsType | typeof httpType {
+  const req = typeof require === "function" ? require : undefined;
+  if (!req) {
+    throw new Error(`Node module ${name} unavailable`);
+  }
+  return req(name);
 }
 
 /** requestUrl 抛出的重定向循环属于网络栈问题，改用原生 https 重试 */
@@ -68,7 +81,7 @@ async function viaRequestUrl(request: HttpRequest): Promise<HttpResponse> {
 
 async function viaNodeHttps(request: HttpRequest): Promise<HttpResponse> {
   const target = new URL(request.url);
-  const transport = target.protocol === "http:" ? http : https;
+  const transport = target.protocol === "http:" ? nodeModule("http") : nodeModule("https");
   const payload =
     request.body === undefined
       ? undefined
@@ -76,7 +89,7 @@ async function viaNodeHttps(request: HttpRequest): Promise<HttpResponse> {
         ? Buffer.from(request.body, "utf-8")
         : Buffer.from(request.body);
 
-  const raw = await new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: Buffer }>(
+  const raw = await new Promise<{ status: number; headers: httpType.IncomingHttpHeaders; body: Buffer }>(
     (resolve, reject) => {
       const req = transport.request(
         {

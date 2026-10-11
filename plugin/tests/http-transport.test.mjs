@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { build } from "esbuild";
 
-async function loadTransport(obsidianStub) {
+async function loadTransport(obsidianStub, withRequire = true) {
   const dir = await mkdtemp(join(tmpdir(), "oss-http-transport-"));
   const outfile = join(dir, "http-transport.mjs");
   await build({
@@ -15,6 +15,14 @@ async function loadTransport(obsidianStub) {
     bundle: true,
     platform: "node",
     format: "esm",
+    // 产物为 CJS 时 require 天然存在；测试用 ESM，需显式注入以覆盖降级路径
+    ...(withRequire
+      ? {
+          banner: {
+            js: 'import { createRequire as __ossCreateRequire } from "node:module";const require = __ossCreateRequire(import.meta.url);',
+          },
+        }
+      : {}),
     plugins: [
       {
         name: "obsidian-stub",
@@ -102,6 +110,28 @@ test("httpRequest returns the requestUrl response unchanged on success", async (
     assert.equal(globalThis.__lastRequest.method, "GET");
   } finally {
     delete globalThis.__lastRequest;
+    await cleanup();
+  }
+});
+
+// 移动端没有 Node 内置模块，传输模块必须能在缺失时正常加载
+test("transport module loads without Node builtin modules", async () => {
+  const stub = `
+    export async function requestUrl(request) {
+      return { status: 200, json: { ok: true }, text: "{}", arrayBuffer: new Uint8Array([1]).buffer, headers: {} };
+    }
+  `;
+  // 不注入 require，模拟移动端缺失 Node 模块的环境
+  const { module, cleanup } = await loadTransport(stub, false);
+  try {
+    assert.equal(typeof module.httpRequest, "function");
+    const res = await module.httpRequest({
+      url: "https://sync.example.com/api/vaults",
+      method: "GET",
+      headers: {},
+    });
+    assert.equal(res.status, 200);
+  } finally {
     await cleanup();
   }
 });

@@ -267,7 +267,13 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 	if !resolved {
 		return
 	}
+	// section 由表单携带，决定本次只接受并校验哪个分组的字段；
+	// 其余分组沿用库里已有值，避免未展示的字段被空值覆盖
+	section := strings.TrimSpace(c.PostForm("section"))
 	redirect := "/dashboard/plugins/" + url.PathEscape(c.Param("plugin_id")) + "/settings?vault_id=" + url.QueryEscape(vault.ID)
+	if section != "" {
+		redirect += "&section=" + url.QueryEscape(section)
+	}
 	errorRedirect := redirect + "&error="
 	if !vaultaccess.CanManage(role) {
 		c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.no_permission")))
@@ -278,14 +284,29 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	raw := pluginSettingsFromForm(c, manifest.Settings)
+	fields := manifest.Settings
+	if section != "" {
+		fields = filterSettingsBySection(manifest.Settings, section)
+	}
+	raw := pluginSettingsFromForm(c, fields)
+	var existing models.JSONMap
+	if _, prev, err := h.loadPluginSettings(manifest.ID, vault.ID); err == nil {
+		existing = prev
+	}
+	// 未在本次提交中的字段保留原值，使校验与落库都只针对当前分区
+	for key, value := range existing {
+		if _, ok := raw[key]; !ok {
+			raw[key] = value
+		}
+	}
 	clean, err := blog.ValidateSettingConfig(manifest.Settings, raw)
 	pluginName := manifest.Name
 	if err != nil {
-		d := pluginSettingsData{VaultID: vault.ID, VaultName: vault.Name, PluginID: manifest.ID, PluginName: pluginName, PluginVersion: manifest.Version, Fields: buildPluginSettingViews(manifest.Settings, models.JSONMap(raw)), Error: err.Error()}
+		d := pluginSettingsData{VaultID: vault.ID, VaultName: vault.Name, PluginID: manifest.ID, PluginName: pluginName, PluginVersion: manifest.Version, Fields: buildPluginSettingViews(fields, models.JSONMap(raw)), Section: section, Error: err.Error()}
 		ld := layoutData{}
 		h.setVaultLayout(&ld, vault)
 		ld.ActivePluginID = manifest.ID
+		ld.ActiveSection = section
 		h.renderVaultStatus(c, http.StatusBadRequest, ld, "vault-plugin-settings", h.t(c, "page.plugin_settings", vault.Name, pluginName), d)
 		return
 	}

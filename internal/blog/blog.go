@@ -20,9 +20,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"github.com/helantianshen/oss-sync/internal/auth"
 	"github.com/helantianshen/oss-sync/internal/config"
 	"github.com/helantianshen/oss-sync/internal/filestore"
-	"github.com/helantianshen/oss-sync/internal/jwt"
 	"github.com/helantianshen/oss-sync/internal/markdown"
 	"github.com/helantianshen/oss-sync/internal/models"
 	"github.com/helantianshen/oss-sync/internal/settingspolicy"
@@ -415,34 +415,65 @@ func sandboxDocument(head, body string) string {
 }
 
 // shareVisible 检查当前请求是否有权访问该分享
-// public 任何人可看；password 需提交密码；login 需已登录
+// public 任何人可看；password 需提交密码或持有该分享的授权 cookie；login 需已登录
 func (h *Handler) shareVisible(c *gin.Context, share models.Share) bool {
 	switch share.Visibility {
 	case "password":
 		password := strings.TrimSpace(c.Query("password"))
-		if password == "" {
-			h.renderSharePasswordPrompt(c, share)
-			return false
+		if password != "" {
+			if bcrypt.CompareHashAndPassword([]byte(share.SharePassword), []byte(password)) != nil {
+				h.renderSharePasswordPrompt(c, share)
+				return false
+			}
+			h.grantShareAccess(c, share)
+			return true
 		}
-		if bcrypt.CompareHashAndPassword([]byte(share.SharePassword), []byte(password)) != nil {
-			h.renderSharePasswordPrompt(c, share)
-			return false
+		if h.hasShareAccess(c, share) {
+			return true
 		}
-		return true
+		h.renderSharePasswordPrompt(c, share)
+		return false
 	case "login":
 		token, err := c.Cookie("oss_web_session")
 		if err != nil || token == "" {
-			c.Redirect(http.StatusFound, "/login?next="+url.QueryEscape(c.Request.URL.String()))
+			h.redirectToLogin(c)
 			return false
 		}
-		if _, err := jwt.Parse(h.Cfg.Auth.JWTSecret, token); err != nil {
-			c.Redirect(http.StatusFound, "/login?next="+url.QueryEscape(c.Request.URL.String()))
+		// 复用控制台认证链路，改密或注销导致的 TokenVersion 变化会在此失效
+		if _, err := auth.AuthenticateToken(h.DB, h.Cfg, token); err != nil {
+			h.redirectToLogin(c)
 			return false
 		}
 		return true
 	default:
 		return true
 	}
+}
+
+// shareAccessCookieName 保存已通过密码校验的分享 ID，仅用于同一浏览器的后续资源请求
+const shareAccessCookieName = "oss_share_access"
+
+// shareAccessTTL 授权 cookie 有效期，覆盖一次典型阅读会话
+const shareAccessTTL = 12 * time.Hour
+
+// grantShareAccess 在密码校验通过后写入授权 cookie，避免图片等资源请求重复提交密码
+func (h *Handler) grantShareAccess(c *gin.Context, share models.Share) {
+	secure := c.Request.URL.Scheme == "https" || c.GetHeader("X-Forwarded-Proto") == "https"
+	c.SetCookie(shareAccessCookieName, share.ShareID, int(shareAccessTTL.Seconds()), "/", "", secure, true)
+}
+
+// hasShareAccess 判断当前请求是否已持有该分享的授权
+func (h *Handler) hasShareAccess(c *gin.Context, share models.Share) bool {
+	granted, err := c.Cookie(shareAccessCookieName)
+	if err != nil || granted == "" {
+		return false
+	}
+	return granted == share.ShareID
+}
+
+// redirectToLogin 跳转登录页并携带回跳地址
+func (h *Handler) redirectToLogin(c *gin.Context) {
+	c.Redirect(http.StatusFound, "/login?next="+url.QueryEscape(c.Request.URL.String()))
 }
 
 // renderSharePasswordPrompt 显示密码输入表单，并提示输入错误（如有）

@@ -180,12 +180,13 @@ func (h *Handler) renderPublicHome(c *gin.Context, data publicHomeData) {
 	}
 }
 
-// homePosts 列出仓库中已单篇分享且目标仍存在的 Markdown 文章
+// homePosts 列出仓库中公开分享且目标仍存在的 Markdown 文章
+// 密码与登录分享的正文摘要不得进入公开首页，查询阶段即排除
 func (h *Handler) homePosts(userID uint, vaultID string) []HomePost {
 	var shares []models.Share
 	if err := h.DB.Where(
-		"user_id = ? AND vault_id = ? AND is_folder = ?",
-		userID, vaultID, false,
+		"user_id = ? AND vault_id = ? AND is_folder = ? AND (visibility = ? OR visibility = '')",
+		userID, vaultID, false, "public",
 	).Order("created_at desc").Order("share_id asc").Find(&shares).Error; err != nil {
 		return nil
 	}
