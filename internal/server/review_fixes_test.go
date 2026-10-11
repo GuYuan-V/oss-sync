@@ -6,8 +6,10 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/helantianshen/oss-sync/internal/jwt"
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
@@ -160,38 +162,295 @@ func TestReviewPR13PasswordAssets(t *testing.T) {
 	router := srv.Router()
 	token := registerAndLogin(t, router, "review-asset-owner", "password123")
 	vaultID := defaultVaultIDFromAPI(t, router, token)
+
+	// 上传真实图片，保证授权后能取到内容而非 404
+	uploadFile(t, router, token, "pic.png", "PNGDATA", 1700000000000)
 	assetUser := userOnlyToken(t, router, "review-asset-owner", "password123")
 	assetDev := deviceTokenFor(t, router, "review-asset-owner", "password123", "review-asset-device", assetUser, []string{vaultID})
-	shareID := createVisibilityShare(t, router, assetDev, "review-asset-device", vaultID, "WithImage.md",
-		"# img\n\n![pic](pic.png)\n\nPROTECTED ARTICLE BODY", "password")
+	code, _ := uploadV2(t, router, assetDev, vaultID, "WithImage.md",
+		"# img\n\n![pic](pic.png)\n\nPROTECTED ARTICLE BODY", 0, "review-asset-device", "create-with-image")
+	if code != http.StatusOK {
+		t.Fatalf("upload article: %d", code)
+	}
+	code, shareBody := doJSON(t, router, "POST", "/api/shares", assetDev, map[string]any{
+		"target_path": "WithImage.md", "is_folder": false, "visibility": "password", "share_password": "review-pass",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("create password share: %d %v", code, shareBody)
+	}
+	shareID := shareBody["share_id"].(string)
 
-	// 首次带密码访问，校验通过并写入授权 cookie
+	// 首次带密码访问，校验通过并写入授权令牌
 	req := httptest.NewRequest("GET", "/p/"+shareID+"?password=review-pass", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("password page: %d %s", w.Code, w.Body.String())
 	}
-
-	// 复用同一会话访问文章内图片地址，不得再要求密码
-	assetReq := httptest.NewRequest("GET", "/assets/"+shareID+"?ref=pic.png", nil)
+	var grant *http.Cookie
 	for _, c := range w.Result().Cookies() {
 		if c.Name == "oss_share_access" {
-			assetReq.AddCookie(c)
+			grant = c
 		}
 	}
-	assetW := httptest.NewRecorder()
-	router.ServeHTTP(assetW, assetReq)
-	if assetW.Code == http.StatusUnauthorized {
-		t.Error("asset request should reuse the share access grant")
+	if grant == nil {
+		t.Fatal("password verification did not issue a share access grant")
 	}
 
-	// 不带授权 cookie 时资源请求仍被拒绝
+	// 复用授权访问文章内图片，必须取到真实内容
+	assetReq := httptest.NewRequest("GET", "/assets/"+shareID+"?ref=pic.png", nil)
+	assetReq.AddCookie(grant)
+	assetW := httptest.NewRecorder()
+	router.ServeHTTP(assetW, assetReq)
+	if assetW.Code != http.StatusOK {
+		t.Fatalf("authorized asset = %d, want 200", assetW.Code)
+	}
+	if !strings.Contains(assetW.Body.String(), "PNGDATA") {
+		t.Errorf("authorized asset body = %q, want PNGDATA", assetW.Body.String())
+	}
+
+	// 不带授权时资源请求仍被拒绝
 	bareReq := httptest.NewRequest("GET", "/assets/"+shareID+"?ref=pic.png", nil)
 	bareW := httptest.NewRecorder()
 	router.ServeHTTP(bareW, bareReq)
 	if bareW.Code != http.StatusUnauthorized {
-		t.Errorf("asset without grant should be rejected, got %d", bareW.Code)
+		t.Errorf("asset without grant = %d, want 401", bareW.Code)
+	}
+}
+
+// 授权令牌不可伪造：把公开分享 ID 直接当 Cookie 值必须被拒绝
+func TestReviewPasswordCookieForgery(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "review-forge-owner", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, token)
+
+	forgeUser := userOnlyToken(t, router, "review-forge-owner", "password123")
+	forgeDev := deviceTokenFor(t, router, "review-forge-owner", "password123", "review-forge-device", forgeUser, []string{vaultID})
+	code, _ := uploadV2(t, router, forgeDev, vaultID, "Forged.md",
+		"# forged\n\nSECRET COOKIE BYPASS BODY", 0, "review-forge-device", "create-forged")
+	if code != http.StatusOK {
+		t.Fatalf("upload: %d", code)
+	}
+	code, shareBody := doJSON(t, router, "POST", "/api/shares", forgeDev, map[string]any{
+		"target_path": "Forged.md", "is_folder": false, "visibility": "password", "share_password": "review-pass",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("create share: %d %v", code, shareBody)
+	}
+	shareID := shareBody["share_id"].(string)
+
+	// 直接用公开分享 ID 构造 Cookie，未提交密码
+	req := httptest.NewRequest("GET", "/p/"+shareID, nil)
+	req.AddCookie(&http.Cookie{Name: "oss_share_access", Value: shareID})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code == http.StatusOK && strings.Contains(w.Body.String(), "SECRET COOKIE BYPASS BODY") {
+		t.Error("forged share id cookie must not bypass the password check")
+	}
+
+	// 同一伪造值也不能用于附件接口
+	assetReq := httptest.NewRequest("GET", "/assets/"+shareID+"?ref=pic.png", nil)
+	assetReq.AddCookie(&http.Cookie{Name: "oss_share_access", Value: shareID})
+	assetW := httptest.NewRecorder()
+	router.ServeHTTP(assetW, assetReq)
+	if assetW.Code != http.StatusUnauthorized {
+		t.Errorf("forged cookie on asset = %d, want 401", assetW.Code)
+	}
+}
+
+// 授权令牌不可篡改：改动载荷或签名都必须失效
+func TestReviewPasswordGrantTampering(t *testing.T) {
+	srv, _, secret := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "review-tamper-owner", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, token)
+
+	tamperUser := userOnlyToken(t, router, "review-tamper-owner", "password123")
+	tamperDev := deviceTokenFor(t, router, "review-tamper-owner", "password123", "review-tamper-device", tamperUser, []string{vaultID})
+	code, _ := uploadV2(t, router, tamperDev, vaultID, "Tamper.md",
+		"# tamper\n\nTAMPER BODY", 0, "review-tamper-device", "create-tamper")
+	if code != http.StatusOK {
+		t.Fatalf("upload: %d", code)
+	}
+	code, shareBody := doJSON(t, router, "POST", "/api/shares", tamperDev, map[string]any{
+		"target_path": "Tamper.md", "is_folder": false, "visibility": "password", "share_password": "review-pass",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("create share: %d %v", code, shareBody)
+	}
+	shareID := shareBody["share_id"].(string)
+
+	// 取一枚真实授权令牌
+	req := httptest.NewRequest("GET", "/p/"+shareID+"?password=review-pass", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	var grant string
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "oss_share_access" {
+			grant = c.Value
+		}
+	}
+	if grant == "" {
+		t.Fatal("no grant issued")
+	}
+
+	// 篡改签名段
+	parts := strings.Split(grant, ".")
+	tampered := parts[0] + "." + parts[1] + "." + strings.Repeat("a", len(parts[2]))
+	forged := httptest.NewRequest("GET", "/p/"+shareID, nil)
+	forged.AddCookie(&http.Cookie{Name: "oss_share_access", Value: tampered})
+	forgedW := httptest.NewRecorder()
+	router.ServeHTTP(forgedW, forged)
+	if forgedW.Code == http.StatusOK && strings.Contains(forgedW.Body.String(), "TAMPER BODY") {
+		t.Error("tampered signature must be rejected")
+	}
+
+	// 用错误密钥签发的令牌同样无效
+	wrongKey, err := jwt.Sign("not-the-server-secret", jwt.Claims{
+		UserID: 1, Username: shareID, TokenVersion: 1,
+		ExpAt: time.Now().Add(time.Hour).Unix(),
+	}, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign := httptest.NewRequest("GET", "/p/"+shareID, nil)
+	foreign.AddCookie(&http.Cookie{Name: "oss_share_access", Value: wrongKey})
+	foreignW := httptest.NewRecorder()
+	router.ServeHTTP(foreignW, foreign)
+	if foreignW.Code == http.StatusOK && strings.Contains(foreignW.Body.String(), "TAMPER BODY") {
+		t.Error("token signed with a foreign key must be rejected")
+	}
+
+	// 过期令牌必须失效
+	expired, err := jwt.Sign(secret, jwt.Claims{
+		UserID: 1, Username: shareID, TokenVersion: 1,
+		IssuedAt: time.Now().Add(-2 * time.Hour).Unix(),
+		ExpAt:    time.Now().Add(-time.Hour).Unix(),
+	}, -time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiredReq := httptest.NewRequest("GET", "/p/"+shareID, nil)
+	expiredReq.AddCookie(&http.Cookie{Name: "oss_share_access", Value: expired})
+	expiredW := httptest.NewRecorder()
+	router.ServeHTTP(expiredW, expiredReq)
+	if expiredW.Code == http.StatusOK && strings.Contains(expiredW.Body.String(), "TAMPER BODY") {
+		t.Error("expired grant must be rejected")
+	}
+}
+
+// 改密后此前签发的授权令牌必须失效
+func TestReviewPasswordGrantRevokedByPasswordChange(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "review-revoke-owner", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, token)
+	revokeUser := userOnlyToken(t, router, "review-revoke-owner", "password123")
+	revokeDev := deviceTokenFor(t, router, "review-revoke-owner", "password123", "review-revoke-device", revokeUser, []string{vaultID})
+
+	code, _ := uploadV2(t, router, revokeDev, vaultID, "Revoke.md",
+		"# revoke\n\nREVOKE BODY", 0, "review-revoke-device", "create-revoke")
+	if code != http.StatusOK {
+		t.Fatalf("upload: %d", code)
+	}
+	code, shareBody := doJSON(t, router, "POST", "/api/shares", revokeDev, map[string]any{
+		"target_path": "Revoke.md", "is_folder": false, "visibility": "password", "share_password": "old-pass",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("create share: %d %v", code, shareBody)
+	}
+	shareID := shareBody["share_id"].(string)
+
+	// 用旧密码取得授权令牌
+	req := httptest.NewRequest("GET", "/p/"+shareID+"?password=old-pass", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	var grant *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "oss_share_access" {
+			grant = c
+		}
+	}
+	if grant == nil {
+		t.Fatal("no grant issued")
+	}
+
+	// 改密，旧令牌应随之失效
+	code, _ = doJSON(t, router, "PATCH", "/api/shares/"+shareID, revokeDev, map[string]any{
+		"visibility": "password", "share_password": "new-pass",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("change share password: %d", code)
+	}
+
+	stale := httptest.NewRequest("GET", "/p/"+shareID, nil)
+	stale.AddCookie(grant)
+	staleW := httptest.NewRecorder()
+	router.ServeHTTP(staleW, stale)
+	if staleW.Code == http.StatusOK && strings.Contains(staleW.Body.String(), "REVOKE BODY") {
+		t.Error("grant issued before a password change must not survive it")
+	}
+
+	// 新密码可以重新取得授权
+	fresh := httptest.NewRequest("GET", "/p/"+shareID+"?password=new-pass", nil)
+	freshW := httptest.NewRecorder()
+	router.ServeHTTP(freshW, fresh)
+	if freshW.Code != http.StatusOK {
+		t.Fatalf("new password should work: %d", freshW.Code)
+	}
+}
+
+// 授权令牌绑定单一分享：A 分享的令牌不能用于 B 分享
+func TestReviewPasswordGrantCrossShare(t *testing.T) {
+	srv, _, _ := newTestServer(t)
+	router := srv.Router()
+	token := registerAndLogin(t, router, "review-cross-owner", "password123")
+	vaultID := defaultVaultIDFromAPI(t, router, token)
+	crossUser := userOnlyToken(t, router, "review-cross-owner", "password123")
+	crossDev := deviceTokenFor(t, router, "review-cross-owner", "password123", "review-cross-device", crossUser, []string{vaultID})
+
+	aShare, bShare := "", ""
+	for _, path := range []string{"A.md", "B.md"} {
+		code, _ := uploadV2(t, router, crossDev, vaultID, path,
+			"# "+path+"\n\nBODY "+path, 0, "review-cross-device", "create-"+path)
+		if code != http.StatusOK {
+			t.Fatalf("upload %s: %d", path, code)
+		}
+		code, body := doJSON(t, router, "POST", "/api/shares", crossDev, map[string]any{
+			"target_path": path, "is_folder": false, "visibility": "password", "share_password": "review-pass",
+		})
+		if code != http.StatusOK {
+			t.Fatalf("create share %s: %d %v", path, code, body)
+		}
+		if path == "A.md" {
+			aShare, _ = body["share_id"].(string)
+		} else {
+			bShare, _ = body["share_id"].(string)
+		}
+	}
+
+	// 只对 A 通过密码校验，取得 A 的授权令牌
+	req := httptest.NewRequest("GET", "/p/"+aShare+"?password=review-pass", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	var grant *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "oss_share_access" {
+			grant = c
+		}
+	}
+	if grant == nil {
+		t.Fatal("no grant issued for A")
+	}
+
+	// 用 A 的令牌访问 B，必须被拒绝
+	crossReq := httptest.NewRequest("GET", "/p/"+bShare, nil)
+	crossReq.AddCookie(grant)
+	crossW := httptest.NewRecorder()
+	router.ServeHTTP(crossW, crossReq)
+	if crossW.Code == http.StatusOK && strings.Contains(crossW.Body.String(), "BODY B.md") {
+		t.Error("grant for one share must not unlock another share")
 	}
 }
 

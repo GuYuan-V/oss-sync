@@ -23,6 +23,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/auth"
 	"github.com/helantianshen/oss-sync/internal/config"
 	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/jwt"
 	"github.com/helantianshen/oss-sync/internal/markdown"
 	"github.com/helantianshen/oss-sync/internal/models"
 	"github.com/helantianshen/oss-sync/internal/settingspolicy"
@@ -415,7 +416,7 @@ func sandboxDocument(head, body string) string {
 }
 
 // shareVisible 检查当前请求是否有权访问该分享
-// public 任何人可看；password 需提交密码或持有该分享的授权 cookie；login 需已登录
+// public 任何人可看；password 需提交密码或持有该分享的授权令牌；login 需已登录
 func (h *Handler) shareVisible(c *gin.Context, share models.Share) bool {
 	switch share.Visibility {
 	case "password":
@@ -450,25 +451,52 @@ func (h *Handler) shareVisible(c *gin.Context, share models.Share) bool {
 	}
 }
 
-// shareAccessCookieName 保存已通过密码校验的分享 ID，仅用于同一浏览器的后续资源请求
+// shareAccessCookieName 保存密码分享的授权令牌
 const shareAccessCookieName = "oss_share_access"
 
-// shareAccessTTL 授权 cookie 有效期，覆盖一次典型阅读会话
+// shareAccessTTL 授权有效期，覆盖一次典型阅读会话
 const shareAccessTTL = 12 * time.Hour
 
-// grantShareAccess 在密码校验通过后写入授权 cookie，避免图片等资源请求重复提交密码
+// grantShareAccess 签发该分享的授权令牌并写入 cookie
+// 令牌经 HS256 签名，载荷绑定分享 ID 与分享记录的更新时间，无法由公开信息伪造
 func (h *Handler) grantShareAccess(c *gin.Context, share models.Share) {
+	token, err := jwt.Sign(h.Cfg.Auth.JWTSecret, jwt.Claims{
+		UserID:       share.UserID,
+		Username:     share.ShareID,
+		TokenVersion: h.shareGrantVersion(share),
+		ExpAt:        time.Now().Add(shareAccessTTL).Unix(),
+	}, shareAccessTTL)
+	if err != nil {
+		return
+	}
 	secure := c.Request.URL.Scheme == "https" || c.GetHeader("X-Forwarded-Proto") == "https"
-	c.SetCookie(shareAccessCookieName, share.ShareID, int(shareAccessTTL.Seconds()), "/", "", secure, true)
+	c.SetCookie(shareAccessCookieName, token, int(shareAccessTTL.Seconds()), "/", "", secure, true)
 }
 
-// hasShareAccess 判断当前请求是否已持有该分享的授权
+// hasShareAccess 校验授权令牌：签名有效、未到期、分享 ID 匹配且未被后续改密失效
 func (h *Handler) hasShareAccess(c *gin.Context, share models.Share) bool {
-	granted, err := c.Cookie(shareAccessCookieName)
-	if err != nil || granted == "" {
+	token, err := c.Cookie(shareAccessCookieName)
+	if err != nil || token == "" {
 		return false
 	}
-	return granted == share.ShareID
+	claims, err := jwt.Parse(h.Cfg.Auth.JWTSecret, token)
+	if err != nil {
+		return false
+	}
+	if claims.Username != share.ShareID || claims.UserID != share.UserID {
+		return false
+	}
+	// 改密会推进 UpdatedAt 对应的版本号，使此前签发的授权令牌全部失效
+	if claims.TokenVersion != h.shareGrantVersion(share) {
+		return false
+	}
+	return true
+}
+
+// shareGrantVersion 返回授权令牌绑定的分享版本，分享记录更新时随之推进
+// 纳秒时间戳截断到 32 位，避免同一秒内的改密与授权签发得到相同版本号
+func (h *Handler) shareGrantVersion(share models.Share) uint {
+	return uint(uint32(share.UpdatedAt.UnixNano()))
 }
 
 // redirectToLogin 跳转登录页并携带回跳地址
