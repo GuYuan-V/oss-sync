@@ -4,6 +4,8 @@ package blog
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"embed"
 	"errors"
 	"fmt"
@@ -458,13 +460,11 @@ const shareAccessCookieName = "oss_share_access"
 const shareAccessTTL = 12 * time.Hour
 
 // grantShareAccess 签发该分享的授权令牌并写入 cookie
-// 令牌经 HS256 签名，载荷绑定分享 ID 与分享记录的更新时间，无法由公开信息伪造
+// 令牌经 HS256 签名，签名密钥绑定分享 ID 与当前密码哈希，无法由公开信息伪造
 func (h *Handler) grantShareAccess(c *gin.Context, share models.Share) {
-	token, err := jwt.Sign(h.Cfg.Auth.JWTSecret, jwt.Claims{
-		UserID:       share.UserID,
-		Username:     share.ShareID,
-		TokenVersion: h.shareGrantVersion(share),
-		ExpAt:        time.Now().Add(shareAccessTTL).Unix(),
+	token, err := jwt.Sign(h.shareAccessSecret(share), jwt.Claims{
+		UserID:   share.UserID,
+		Username: share.ShareID,
 	}, shareAccessTTL)
 	if err != nil {
 		return
@@ -479,24 +479,21 @@ func (h *Handler) hasShareAccess(c *gin.Context, share models.Share) bool {
 	if err != nil || token == "" {
 		return false
 	}
-	claims, err := jwt.Parse(h.Cfg.Auth.JWTSecret, token)
+	claims, err := jwt.Parse(h.shareAccessSecret(share), token)
 	if err != nil {
 		return false
 	}
 	if claims.Username != share.ShareID || claims.UserID != share.UserID {
 		return false
 	}
-	// 改密会推进 UpdatedAt 对应的版本号，使此前签发的授权令牌全部失效
-	if claims.TokenVersion != h.shareGrantVersion(share) {
-		return false
-	}
 	return true
 }
 
-// shareGrantVersion 返回授权令牌绑定的分享版本，分享记录更新时随之推进
-// 纳秒时间戳截断到 32 位，避免同一秒内的改密与授权签发得到相同版本号
-func (h *Handler) shareGrantVersion(share models.Share) uint {
-	return uint(uint32(share.UpdatedAt.UnixNano()))
+// shareAccessSecret 隔离分享授权与账号令牌，并在密码哈希变化时使旧授权失效
+func (h *Handler) shareAccessSecret(share models.Share) string {
+	mac := hmac.New(sha256.New, []byte(h.Cfg.Auth.JWTSecret))
+	_, _ = mac.Write([]byte("oss-sync/share-access\x00" + share.ShareID + "\x00" + share.SharePassword))
+	return fmt.Sprintf("%x", mac.Sum(nil))
 }
 
 // redirectToLogin 跳转登录页并携带回跳地址
