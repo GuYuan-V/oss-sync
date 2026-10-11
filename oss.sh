@@ -436,7 +436,9 @@ manage_modify() {
   choice="${1:-}"
   value="${2:-}"
   if [[ -z "$choice" ]]; then
-    printf '1 修改容量\n2 修改端口\n3 切换 SSE 明文令牌\n0 返回\n'
+    local sse_state='关闭'
+    [[ "$(sed -n 's/^[[:space:]]*allow_insecure_query_token:[[:space:]]*//p' "$INSTALL_DIR/configs/config.prod.yaml" 2>/dev/null | head -1)" == 'true' ]] && sse_state='开启'
+    printf '1 修改容量\n2 修改端口\n3 切换 SSE 明文令牌（当前：%s）\n0 返回\n' "$sse_state"
     choice="$(prompt '选择 [0]：')"
     choice="${choice:-0}"
   fi
@@ -467,10 +469,15 @@ toggle_insecure_query_token() {
   acquire_lock
   local current
   current="$(sed -n 's/^[[:space:]]*allow_insecure_query_token:[[:space:]]*//p' "$config" | head -1)"
+  local state='关闭'
+  [[ "$current" == 'true' ]] && state='开启'
+  printf 'SSE 明文令牌当前为：%s\n' "$state"
+  printf '开启后 JWT 会出现在 URL 查询参数中，明文 http 链路段可被同链路设备观察\n'
+  local answer
+  answer="$(prompt '切换为相反状态？[y/N]：')"
+  [[ "$answer" == 'y' || "$answer" == 'Y' ]] || return 0
   local next='true'
-  if [[ "$current" == 'true' ]]; then
-    next='false'
-  fi
+  [[ "$current" == 'true' ]] && next='false'
   if grep -qE '^[[:space:]]*allow_insecure_query_token:' "$config"; then
     sed -i "s/^[[:space:]]*allow_insecure_query_token:.*/  allow_insecure_query_token: $next/" "$config"
   else
@@ -479,7 +486,7 @@ toggle_insecure_query_token() {
   fi
   chown root:oss-sync "$config" 2>/dev/null || true
   chmod 640 "$config" 2>/dev/null || true
-  printf 'SSE 明文令牌已切换为 %s\n' "$next"
+  printf 'SSE 明文令牌已切换为 %s\n' "$([[ "$next" == 'true' ]] && echo 开启 || echo 关闭)"
   printf '重启服务后生效：systemctl restart oss-sync\n'
 }
 
