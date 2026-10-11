@@ -436,7 +436,7 @@ manage_modify() {
   choice="${1:-}"
   value="${2:-}"
   if [[ -z "$choice" ]]; then
-    printf '1 修改容量\n2 修改端口\n0 返回\n'
+    printf '1 修改容量\n2 修改端口\n3 切换 SSE 明文令牌\n0 返回\n'
     choice="$(prompt '选择 [0]：')"
     choice="${choice:-0}"
   fi
@@ -451,9 +451,36 @@ manage_modify() {
       [[ -n "$value" ]] || value="$(prompt "新端口（当前 ${DEPLOY_PORT:-8080}：")"
       OSS_INSTALL_DIR="$DIR" OSS_PORT="$value" deploy configure
       ;;
+    3|sse)
+      toggle_insecure_query_token
+      ;;
     0) return 0 ;;
     *) fail '无效操作' ;;
   esac
+}
+
+# toggle_insecure_query_token 切换 config.prod.yaml 中 SSE 查询参数令牌的明文放行
+# 反代在内网以明文 http 转发 SSE 时需要开启，此时令牌会经过未加密链路
+toggle_insecure_query_token() {
+  local config="$INSTALL_DIR/configs/config.prod.yaml"
+  [[ -f "$config" ]] || fail '未找到配置文件，请先完成安装'
+  acquire_lock
+  local current
+  current="$(sed -n 's/^[[:space:]]*allow_insecure_query_token:[[:space:]]*//p' "$config" | head -1)"
+  local next='true'
+  if [[ "$current" == 'true' ]]; then
+    next='false'
+  fi
+  if grep -qE '^[[:space:]]*allow_insecure_query_token:' "$config"; then
+    sed -i "s/^[[:space:]]*allow_insecure_query_token:.*/  allow_insecure_query_token: $next/" "$config"
+  else
+    # 缺少该键时追加到 sync: 段末尾，保持既有缩进风格
+    sed -i "/^sync:/a\\  allow_insecure_query_token: $next" "$config"
+  fi
+  chown root:oss-sync "$config" 2>/dev/null || true
+  chmod 640 "$config" 2>/dev/null || true
+  printf 'SSE 明文令牌已切换为 %s\n' "$next"
+  printf '重启服务后生效：systemctl restart oss-sync\n'
 }
 
 manage_uninstall() {
