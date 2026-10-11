@@ -683,6 +683,7 @@ manage() {
       apply-web-update) manage_apply_web_update ;;
       *) fail '无效操作' ;;
     esac
+    exec 9>&-
     # 命令行一次性调用执行完即退出；交互模式返回主菜单。
     if [[ -n "${1:-}" ]]; then return 0; fi
     if ((MENU_EXIT)); then return 0; fi

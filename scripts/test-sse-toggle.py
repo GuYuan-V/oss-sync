@@ -30,6 +30,7 @@ with tempfile.TemporaryDirectory(prefix='oss-sse-test-') as directory:
     assert run('insecure_query_token_value "$1"', config) == 'true'
     run('DIR="$1"; prompt() { printf n; }; toggle_insecure_query_token; acquire_lock', root)
     assert run('insecure_query_token_value "$1"', config) == 'true'
+    run("""DIR="$1"; print_menu() { :; }; systemctl() { :; }; prompt() { local value; read -r value; printf %s "$value"; }; manage_modify() { toggle_insecure_query_token; }; manage <<< $'3\n4\nn\n0'; acquire_lock""", root)
     config.write_text('sync:\n  max_concurrency: 6\nupdate:\n  github_repo: example/repo\n')
     assert run('insecure_query_token_value "$1"', config) == 'false'
     run('insecure_query_token_value "$1" true', config)
