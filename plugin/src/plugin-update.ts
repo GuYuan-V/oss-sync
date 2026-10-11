@@ -1,18 +1,26 @@
 // GitHub Release 在线更新支持
 //
 // 模块不依赖 Obsidian，便于在 Node 测试中注入伪造的 fetch 与文件系统
-// 更新流程：查询最新 Release → 读取 manifest.json 得到远端版本 → 下载三件套 →
+// 更新流程：查询最新 Release -> 读取 manifest.json 得到远端版本 -> 下载三件套 ->
 // 由 plugin-update-apply.ts 原子替换并重载插件
 
+/** 更新包下载渠道：official 直连 GitHub，proxy 走 gh-proxy.com，custom 走用户自建代理前缀*/
 export type UpdateDownloadSource = "official" | "proxy" | "custom";
 
+/** 把任意输入收敛为合法渠道；非法或缺失值一律回落为 proxy*/
 export function normalizeUpdateSource(value: unknown): UpdateDownloadSource {
   const source = typeof value === "string" ? value.trim() : "";
   return source === "official" || source === "custom" ? source : "proxy";
 }
 
+/** 自定义代理前缀不合法时抛出*/
 export class UpdateSourceError extends Error {}
 
+/**
+ * 按渠道拼装下载地址
+ * custom 渠道要求前缀为不含用户信息与查询片段的 https URL，长度不超过 1024
+ * 前缀中的空白与控制字符、以及 \ ? # 等会破坏路径拼接的字符均视为非法
+ */
 export function resolveUpdateURL(rawURL: string, source: UpdateDownloadSource, customProxy: string): string {
   if (source === "official") return rawURL;
   if (source === "proxy") return "https://gh-proxy.com/" + rawURL;
@@ -32,6 +40,7 @@ export function resolveUpdateURL(rawURL: string, source: UpdateDownloadSource, c
   return prefix.replace(/\/+$/, "") + "/" + rawURL;
 }
 
+/** 一次 HTTP 请求的结果快照；arrayBuffer 为二进制响应体*/
 export interface HttpResult {
   status: number;
   json: unknown;
@@ -40,12 +49,14 @@ export interface HttpResult {
   headers: Record<string, string>;
 }
 
+/** 注入用的 HTTP 请求函数，便于在测试中替换为伪造实现*/
 export type HttpFetch = (options: {
   url: string;
   method: string;
   headers?: Record<string, string>;
 }) => Promise<HttpResult>;
 
+/** GitHub Release 中的单个资产*/
 export interface GitHubReleaseAsset {
   name: string;
   browser_download_url: string;
@@ -53,12 +64,14 @@ export interface GitHubReleaseAsset {
   digest?: string | null;
 }
 
+/** GitHub latest release 接口返回的裁剪结果*/
 export interface GitHubRelease {
   tag_name: string;
   html_url: string;
   assets: GitHubReleaseAsset[];
 }
 
+/** 待写入插件目录的单个更新文件*/
 export interface UpdateFile {
   name: string;
   content: ArrayBuffer;
@@ -147,6 +160,10 @@ export function manifestVersionFromText(text: string | null): string | null {
 
 // GitHub Release 查询与下载
 
+/**
+ * GitHub Release 数据源
+ * 构造时立即校验代理配置，配置非法则抛 UpdateSourceError
+ */
 export class GitHubReleaseSource {
   constructor(
     private readonly fetchImpl: HttpFetch,
@@ -156,6 +173,7 @@ export class GitHubReleaseSource {
     resolveUpdateURL("https://api.github.com", source, customProxy);
   }
 
+  /** 拉取仓库最新 Release；repo 需形如 owner/name，404 视为仓库无 Release*/
   async latestRelease(repo: string): Promise<GitHubRelease> {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
       throw new Error(`invalid GitHub repository "${repo}"`);
@@ -253,16 +271,19 @@ async function sha256(content: ArrayBuffer): Promise<string> {
 
 // 更新检查与资源下载
 
+/** 更新检查结果；remoteVersion 优先取自 Release 内 manifest.json，缺失时回落到 tag*/
 export interface UpdateCheckResult {
   readonly currentVersion: string;
   readonly remoteVersion: string;
   readonly release: GitHubRelease;
 }
 
+/** 远端版本是否比当前版本更新*/
 export function isUpdateAvailable(result: UpdateCheckResult): boolean {
   return isNewerVersion(result.currentVersion, result.remoteVersion);
 }
 
+/** 查询最新 Release 并解析远端版本；manifest.json 缺失或不可解析时回落到 Release 标签*/
 export async function checkForUpdates(
   repo: string,
   currentVersion: string,
@@ -274,6 +295,7 @@ export async function checkForUpdates(
   return { currentVersion, remoteVersion, release };
 }
 
+/** 按 UPDATE_FILE_NAMES 顺序下载三件套；任一资产校验失败都会抛错*/
 export async function downloadUpdateAssets(
   source: GitHubReleaseSource,
   release: GitHubRelease

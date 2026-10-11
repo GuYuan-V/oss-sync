@@ -15,6 +15,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
+// maxEditablePluginFileBytes 是在线编辑单文件的内容上限
 const maxEditablePluginFileBytes = 1 << 20
 
 // EditablePluginFile 是插件包中可在线编辑的文本文件
@@ -23,6 +24,8 @@ type EditablePluginFile struct {
 	Content string
 }
 
+// EditableFiles 返回插件包内可编辑的文本文件
+// 按路径排序，最多返回 64 个
 func (m *Manager) EditableFiles(id string) ([]EditablePluginFile, error) {
 	packageData, err := readInstalledPackage(m.root, id)
 	if err != nil {
@@ -46,6 +49,9 @@ func (m *Manager) EditableFiles(id string) ([]EditablePluginFile, error) {
 	return files, nil
 }
 
+// SaveTextFile 覆盖插件包内一个可编辑文本文件并重新加载插件
+// 内容须为不超过 1 MiB 的合法 UTF-8；内置插件与入口文件不可写
+// 编辑前先停用插件，校验失败时回滚文件内容、元数据与启用状态
 func (m *Manager) SaveTextFile(ctx context.Context, id, path, content string) (resultErr error) {
 	if ctx == nil {
 		return errors.New("plugin editor context is nil")
@@ -153,6 +159,8 @@ func (m *Manager) SaveTextFile(ctx context.Context, id, path, content string) (r
 	return nil
 }
 
+// isEditablePluginFile 判断文件是否允许在线编辑
+// 排除入口文件与 plugin.wasm，仅接受白名单扩展名的合法 UTF-8 文本
 func isEditablePluginFile(manifest Manifest, path string, content []byte) bool {
 	if path == "" || manifestEntrypointFile(manifest, path) || path == "plugin.wasm" {
 		return false
@@ -166,6 +174,8 @@ func isEditablePluginFile(manifest Manifest, path string, content []byte) bool {
 	}
 }
 
+// writeInstalledTextFile 以临时文件加改名的方式原子替换已安装文件
+// 目标必须是插件目录内的常规文件，符号链接一律拒绝
 func writeInstalledTextFile(root, id, path string, content []byte) error {
 	dir := filepath.Join(root, id)
 	if err := os.MkdirAll(dir, 0o750); err != nil {

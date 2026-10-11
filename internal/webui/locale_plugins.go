@@ -1,5 +1,6 @@
 package webui
 
+// 本地化条目：插件管理与插件设置页面文案
 func init() {
 	registerEntries(map[string][2]string{
 		"page.admin_plugins":                       {"插件管理", "Plugins"},

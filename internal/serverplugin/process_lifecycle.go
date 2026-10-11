@@ -7,6 +7,8 @@ import (
 	"os"
 )
 
+// Close 发送 shutdown 帧并等待进程退出
+// ctx 为 nil 时报错；重复关闭在宽限期内复用已关闭结果，超时则强杀并返回 ctx 错误
 func (p *executablePlugin) Close(ctx context.Context) error {
 	if ctx == nil {
 		return errors.New("executable plugin close context is nil")
@@ -48,6 +50,7 @@ func (p *executablePlugin) Close(ctx context.Context) error {
 	}
 }
 
+// kill 终止子进程，进程已退出或未启动时视为成功
 func (p *executablePlugin) kill() error {
 	if p.cmd == nil || p.cmd.Process == nil {
 		return nil
@@ -59,6 +62,7 @@ func (p *executablePlugin) kill() error {
 	return err
 }
 
+// Healthy 表示进程是否仍在运行
 func (p *executablePlugin) Healthy() bool {
 	select {
 	case <-p.done:
@@ -68,6 +72,7 @@ func (p *executablePlugin) Healthy() bool {
 	}
 }
 
+// protocolFailure 协议或 IO 出错时强杀进程并记录失败原因
 func (p *executablePlugin) protocolFailure(err error) {
 	_ = p.kill()
 	p.fail(err)

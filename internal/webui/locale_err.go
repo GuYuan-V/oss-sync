@@ -1,5 +1,6 @@
 package webui
 
+// 本地化条目：控制台各处的错误提示文案
 func init() {
 	registerEntries(map[string][2]string{
 		"err.admin_status_failed":                {"读取管理员状态失败，请稍后再试。", "Failed to read admin status, please try again later."},

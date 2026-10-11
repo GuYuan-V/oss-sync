@@ -1,5 +1,6 @@
 package webui
 
+// 本地化条目：首页与设备管理页面文案
 func init() {
 	registerEntries(map[string][2]string{
 		"overview.home_eyebrow":        {"Home", "Home"},

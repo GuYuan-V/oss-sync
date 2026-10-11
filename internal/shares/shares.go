@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"github.com/helantianshen/oss-sync/internal/auth"
@@ -41,10 +42,17 @@ type createRequest struct {
 	IsFolder           bool   `json:"is_folder"`
 	AllowCopy          bool   `json:"allow_copy"`
 	RecursiveBacklinks bool   `json:"recursive_backlinks"`
+	// Visibility 取 public / password / login，缺省 public
+	Visibility string `json:"visibility"`
+	// SharePassword 是 password 可见性的访问密码明文，仅创建时接收
+	SharePassword string `json:"share_password"`
 }
 
 type updateRequest struct {
-	AllowCopy *bool `json:"allow_copy" binding:"required"`
+	AllowCopy *bool `json:"allow_copy"`
+	// Visibility 与 SharePassword 可单独或一起更新；password 模式必须提供新密码
+	Visibility    string `json:"visibility"`
+	SharePassword string `json:"share_password"`
 }
 
 type shareOut struct {
@@ -53,6 +61,7 @@ type shareOut struct {
 	TargetPath string `json:"target_path"`
 	IsFolder   bool   `json:"is_folder"`
 	AllowCopy  bool   `json:"allow_copy"`
+	Visibility string `json:"visibility"`
 	Views      int    `json:"views"`
 	URL        string `json:"url"`
 	CreatedAt  string `json:"created_at"`
@@ -78,12 +87,12 @@ func (h *Handler) Register(r *gin.Engine) {
 }
 
 // CreateWeb 是网页控制台使用的分享创建服务，校验文件存在并生成分享 ID
-func (h *Handler) CreateWeb(userID uint, vaultID, targetPath string, isFolder, allowCopy bool) (string, error) {
+func (h *Handler) CreateWeb(userID uint, vaultID, targetPath string, isFolder, allowCopy bool, access ShareAccess) (string, error) {
 	targetPath = strings.TrimSpace(targetPath)
 	if targetPath == "" || !isSafeSharePath(targetPath) {
 		return "", fmt.Errorf("路径包含非法内容")
 	}
-	so, err := h.createOne(userID, vaultID, targetPath, isFolder, allowCopy)
+	so, err := h.createOne(userID, vaultID, targetPath, isFolder, allowCopy, access)
 	if err != nil {
 		return "", err
 	}
@@ -128,7 +137,7 @@ func (h *Handler) Create(c *gin.Context) {
 			return
 		}
 		for _, p := range links {
-			so, err := h.createOne(vault.OwnerID, vaultID, p, false, req.AllowCopy)
+			so, err := h.createOne(vault.OwnerID, vaultID, p, false, req.AllowCopy, ShareAccess{Visibility: req.Visibility, Password: req.SharePassword})
 			if err != nil {
 				continue
 			}
@@ -136,7 +145,7 @@ func (h *Handler) Create(c *gin.Context) {
 		}
 	}
 
-	so, err := h.createOne(vault.OwnerID, vaultID, req.TargetPath, req.IsFolder, req.AllowCopy)
+	so, err := h.createOne(vault.OwnerID, vaultID, req.TargetPath, req.IsFolder, req.AllowCopy, ShareAccess{Visibility: req.Visibility, Password: req.SharePassword})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -150,10 +159,41 @@ func (h *Handler) Create(c *gin.Context) {
 	})
 }
 
+// ShareAccess 描述一次分享创建时的访问控制意图
+// Visibility 取 public / password / login；password 必须提供明文 Password
+type ShareAccess struct {
+	Visibility string
+	Password   string
+}
+
+// normalizeShareAccess 校验并规范化访问控制，password 模式必须带密码
+func normalizeShareAccess(access ShareAccess) (string, string, error) {
+	visibility := strings.TrimSpace(access.Visibility)
+	switch visibility {
+	case "", "public":
+		return "public", "", nil
+	case "password":
+		password := access.Password
+		if strings.TrimSpace(password) == "" {
+			return "", "", errors.New("密码访问必须设置密码")
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return "", "", err
+		}
+		return visibility, string(hash), nil
+	case "login":
+		return visibility, "", nil
+	default:
+		return "", "", fmt.Errorf("不支持的分享可见范围: %s", visibility)
+	}
+}
+
 func (h *Handler) createOne(
 	userID uint,
 	vaultID, targetPath string,
 	isFolder, allowCopy bool,
+	access ShareAccess,
 ) (shareOut, error) {
 	if !isFolder {
 		var cnt int64
@@ -168,6 +208,10 @@ func (h *Handler) createOne(
 		}
 	}
 
+	visibility, passwordHash, err := normalizeShareAccess(access)
+	if err != nil {
+		return shareOut{}, err
+	}
 	var shareID string
 	var lastErr error
 	for attempt := 0; attempt < maxIDAttempts; attempt++ {
@@ -177,12 +221,14 @@ func (h *Handler) createOne(
 			continue
 		}
 		rec := models.Share{
-			ShareID:    id,
-			UserID:     userID,
-			VaultID:    vaultID,
-			TargetPath: targetPath,
-			IsFolder:   isFolder,
-			AllowCopy:  allowCopy,
+			ShareID:       id,
+			UserID:        userID,
+			VaultID:       vaultID,
+			TargetPath:    targetPath,
+			IsFolder:      isFolder,
+			AllowCopy:     allowCopy,
+			Visibility:    visibility,
+			SharePassword: passwordHash,
 		}
 		err = h.DB.Create(&rec).Error
 		if err == nil {
@@ -274,8 +320,12 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 	var req updateRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.AllowCopy == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "allow_copy is required", "code": "invalid_share_update"})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request", "code": "invalid_share_update"})
+		return
+	}
+	if req.AllowCopy == nil && req.Visibility == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "allow_copy or visibility is required", "code": "invalid_share_update"})
 		return
 	}
 	var share models.Share
@@ -288,8 +338,26 @@ func (h *Handler) Update(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "share not found", "code": "share_not_found"})
 		return
 	}
-	share.AllowCopy = *req.AllowCopy
-	if err := h.DB.Model(&share).Update("allow_copy", share.AllowCopy).Error; err != nil {
+	updates := map[string]any{}
+	if req.AllowCopy != nil {
+		share.AllowCopy = *req.AllowCopy
+		updates["allow_copy"] = share.AllowCopy
+	}
+	if req.Visibility != "" {
+		visibility, passwordHash, accessErr := normalizeShareAccess(ShareAccess{
+			Visibility: req.Visibility,
+			Password:   req.SharePassword,
+		})
+		if accessErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": accessErr.Error(), "code": "invalid_share_visibility"})
+			return
+		}
+		share.Visibility = visibility
+		share.SharePassword = passwordHash
+		updates["visibility"] = visibility
+		updates["share_password"] = passwordHash
+	}
+	if err := h.DB.Model(&share).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update share failed", "code": "share_update_failed"})
 		return
 	}
@@ -329,12 +397,17 @@ func toOut(s models.Share) shareOut {
 	if !s.CreatedAt.IsZero() {
 		created = s.CreatedAt.Format("2006-01-02T15:04:05Z07:00")
 	}
+	visibility := s.Visibility
+	if visibility == "" {
+		visibility = "public"
+	}
 	return shareOut{
 		ShareID:    s.ShareID,
 		VaultID:    s.VaultID,
 		TargetPath: s.TargetPath,
 		IsFolder:   s.IsFolder,
 		AllowCopy:  s.AllowCopy,
+		Visibility: visibility,
 		Views:      s.Views,
 		URL:        "/p/" + s.ShareID,
 		CreatedAt:  created,

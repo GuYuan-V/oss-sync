@@ -2,6 +2,7 @@
 import type { UpdateDownloadSource } from "./plugin-update";
 import type { LanguagePreference } from "./i18n";
 
+/** 插件设置；字段含义见各项注释，password 仅在内存中持有，不落盘 */
 export interface OSSSettings {
   /** 服务端 URL（不含尾斜杠），例如 http://localhost:8080 */
   serverUrl: string;
@@ -45,6 +46,7 @@ export interface OSSSettings {
   conflictEditWarning: boolean;
 }
 
+/** 新安装或设置缺失字段时的兜底值，与 OSSSettings 字段一一对应 */
 export const DEFAULT_SETTINGS: OSSSettings = {
   serverUrl: "http://localhost:8080",
   username: "",

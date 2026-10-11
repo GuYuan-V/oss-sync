@@ -1,5 +1,6 @@
 package webui
 
+// 本地化条目：登录与注册页面文案
 func init() {
 	registerEntries(map[string][2]string{
 		"common.main_navigation":        {"主导航", "Main navigation"},

@@ -3,11 +3,12 @@
 // JWT 由插件通过 loadData()/saveData() 持久化
 // 失效或登录失败时抛错，由调用方决定 UI 提示
 
-import { requestUrl } from "obsidian";
 import type { Diagnostics } from "./diagnostics";
 import type { OSSSettings } from "./settings";
 import { isValidOperationID, isValidServerRevision } from "./operation-id.js";
+import { httpRequest } from "./http-transport.js";
 
+/** 登录响应；device_status 为 pending 时令牌可用但需等待授权 */
 export interface AuthResponse {
   token: string;
   expires_in: number;
@@ -18,6 +19,7 @@ export interface AuthResponse {
   device_name?: string;
 }
 
+/** 服务端注册与管理员入口的开放状态 */
 export interface AuthStatus {
   readonly needs_first_admin: boolean;
   readonly registration_enabled: boolean;
@@ -44,6 +46,7 @@ interface CheckResponse {
   results: CheckFileOut[];
 }
 
+/** 上传结果 */
 export interface UploadResult {
   path: string;
   hash: string;
@@ -51,6 +54,7 @@ export interface UploadResult {
   server_time: number;
 }
 
+/** 分享条目 */
 export interface ShareOut {
   share_id: string;
   vault_id: string;
@@ -62,6 +66,7 @@ export interface ShareOut {
   created_at: string;
 }
 
+/** 创建分享结果；extra 为同一目录下同时被分享的链接笔记 */
 export interface ShareCreateResult {
   share_id: string;
   url: string;
@@ -70,6 +75,7 @@ export interface ShareCreateResult {
   extra?: ShareOut[];
 }
 
+/** 仓库条目 */
 export interface VaultOut {
   id: string;
   name: string;
@@ -83,6 +89,7 @@ export interface VaultOut {
   updated_at: string;
 }
 
+/** 设备在某仓库中的同步进度 */
 export interface DeviceVaultOut {
   vault_id: string;
   vault_name: string;
@@ -92,6 +99,7 @@ export interface DeviceVaultOut {
   last_sync_at?: string;
 }
 
+/** 设备条目；stale 表示超过阈值未活跃 */
 export interface DeviceOut {
   client_id: string;
   name: string;
@@ -103,6 +111,7 @@ export interface DeviceOut {
   vaults: DeviceVaultOut[];
 }
 
+/** 服务端文件元信息 */
 export interface SyncFileMeta {
   path: string;
   type: "markdown" | "attachment" | "config";
@@ -114,12 +123,14 @@ export interface SyncFileMeta {
   server_time?: number;
 }
 
+/** 协作上传参数；baseRevision 与 operationID 由本地基线派生 */
 export interface CollaborationUploadInput {
   readonly content: string;
   readonly baseRevision: number;
   readonly operationID: string;
 }
 
+/** 清单或变更分页；recovery_snapshot 表示本次为历史压缩后的全量快照 */
 export interface SyncManifestResponse {
   snapshot_revision: number;
   compacted_revision: number;
@@ -130,8 +141,10 @@ export interface SyncManifestResponse {
   files: SyncFileMeta[];
 }
 
+/** 同步模式 */
 export type SyncMode = "short_poll" | "long_poll";
 
+/** 服务端仓库同步策略；effective_mode 已综合仓库策略与客户端偏好 */
 export interface SyncStrategyResponse {
   policy: string;
   effective_mode: SyncMode;
@@ -139,6 +152,7 @@ export interface SyncStrategyResponse {
   long_poll_wait_sec: number;
 }
 
+/** 文件历史条目；has_snapshot 表示可读取正文 */
 export interface HistoryEntry {
   id: number;
   file_path: string;
@@ -152,12 +166,16 @@ export interface HistoryEntry {
   created_at: string;
 }
 
+/** 历史详情；is_text 为 false 时 content 缺失，diff 为空 */
 export interface HistoryDetail extends HistoryEntry {
   content?: string;
   diff: string[];
   is_text: boolean;
+  /** 本次 diff 的对比基准，由服务端回显 */
+  mode: string;
 }
 
+/** 回收站条目 */
 export interface RecycleBinFile {
   id: number;
   path: string;
@@ -169,6 +187,7 @@ export interface RecycleBinFile {
   can_restore: boolean;
 }
 
+/** 协作关系条目 */
 export interface CollabEntry {
   id: number;
   file_id: number;
@@ -179,9 +198,12 @@ export interface CollabEntry {
   collaborator_id: number;
   collaborator_username: string;
   status: string;
+  /** 协作者是否可读该文件的修改记录，仅 owner 或 manager 可改 */
+  allow_history_view: boolean;
   created_at: string;
 }
 
+/** 服务端 API 错误；current、compactedRevision 与 headRevision 仅在同步接口返回 */
 export class OSSApiError extends Error {
   constructor(
     message: string,
@@ -196,6 +218,7 @@ export class OSSApiError extends Error {
   }
 }
 
+/** 服务端版本信息 */
 export interface ServerVersionInfo {
   readonly version: string;
   readonly env: string;
@@ -203,26 +226,31 @@ export interface ServerVersionInfo {
   readonly built_at?: string;
 }
 
+/** 服务端插件钩子描述 */
 export interface ServerPluginHook {
   readonly name: string;
   readonly id?: string;
   readonly label?: string;
 }
 
+/** 服务端插件能力 */
 export interface ServerPluginCapability {
   readonly plugin_id: string;
   readonly name: string;
   readonly hooks: readonly ServerPluginHook[];
 }
 
+/** 服务端插件能力列表 */
 export interface ServerPluginCapabilitiesResponse {
   readonly plugins: readonly ServerPluginCapability[];
 }
 
+/** 服务端插件钩子执行结果 */
 export interface ServerPluginHookResponse {
   readonly content: string;
 }
 
+/** 服务端更新候选 */
 export interface ServerUpdateCandidate {
   readonly version: string;
   readonly tag: string;
@@ -237,6 +265,7 @@ export interface ServerUpdateCandidate {
   readonly asset_id: number;
 }
 
+/** 服务端更新检查结果；check_id 在触发更新时回传以绑定候选 */
 export interface ServerUpdateCheckResponse {
   readonly check_id: string;
   readonly candidate: ServerUpdateCandidate;
@@ -247,6 +276,7 @@ export interface ServerUpdateCheckResponse {
   readonly expires_at: number;
 }
 
+/** 服务端更新操作记录 */
 export interface ServerUpdateOperation {
   readonly id: string;
   readonly state: string;
@@ -256,6 +286,7 @@ export interface ServerUpdateOperation {
   readonly error?: string;
 }
 
+/** 服务端更新状态 */
 export interface ServerUpdateStatusResponse {
   readonly version: string;
   readonly exec_path: string;
@@ -286,6 +317,7 @@ export interface ServerUpdateStatusResponse {
   };
 }
 
+/** 触发服务端更新的响应；ok 为 false 时 error 或 code 说明原因 */
 export interface ServerUpdateTriggerResponse {
   readonly ok: boolean;
   readonly code: string;
@@ -294,6 +326,7 @@ export interface ServerUpdateTriggerResponse {
   readonly error?: string;
 }
 
+/** 服务端 HTTP 客户端；令牌由插件持久化后注入，请求失败统一抛 OSSApiError */
 export class OSSApiClient {
   /** 服务端时间与本地时间的偏移，单位为毫秒*/
   private timeOffset = 0;
@@ -305,26 +338,32 @@ export class OSSApiClient {
     private readonly onTokenExpired?: () => Promise<void>
   ) {}
 
+  /** 设置或清除当前令牌 */
   setToken(token: string | null): void {
     this.token = token;
   }
 
+  /** 是否持有令牌 */
   hasToken(): boolean {
     return !!this.token;
   }
 
+  /** 把本地 mtime 换算为服务端时间轴上的值 */
   getAdjustedMtime(localMtimeMs: number): number {
     return localMtimeMs + this.timeOffset;
   }
 
+  /** 时钟偏移超过 5 分钟时提示用户，避免 mtime 比较失真 */
   isClockDriftLarge(): boolean {
     return Math.abs(this.timeOffset) > 5 * 60 * 1000;
   }
 
+  /** 当前时钟偏移，单位为毫秒 */
   getTimeOffset(): number {
     return this.timeOffset;
   }
 
+  /** 查询服务端注册状态 */
   async authStatus(): Promise<AuthStatus> {
     return this.doRequest<AuthStatus>("GET", "/api/auth/status");
   }
@@ -342,14 +381,17 @@ export class OSSApiClient {
     }
   }
 
+  /** 获取服务端版本信息 */
   async getServerVersion(): Promise<ServerVersionInfo> {
     return this.doRequest<ServerVersionInfo>("GET", "/api/admin/version");
   }
 
+  /** 列出服务端已注册插件的编辑器命令钩子 */
   async getServerPluginCapabilities(): Promise<ServerPluginCapabilitiesResponse> {
     return this.doRequest<ServerPluginCapabilitiesResponse>("GET", "/api/plugin-capabilities");
   }
 
+  /** 执行服务端插件钩子 */
   async runServerPluginHook(hook: string, content: string, metadata: Record<string, string> = {}): Promise<ServerPluginHookResponse> {
     return this.doRequest<ServerPluginHookResponse>("POST", `/api/plugin-hooks/${encodeURIComponent(hook)}`, {
       vault_id: this.settings.vaultId,
@@ -358,14 +400,17 @@ export class OSSApiClient {
     });
   }
 
+  /** 检查服务端新版本 */
   async checkServerUpdate(): Promise<ServerUpdateCheckResponse> {
     return this.doRequest<ServerUpdateCheckResponse>("GET", "/api/admin/update/check");
   }
 
+  /** 查询服务端更新进度 */
   async getServerUpdateStatus(): Promise<ServerUpdateStatusResponse> {
     return this.doRequest<ServerUpdateStatusResponse>("GET", "/api/admin/update/status");
   }
 
+  /** 触发服务端更新到指定版本 */
   async triggerServerUpdate(opts: { readonly checkId: string; readonly expectedVersion: string }): Promise<ServerUpdateTriggerResponse> {
     return this.doRequest<ServerUpdateTriggerResponse>("POST", "/api/admin/update", {
       check_id: opts.checkId,
@@ -373,6 +418,7 @@ export class OSSApiClient {
     });
   }
 
+  /** 登录并缓存返回的令牌 */
   async login(): Promise<AuthResponse> {
     const res = await this.doRequest<AuthResponse>("POST", "/api/auth/login", {
       username: this.settings.username,
@@ -382,15 +428,17 @@ export class OSSApiClient {
     return res;
   }
 
+  /** 列出当前用户可见的仓库 */
   async listVaults(): Promise<{ vaults: VaultOut[] }> {
     return this.doRequest<{ vaults: VaultOut[] }>("GET", "/api/vaults");
   }
 
+  /** 创建仓库 */
   async createVault(name: string): Promise<VaultOut> {
     return this.doRequest<VaultOut>("POST", "/api/vaults", { name });
   }
 
-
+  /** 列出当前用户的设备 */
   async listDevices(): Promise<{ devices: DeviceOut[]; stale_after_days: number }> {
     return this.doRequest<{ devices: DeviceOut[]; stale_after_days: number }>(
       "GET",
@@ -398,6 +446,7 @@ export class OSSApiClient {
     );
   }
 
+  /** 拉取全量清单；after 与 wait 由调用方控制分页与长轮询等待 */
   async manifest(vaultID: string, after = 0, waitSeconds = 0): Promise<SyncManifestResponse> {
     const before = Date.now();
     const result = await this.doRequest<SyncManifestResponse>(
@@ -411,6 +460,7 @@ export class OSSApiClient {
     return result;
   }
 
+  /** 拉取自 cursor 之后的变更；waitSeconds 用于长轮询 */
   async changes(vaultID: string, after: number, waitSeconds = 0): Promise<SyncManifestResponse> {
     const before = Date.now();
     const result = await this.doRequest<SyncManifestResponse>(
@@ -424,6 +474,7 @@ export class OSSApiClient {
     return result;
   }
 
+  /** 确认已处理到指定 cursor，服务端据此清理该设备的待推送队列 */
   async acknowledge(vaultID: string, cursor: number): Promise<void> {
     await this.doRequest<void>(
       "POST",
@@ -435,6 +486,7 @@ export class OSSApiClient {
     );
   }
 
+  /** 上传文件正文；body 为二进制，参数走 query，diagnostics 在 finally 中记录耗时与字节数 */
   async uploadV2(
     vaultID: string,
     input: {
@@ -457,16 +509,15 @@ export class OSSApiClient {
       operation_id: input.operationID,
     });
     try {
-      const res = await requestUrl({
+      const res = await httpRequest({
         url: this.url(`/api/vaults/${encodeURIComponent(vaultID)}/sync/upload?${query.toString()}`),
         method: "POST",
         headers: {
-          "Content-Type": "application/octet-stream",
-          ...this.authHeaders(),
-        },
+  "Content-Type": "application/octet-stream",
+  ...this.authHeaders(),
+          },
         body: input.content,
-        throw: false,
-      });
+        });
       status = res.status;
       return this.parseResponse<SyncFileMeta>(res.status, res.json, res.text);
     } finally {
@@ -481,6 +532,7 @@ export class OSSApiClient {
     }
   }
 
+  /** 下载指定 revision 的正文；文件元信息从响应头解析 */
   async downloadV2(
     vaultID: string,
     path: string,
@@ -491,11 +543,10 @@ export class OSSApiClient {
     let bytes: number | undefined;
     const query = new URLSearchParams({ path, revision: String(revision) });
     try {
-      const res = await requestUrl({
+      const res = await httpRequest({
         url: this.url(`/api/vaults/${encodeURIComponent(vaultID)}/sync/download?${query.toString()}`),
         method: "GET",
         headers: this.authHeaders(),
-        throw: false,
       });
       status = res.status;
       if (res.status >= 400) {
@@ -526,6 +577,7 @@ export class OSSApiClient {
     }
   }
 
+  /** 删除服务端文件 */
   async deleteV2(
     vaultID: string,
     input: {
@@ -548,6 +600,7 @@ export class OSSApiClient {
     );
   }
 
+  /** 重命名服务端文件；目标位置需提供 targetRevision 以检测并发修改 */
   async renameV2(
     vaultID: string,
     input: {
@@ -594,6 +647,7 @@ export class OSSApiClient {
     );
   }
 
+  /** 查询历史版本详情；mode 为 last 时与该版本上一版比较，current 时与当前版本比较 */
   async historyDetail(
     vaultID: string,
     historyID: number,
@@ -606,6 +660,7 @@ export class OSSApiClient {
     );
   }
 
+  /** 恢复历史版本为当前版本 */
   async historyRestore(vaultID: string, historyID: number): Promise<{ path: string }> {
     return this.doRequest<{ path: string }>(
       "POST",
@@ -614,6 +669,7 @@ export class OSSApiClient {
     );
   }
 
+  /** 列出仓库回收站 */
   async recycleList(vaultID: string): Promise<{ files: RecycleBinFile[] }> {
     return this.doRequest<{ files: RecycleBinFile[] }>(
       "GET",
@@ -622,6 +678,7 @@ export class OSSApiClient {
     );
   }
 
+  /** 从回收站恢复文件 */
   async recycleRestore(vaultID: string, fileID: number): Promise<void> {
     await this.doRequest<void>(
       "POST",
@@ -630,6 +687,7 @@ export class OSSApiClient {
     );
   }
 
+  /** 彻底删除回收站文件 */
   async recycleDelete(vaultID: string, fileID: number): Promise<void> {
     await this.doRequest<void>(
       "POST",
@@ -655,11 +713,13 @@ export class OSSApiClient {
   async collabInvite(
     vaultID: string,
     filePath: string,
-    username: string
+    username: string,
+    allowHistoryView = false
   ): Promise<CollabEntry> {
     return this.doRequest<CollabEntry>("POST", `/api/vaults/${encodeURIComponent(vaultID)}/collaborations`, {
       file_path: filePath,
       username,
+      allow_history_view: allowHistoryView,
     });
   }
 
@@ -680,6 +740,16 @@ export class OSSApiClient {
     );
   }
 
+  /** 切换协作者对该文件修改记录的读取权限（owner/manager）*/
+  async collabSetHistoryView(vaultID: string, collabID: number, allow: boolean): Promise<{ status: string }> {
+    return this.doRequest<{ status: string }>(
+      "POST",
+      `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/${encodeURIComponent(String(collabID))}/history-view`,
+      { allow_history_view: allow }
+    );
+  }
+
+  /** 协作者主动退出协作 */
   async collabLeave(vaultID: string, collabID: number): Promise<{ status: string }> {
     return this.doRequest<{ status: string }>(
       "POST",
@@ -687,7 +757,7 @@ export class OSSApiClient {
     );
   }
 
-  /** 以协作者身份上传协作文件正文*/
+  /** 以协作者身份上传协作文件正文；baseRevision 与 operationID 先本地校验再发出，避免无意义请求 */
   async collabUpload(
     vaultID: string,
     fileID: number,
@@ -767,7 +837,7 @@ export class OSSApiClient {
     }
   }
 
-  /** 长轮询协作事件：changed 为 true 表示有新事件，version 用于下次 after 参数*/
+  /** 长轮询当前仓库的协作事件；changed 为 true 表示有新事件，version 用于下次 after 参数 */
   async collabPoll(
     vaultID: string,
     after: number,
@@ -805,26 +875,27 @@ export class OSSApiClient {
     return this.buildCollabEventStreamURL("/api/collaborations/stream");
   }
 
+  /**
+   * 构造事件流地址
+   * EventSource 无法携带 Authorization 头，令牌只能走查询参数；
+   * 非 HTTPS 时仍放行，由使用方自行评估明文传输风险
+   */
   private buildCollabEventStreamURL(path: string): string | null {
     if (!this.token) {
       return null;
     }
-    let serverURL: URL;
     try {
-      serverURL = new URL(this.settings.serverUrl);
+      new URL(this.settings.serverUrl);
     } catch {
       return null;
     }
-    const secure = serverURL.protocol === "https:";
-    const loopbackHTTP = serverURL.protocol === "http:" && isLoopbackHostname(serverURL.hostname);
-    if (!secure && !loopbackHTTP) return null;
     return this.url(
       `${path}?token=${encodeURIComponent(this.token)}` +
         `&client_id=${encodeURIComponent(this.settings.clientId)}`
     );
   }
 
-  /** 下载协作文件正文；协作者不需要仓库成员或设备仓库授权*/
+  /** 下载协作文件正文；403/404/410 表示无权或已失效，返回 null 而不抛错 */
   async downloadCollabContent(
     vaultID: string,
     fileID: number
@@ -833,13 +904,12 @@ export class OSSApiClient {
     let status: number | undefined;
     let bytes: number | undefined;
     try {
-      const res = await requestUrl({
+      const res = await httpRequest({
         url: this.url(
           `/api/vaults/${encodeURIComponent(vaultID)}/collaborations/files/${encodeURIComponent(String(fileID))}/content`
         ),
         method: "GET",
         headers: this.authHeaders(),
-        throw: false,
       });
       status = res.status;
       if (res.status >= 400) {
@@ -878,7 +948,7 @@ export class OSSApiClient {
     }
   }
 
-  /** 调用旧版同步检查接口，并更新本地时钟偏移*/
+  /** 调用旧版同步检查接口，并更新本地时钟偏移 */
   async check(files: CheckFileIn[], mode: "full" | "incremental"): Promise<CheckResponse> {
     const localBefore = Date.now();
     const res = await this.doRequest<CheckResponse>("POST", "/api/sync/check", {
@@ -892,9 +962,9 @@ export class OSSApiClient {
     return res;
   }
 
-  /** requestUrl 使用 ArrayBuffer 发送原始文件内容*/
+  /** 旧版上传接口，使用 ArrayBuffer 发送原始文件内容 */
   async upload(path: string, adjustedMtime: number, content: ArrayBuffer): Promise<UploadResult> {
-    const res = await requestUrl({
+    const res = await httpRequest({
       url: this.url(
         `/api/sync/upload?path=${encodeURIComponent(path)}&mtime=${encodeURIComponent(String(adjustedMtime))}`
       ),
@@ -908,8 +978,9 @@ export class OSSApiClient {
     return res.json as UploadResult;
   }
 
+  /** 旧版下载接口；mtime 与 hash 从响应头读取 */
   async download(path: string): Promise<{ content: ArrayBuffer; mtime: number; hash: string }> {
-    const res = await requestUrl({
+    const res = await httpRequest({
       url: this.url("/api/sync/download?path=" + encodeURIComponent(path)),
       method: "GET",
       headers: this.authHeaders(),
@@ -921,10 +992,12 @@ export class OSSApiClient {
     };
   }
 
+  /** 旧版删除接口 */
   async delete(path: string): Promise<void> {
     await this.doRequest<void>("POST", "/api/sync/delete", { path });
   }
 
+  /** 创建分享；文件夹分享可携带同时生成的链接笔记 */
   async createShare(opts: {
     targetPath: string;
     isFolder: boolean;
@@ -940,6 +1013,7 @@ export class OSSApiClient {
     });
   }
 
+  /** 列出当前仓库的分享 */
   async listShares(): Promise<{ shares: ShareOut[] }> {
     const query = this.settings.vaultId
       ? `?vault_id=${encodeURIComponent(this.settings.vaultId)}`
@@ -947,20 +1021,24 @@ export class OSSApiClient {
     return this.doRequest<{ shares: ShareOut[] }>("GET", `/api/shares${query}`);
   }
 
+  /** 切换分享是否允许复制 */
   async updateShareAllowCopy(shareID: string, allowCopy: boolean): Promise<ShareOut> {
     return this.doRequest<ShareOut>("PATCH", `/api/shares/${encodeURIComponent(shareID)}`, {
       allow_copy: allowCopy,
     });
   }
 
+  /** 删除分享 */
   async deleteShare(shareID: string): Promise<void> {
     await this.doRequest<void>("DELETE", `/api/shares/${encodeURIComponent(shareID)}`);
   }
 
+  /** 拼接完整请求地址，去掉 serverUrl 尾部斜杠避免双斜杠 */
   private url(path: string): string {
     return this.settings.serverUrl.replace(/\/$/, "") + path;
   }
 
+  /** 构造请求头；设备名需编码以兼容非 ASCII 字符 */
   private authHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       "X-OSS-Client-ID": this.settings.clientId,
@@ -970,6 +1048,7 @@ export class OSSApiClient {
     return headers;
   }
 
+  /** 统一 JSON 请求入口；失败时记录诊断后原样抛出 */
   private async doRequest<T>(
     method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
@@ -978,26 +1057,34 @@ export class OSSApiClient {
     const startedAt = Date.now();
     let status: number | undefined;
     try {
-      const res = await requestUrl({
+      const res = await httpRequest({
         url: this.url(path),
-        method: method as any,
+        method,
         headers: {
           "Content-Type": "application/json",
           ...this.authHeaders(),
         },
         body: body ? JSON.stringify(body) : undefined,
-        throw: false,
       });
       status = res.status;
       return this.parseResponse<T>(res.status, res.json, res.text);
     } catch (error) {
       if (error instanceof OSSApiError) status = error.status;
+      this.diagnostics?.record({
+        kind: "api_failed",
+        at: Date.now(),
+        method,
+        path,
+        ...(typeof status === "number" ? { status } : {}),
+        message: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
       throw error;
     } finally {
       this.diagnostics?.record({ kind: "api", at: Date.now(), method, status, durationMs: Date.now() - startedAt });
     }
   }
 
+  /** 记录绕过 doRequest 的二进制请求耗时 */
   private recordDirectAPI(
     method: "GET" | "POST",
     status: number | undefined,
@@ -1006,23 +1093,26 @@ export class OSSApiClient {
     this.diagnostics?.record({ kind: "api", at: Date.now(), method, status, durationMs: Date.now() - startedAt });
   }
 
+  /** 解析响应；4xx/5xx 时构造 OSSApiError 并透出服务端字段 */
   private async parseResponse<T>(status: number, json: any, text: string): Promise<T> {
     if (status >= 400) {
-      let body: any = json;
-      if (!body || typeof body !== "object") {
+      // 服务端故障时可能返回 HTML 错误页，不能把 JSON 解析异常直接抛给用户
+      let body: unknown = json;
+      if (!isErrorBody(body)) {
         try {
           body = JSON.parse(text);
         } catch {
           body = null;
         }
       }
+      const message = errorBodyMessage(body) ?? this.describeStatusFailure(status, text);
       const error = new OSSApiError(
-        body?.error || `HTTP ${status}`,
+        message,
         status,
-        body?.current,
-        body?.code,
-        body?.compacted_revision,
-        body?.head_revision
+        errorBodyField(body, "current"),
+        errorBodyString(body, "code"),
+        errorBodyNumber(body, "compacted_revision"),
+        errorBodyNumber(body, "head_revision")
       );
       if (
         status === 401 &&
@@ -1037,12 +1127,26 @@ export class OSSApiClient {
     return json as T;
   }
 
+  /** 把非 JSON 的失败响应描述成可读文本；HTML 错误页按状态码归类，其余透出服务端原因 */
+  private describeStatusFailure(status: number, text: string): string {
+    const trimmed = text.trim();
+    const looksLikeHTML = trimmed.startsWith("<");
+    // 非 HTML 的正文通常是服务端写的可读原因，优先透出
+    if (trimmed.length > 0 && !looksLikeHTML) return trimmed.slice(0, 200);
+    if (status >= 500) return `服务器内部错误（HTTP ${status}）`;
+    if (status === 404) return `接口不存在（HTTP 404）`;
+    if (status === 401 || status === 403) return `未授权或登录已失效（HTTP ${status}）`;
+    return `HTTP ${status}`;
+  }
+
+  /** 用请求往返中点估算服务端时间对应的本地时刻，据此更新时钟偏移 */
   private updateTimeOffset(serverTime: number, before: number, after: number): void {
     if (!serverTime) return;
     this.timeOffset = serverTime - Math.floor((before + after) / 2);
   }
 }
 
+/** 大小写不敏感地读取响应头 */
 function header(headers: Record<string, string>, name: string): string {
   const target = name.toLowerCase();
   for (const [key, value] of Object.entries(headers)) {
@@ -1051,17 +1155,43 @@ function header(headers: Record<string, string>, name: string): string {
   return "";
 }
 
-export function isLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (normalized === "localhost" || normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") {
-    return true;
-  }
-  return /^127(?:\.\d{1,3}){3}$/.test(normalized);
-}
-
+/** 按路径推断文件类型；.obsidian 下的文件归为配置 */
 function classifyPath(path: string): "markdown" | "attachment" | "config" {
   const lower = path.toLowerCase();
   if (lower.endsWith(".md")) return "markdown";
   if (lower.startsWith(".obsidian/")) return "config";
   return "attachment";
+}
+
+// 错误响应体的字段访问全部经过类型守卫，外部响应不可信
+/** 错误响应体必须是普通对象，数组不可作为错误体 */
+function isErrorBody(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** 读取错误响应体的 error 字段，空白文本视为缺失 */
+function errorBodyMessage(body: unknown): string | undefined {
+  if (!isErrorBody(body)) return undefined;
+  const message = body.error;
+  return typeof message === "string" && message.trim() !== "" ? message : undefined;
+}
+
+/** 读取错误响应体的字符串字段 */
+function errorBodyString(body: unknown, field: string): string | undefined {
+  if (!isErrorBody(body)) return undefined;
+  const value = body[field];
+  return typeof value === "string" ? value : undefined;
+}
+
+/** 读取错误响应体的数字字段 */
+function errorBodyNumber(body: unknown, field: string): number | undefined {
+  if (!isErrorBody(body)) return undefined;
+  const value = body[field];
+  return typeof value === "number" ? value : undefined;
+}
+
+/** 读取错误响应体中的 current 文件元信息；字段缺失时由调用方兜底 */
+function errorBodyField(body: unknown, field: string): SyncFileMeta | undefined {
+  if (!isErrorBody(body)) return undefined;
+  return body[field] as SyncFileMeta | undefined;
 }

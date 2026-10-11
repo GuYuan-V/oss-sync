@@ -2,10 +2,13 @@ package webui
 
 import "github.com/helantianshen/oss-sync/internal/blog"
 
+// themeSettingRowView 承载主题设置中一组多行字段的键值
 type themeSettingRowView struct {
 	Values map[string]string
 }
 
+// buildThemeSettingRows 从持久化数据还原多行设置，超过 MaxItems 的条目被截断
+// 数据形态不符或缺字段时对应值留空，由模板渲染为空白输入框
 func buildThemeSettingRows(field blog.ThemeSettingField, raw any) []themeSettingRowView {
 	rows := make([]themeSettingRowView, 0, field.MaxItems)
 	stored, ok := raw.([]any)

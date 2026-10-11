@@ -10,12 +10,14 @@ import {
   type MergeRegion,
 } from "./text-merge";
 
+/** 解决方式；accept_remote 采用远端，force_local 采用本地，keep_both 保留两份 */
 export type ConflictResolution =
   | "accept_remote"
   | "force_local"
   | "keep_both"
   | { kind: "ordered_merge"; content: string };
 
+/** 冲突解决弹窗；有祖先文本时提供有序合并视图，否则退化为经典差异视图 */
 export class ConflictModal extends Modal {
   private remoteContent = "";
   private resolving = false;
@@ -180,6 +182,7 @@ export class ConflictModal extends Modal {
     this.options.onClose?.();
   }
 
+  /** 提交解决方式；resolving 期间重复点击被忽略，失败时保留弹窗供重试 */
   private async resolve(r: ConflictResolution): Promise<void> {
     if (this.resolving) return;
     this.resolving = true;
@@ -195,6 +198,7 @@ export class ConflictModal extends Modal {
   }
 }
 
+/** 渲染压缩后的上下文；靠冲突的边界保留更多行，远离冲突的边界大幅省略 */
 function renderCompressedContext(
   container: HTMLElement,
   lines: readonly string[],
@@ -247,6 +251,7 @@ function renderCompressedContext(
   appendTextWithPathBreaks(preTail, tail);
 }
 
+/** 渲染有序合并块；每个冲突块可切换本地或远端在前，索引按冲突序号而非区域序号 */
 function renderOrderedBlocks(
   container: HTMLElement,
   regions: readonly MergeRegion[],
@@ -297,6 +302,7 @@ function renderOrderedBlocks(
   }
 }
 
+/** 渲染合并后的最终预览，随冲突块顺序切换实时更新 */
 function renderFinalPreview(
   container: HTMLElement,
   regions: readonly MergeRegion[],
@@ -367,6 +373,7 @@ function renderFinalPreview(
   }
 }
 
+/** 按路径分隔符插入软换行点，避免长路径撑破容器 */
 function appendTextWithPathBreaks(element: HTMLElement, text: string): void {
   for (const part of text.split(/(?=[\/\\])/)) {
     if (part.length === 0) continue;
@@ -377,6 +384,7 @@ function appendTextWithPathBreaks(element: HTMLElement, text: string): void {
   }
 }
 
+/** 穷尽检查；新增差异行类型未处理时应抛错 */
 function assertNever(value: never): never {
   throw new Error(`Unexpected conflict diff row: ${String(value)}`);
 }

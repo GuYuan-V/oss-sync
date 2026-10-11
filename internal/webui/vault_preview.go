@@ -167,7 +167,8 @@ func (h *Handler) previewMarkdownShareID(vault models.Vault, filePath string) (s
 	}
 
 	shareHandler := shares.New(h.DB, h.Cfg)
-	shareID, err := shareHandler.CreateWeb(vault.OwnerID, vault.ID, filePath, false, false)
+	// 预览分享是编辑辅助视图，固定 public，不随分享可见范围设置改变
+	shareID, err := shareHandler.CreateWeb(vault.OwnerID, vault.ID, filePath, false, false, shares.ShareAccess{Visibility: "public"})
 	if err != nil {
 		return "", fmt.Errorf("create preview share: %w", err)
 	}

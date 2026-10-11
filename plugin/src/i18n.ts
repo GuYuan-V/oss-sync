@@ -1,7 +1,11 @@
+/** 插件支持的语言 */
 export type PluginLanguage = "zh" | "en";
+/** 界面语言偏好；auto 跟随 Obsidian */
 export type LanguagePreference = "auto" | PluginLanguage;
+/** 翻译参数；值会插入到消息的 {name} 占位符 */
 export type TranslationParams = Readonly<Record<string, string | number>>;
 
+/** 中文文案表，作为翻译键的唯一定义来源 */
 const ZH = {
   "common.unknownError": "未知错误",
   "notice.pluginCapabilitiesFailed": "插件能力加载失败：{error}",
@@ -20,6 +24,8 @@ const ZH = {
   "common.longPoll": "长轮询",
   "common.noVaultSync": "尚未同步任何仓库",
   "network.connectionRefused": "无法连接到服务器，请确认服务端已启动且地址正确",
+  "network.tooManyRedirects": "连接失败：请求被反复重定向，通常是代理或网关设置导致，请检查代理软件后重试",
+  "network.invalidResponseBody": "连接失败：服务器返回了无法解析的响应，可能是服务端故障，请稍后重试",
   "network.connectionTimedOut": "连接服务器超时，请检查网络和服务端地址",
   "network.nameNotResolved": "无法解析服务器地址，请检查服务端地址",
   "network.disconnected": "网络连接已断开，请检查网络后重试",
@@ -267,8 +273,7 @@ const ZH = {
   "collab.loadFailed": "OSS：加载协作列表失败 {error}",
   "collab.loading": "正在加载协作…",
   "collab.empty": "当前仓库暂无协作关系",
-  "collab.incomingMeta": "来自 {name} · {status}",
-  "collab.outgoingMeta": "协作者 {name} · {status}",
+  "collab.incomingFrom": "来自 {name}",
   "collab.revoke": "撤回协作",
   "collab.leave": "退出协作",
   "collab.left": "OSS：已退出协作",
@@ -280,6 +285,15 @@ const ZH = {
   "collab.collaboratorsTitle": "协作者：{path}",
   "collab.cancelArticle": "取消",
   "collab.cancelSelectedArticles": "取消选中文章（{count}）",
+  "collab.allowHistoryView": "允许查看修改记录",
+  "collab.historyView": "修改记录",
+  "collab.view": "查看",
+  "collab.countIncoming": "{pending}待处理/{accepted}正协作",
+  "collab.countOutgoing": "{count}发出",
+  "collab.allowHistoryViewDesc": "开启后，对方可在修改记录中查看该文件的历史版本与差异；关闭后只能看到当前内容。仅已接受的协作可修改。",
+  "collab.sectionIncoming": "我收到的邀请",
+  "collab.sectionOutgoing": "我发出的邀请",
+  "collab.historyViewFailed": "OSS：切换查看记录权限失败 {error}",
   "collab.accepted": "OSS：已接受协作邀请",
   "collab.rejected": "OSS：已拒绝协作邀请",
   "collab.respondFailed": "OSS：处理协作邀请失败 {error}",
@@ -398,8 +412,10 @@ const ZH = {
   "sync.mkdirFailed": "无法创建目录：{path}",
 } as const;
 
+/** 翻译键，取中文表的键；新增键必须同时补全英文表 */
 export type TranslationKey = keyof typeof ZH;
 
+/** 英文文案表，键集合由类型约束与中文表一致 */
 const EN: Record<TranslationKey, string> = {
   "common.unknownError": "Unknown error",
   "notice.pluginCapabilitiesFailed": "Failed to load plugin capabilities: {error}",
@@ -418,6 +434,8 @@ const EN: Record<TranslationKey, string> = {
   "common.longPoll": "Long polling",
   "common.noVaultSync": "No vault has been synced",
   "network.connectionRefused": "Unable to connect to the server. Check that it is running and the address is correct",
+  "network.tooManyRedirects": "Connection failed: the request was redirected in a loop. This is usually caused by a proxy or gateway; check your proxy software and retry",
+  "network.invalidResponseBody": "Connection failed: the server returned an unparsable response. This may be a server-side error; please retry later",
   "network.connectionTimedOut": "Connection to the server timed out. Check the network and server address",
   "network.nameNotResolved": "Unable to resolve the server address. Check the server address",
   "network.disconnected": "Network connection was interrupted. Check the network and retry",
@@ -665,8 +683,7 @@ const EN: Record<TranslationKey, string> = {
   "collab.loadFailed": "OSS: Unable to load collaborations {error}",
   "collab.loading": "Loading collaborations…",
   "collab.empty": "No collaborations exist in this vault",
-  "collab.incomingMeta": "From {name} · {status}",
-  "collab.outgoingMeta": "Collaborator {name} · {status}",
+  "collab.incomingFrom": "From {name}",
   "collab.revoke": "Revoke collaboration",
   "collab.leave": "Leave collaboration",
   "collab.left": "OSS: Left collaboration",
@@ -678,6 +695,15 @@ const EN: Record<TranslationKey, string> = {
   "collab.collaboratorsTitle": "Collaborators: {path}",
   "collab.cancelArticle": "Cancel",
   "collab.cancelSelectedArticles": "Cancel selected articles ({count})",
+  "collab.allowHistoryView": "Allow viewing history",
+  "collab.historyView": "History",
+  "collab.view": "View",
+  "collab.countIncoming": "{pending} pending/{accepted} active",
+  "collab.countOutgoing": "{count} sent",
+  "collab.allowHistoryViewDesc": "When on, the collaborator can read this file's history versions and diffs. When off, only current content is visible. Editable once the invitation is accepted.",
+  "collab.sectionIncoming": "Invitations I received",
+  "collab.sectionOutgoing": "Invitations I sent",
+  "collab.historyViewFailed": "OSS: Unable to change history permission {error}",
   "collab.accepted": "OSS: Collaboration invitation accepted",
   "collab.rejected": "OSS: Collaboration invitation rejected",
   "collab.respondFailed": "OSS: Unable to process collaboration invitation {error}",
@@ -796,6 +822,7 @@ const EN: Record<TranslationKey, string> = {
   "sync.mkdirFailed": "Unable to create folder: {path}",
 };
 
+/** 按语言索引的文案表 */
 export const TRANSLATIONS = { zh: ZH, en: EN } as const;
 
 /** 自动模式按宿主语言选择中文或英文，显式选择优先 */
@@ -804,6 +831,7 @@ export function resolveLanguage(preference: LanguagePreference, hostLanguage: st
   return hostLanguage.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
 
+/** 取文案并替换 {name} 占位符；未提供的参数保留原样占位 */
 export function translate(
   language: PluginLanguage,
   key: TranslationKey,

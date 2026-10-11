@@ -25,7 +25,9 @@ type collabOut struct {
 	CollabID      uint   `json:"collaborator_id"`
 	CollabName    string `json:"collaborator_username"`
 	Status        string `json:"status"`
-	CreatedAt     string `json:"created_at"`
+	// AllowHistoryView 协作者是否可读该文件的修改记录
+	AllowHistoryView bool   `json:"allow_history_view"`
+	CreatedAt         string `json:"created_at"`
 }
 
 func (h *Handler) collabOuts(rows []models.Collaboration) ([]collabOut, error) {
@@ -64,6 +66,7 @@ func (h *Handler) collabOuts(rows []models.Collaboration) ([]collabOut, error) {
 			OwnerID: r.OwnerID, OwnerUsername: usernames[r.OwnerID],
 			CollabID: r.CollaboratorID, CollabName: usernames[r.CollaboratorID],
 			Status: r.Status, CreatedAt: r.CreatedAt.Format(time.RFC3339),
+			AllowHistoryView: r.AllowHistoryView,
 		})
 	}
 	return out, nil
@@ -143,8 +146,10 @@ func (h *Handler) CollabInvite(c *gin.Context) {
 		return
 	}
 	var req struct {
-		FilePath string `json:"file_path" binding:"required"`
-		Username string `json:"username" binding:"required"`
+		FilePath  string `json:"file_path" binding:"required"`
+		Username  string `json:"username" binding:"required"`
+		// AllowHistoryView 协作者是否可读该文件的修改记录，缺省不允许
+		AllowHistoryView bool `json:"allow_history_view"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -155,7 +160,7 @@ func (h *Handler) CollabInvite(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file path"})
 		return
 	}
-	row, err := h.collab.Invite(u.ID, vault.ID, req.FilePath, req.Username)
+	row, err := h.collab.Invite(u.ID, vault.ID, req.FilePath, req.Username, req.AllowHistoryView)
 	if err != nil {
 		status := http.StatusBadRequest
 		switch {
@@ -234,6 +239,39 @@ func (h *Handler) CollabRevoke(c *gin.Context) {
 		return
 	}
 	if err := h.collab.Revoke(u.ID, uint(collabID)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	h.publishCollaborationEvent(collaboration.Event{
+		VaultID: row.VaultID, FileID: row.FileID, Kind: "revoked", At: time.Now().UnixMilli(),
+	}, []uint{row.OwnerID, row.CollaboratorID})
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// CollabSetHistoryView 切换协作者对该文件修改记录的读取权限（owner/manager）
+func (h *Handler) CollabSetHistoryView(c *gin.Context) {
+	u, _, _, _, ok := h.requireVaultActorSync(c)
+	if !ok {
+		return
+	}
+	collabID, err := strconv.ParseUint(c.Param("collab_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid collaboration id"})
+		return
+	}
+	var req struct {
+		AllowHistoryView bool `json:"allow_history_view"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	var row models.Collaboration
+	if err := h.DB.First(&row, uint(collabID)).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "collaboration not found"})
+		return
+	}
+	if err := h.collab.SetHistoryView(u.ID, uint(collabID), req.AllowHistoryView); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

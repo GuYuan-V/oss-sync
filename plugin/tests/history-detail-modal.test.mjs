@@ -29,6 +29,7 @@ test("history detail shows three actions, a folded previous diff, and a current 
             content: mode === "current" ? "current" : "saved",
             diff: [" first", " second", " third", " fourth", " fifth", " sixth", " seventh", " eighth", "-saved", "+current"],
             is_text: true,
+            mode,
           };
         },
         historyRestore: async () => ({ path: entry.file_path }),
@@ -52,12 +53,15 @@ test("history detail shows three actions, a folded previous diff, and a current 
     assert.equal(modal.contentEl.querySelectorAll("button").length, 3);
     assert.equal(modal.contentEl.querySelectorAll(".is-omitted").length, 1);
     assert.equal(modal.contentEl.querySelectorAll(".oss-history-detail-actions").length, 1);
-    assert.equal(previous.hasClass("is-active"), true);
+    // 默认对比当前文件，而非上一版本
+    assert.equal(modal.contentEl.querySelectorAll(".oss-history-compare-current")[0].hasClass("is-active"), true);
+    assert.equal(previous.hasClass("is-active"), false);
     assert.equal(modal.contentEl.querySelectorAll(".oss-history-comparison-status").length, 1);
+    assert.deepEqual(detailCalls, [[12, "current"]]);
+    // 上一版快照不可用时按钮禁用；切到上一版需重新请求
     modal.contentEl.querySelectorAll(".oss-history-compare-current")[0].click();
     await new Promise((resolve) => setImmediate(resolve));
-
-    assert.deepEqual(detailCalls, [[12, "last"], [12, "current"]]);
+    assert.deepEqual(detailCalls, [[12, "current"]]);
     assert.equal(modal.contentEl.querySelectorAll(".oss-diff-preview").length, 1);
     assert.equal(modal.contentEl.querySelectorAll(".oss-history-compare-current")[0].hasClass("is-active"), true);
   } finally {

@@ -41,6 +41,7 @@
     <form method="post" action="/dashboard/plugins/{{.Data.PluginID}}/settings" class="gate-form stack-form">
       <input type="hidden" name="_csrf" value="{{.Layout.CSRF}}">
       <input type="hidden" name="vault_id" value="{{.Data.VaultID}}">
+      {{if .Data.Section}}<input type="hidden" name="section" value="{{.Data.Section}}">{{end}}
       {{range .Data.Fields}}
         {{if eq .Schema.Type "group"}}
         {{$field := .}}

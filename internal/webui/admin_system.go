@@ -17,13 +17,19 @@ import (
 )
 
 const (
-	hardMaxLongPollWaitSec      = 30
-	hardMaxSyncDebounceSec      = 3600
-	hardMaxRecycleBinDays       = 3650
+	// hardMaxLongPollWaitSec 是长轮询等待时间的服务端硬上限（秒）
+	hardMaxLongPollWaitSec = 30
+	// hardMaxSyncDebounceSec 是同步防抖时间的服务端硬上限（秒）
+	hardMaxSyncDebounceSec = 3600
+	// hardMaxRecycleBinDays 是回收站保留天数的服务端硬上限
+	hardMaxRecycleBinDays = 3650
+	// hardMaxHistoryRetentionDays 是文件历史保留天数的服务端硬上限
 	hardMaxHistoryRetentionDays = 3650
-	bytesPerMegabyte            = int64(1 << 20)
+	// bytesPerMegabyte 是 MiB 与字节的换算单位
+	bytesPerMegabyte = int64(1 << 20)
 )
 
+// adminSystemData 是系统设置页与数据看板的显示数据
 type adminSystemData struct {
 	RegistrationEnabled    bool
 	CustomFragmentsEnabled bool
@@ -51,6 +57,7 @@ type adminSystemData struct {
 	Update                 adminUpdateStatus
 }
 
+// adminSystemInput 是系统设置表单解析后的数值，容量与上传字段以字节为单位
 type adminSystemInput struct {
 	CustomFragmentsEnabled bool
 	SyncMode               settingspolicy.SyncMode
@@ -63,15 +70,19 @@ type adminSystemInput struct {
 	MaxUploadSizeBytes     int64
 }
 
+// adminSystemInputError 标识系统设置表单中的非法字段及其原因
 type adminSystemInputError struct {
 	Field   string
 	Message string
 }
 
+// Error 返回形如「字段: 原因」的校验错误文案
 func (e *adminSystemInputError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Field, e.Message)
 }
 
+// adminSystemPage 渲染系统设置页：GET /dashboard/admin/system
+// 读取注册开关、同步模式与 settingspolicy 计算出的生效限额，同步模式无法解析时回退为用户自选
 func (h *Handler) adminSystemPage(c *gin.Context) {
 	data := adminSystemData{
 		SyncMode: settingspolicy.SyncModeUserChoice,
@@ -109,6 +120,8 @@ func (h *Handler) adminSystemPage(c *gin.Context) {
 	h.render(c, http.StatusOK, "admin-system", h.t(c, "page.admin_system"), "admin", "admin-system", data)
 }
 
+// adminDataPage 渲染数据信息看板：GET /dashboard/admin/data
+// 统计用户、仓库、设备与仓库存储总量，最近历史与设备同步记录查询失败时保留空值而不中断渲染
 func (h *Handler) adminDataPage(c *gin.Context) {
 	data := adminSystemData{
 		Error: c.Query("error"),
@@ -126,6 +139,8 @@ func (h *Handler) adminDataPage(c *gin.Context) {
 	h.render(c, http.StatusOK, "admin-data", h.t(c, "page.admin_data"), "admin", "admin-data", data)
 }
 
+// loadAdminRecentDevices 按最近同步时间取 8 条设备-仓库绑定记录填充看板
+// 任一关联的设备或仓库记录缺失时跳过该条，查询失败时保持列表为空
 func (h *Handler) loadAdminRecentDevices(data *adminSystemData) {
 	var syncs []models.DeviceVault
 	if err := h.DB.Order("last_sync_at desc").Limit(8).Find(&syncs).Error; err != nil {
@@ -142,6 +157,8 @@ func (h *Handler) loadAdminRecentDevices(data *adminSystemData) {
 	}
 }
 
+// databaseStatusDSN 返回用于展示的数据库连接串
+// PostgreSQL 连接串会剥离密码与查询参数，其余驱动原样返回；解析失败时只保留「已配置」
 func databaseStatusDSN(driver, dsn string) string {
 	if driver != "postgres" {
 		return dsn
@@ -162,6 +179,9 @@ func databaseStatusDSN(driver, dsn string) string {
 	return parsed.String()
 }
 
+// adminSaveSystem 保存系统设置：POST /dashboard/admin/system
+// 注册开关、同步策略、保留与上传限额写入 id 为 1 的系统设置行，行不存在时先创建
+// 校验失败或写入失败时通过 query 参数回传错误并重定向回设置页
 func (h *Handler) adminSaveSystem(c *gin.Context) {
 	input, err := parseAdminSystemInput(c.Request.PostForm, h.configuredMaxUploadBytes())
 	if err != nil {
@@ -200,6 +220,8 @@ func (h *Handler) adminSaveSystem(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/system?saved=1")
 }
 
+// adminSaveDatabase 保存下次启动使用的数据库驱动与连接串：POST /dashboard/admin/system/database
+// 只写入部署配置文件，当前进程仍使用原连接，重启后生效
 func (h *Handler) adminSaveDatabase(c *gin.Context) {
 	if err := config.SaveDatabaseConfig(c.PostForm("database_driver"), c.PostForm("database_dsn")); err != nil {
 		c.Redirect(http.StatusSeeOther, "/dashboard/admin/system?error="+url.QueryEscape(err.Error()))
@@ -208,6 +230,8 @@ func (h *Handler) adminSaveDatabase(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/dashboard/admin/system?saved=1")
 }
 
+// parseAdminSystemInput 解析系统设置表单并校验取值范围
+// 上传上限还受部署配置硬上限约束，超限时返回带字段名的 adminSystemInputError
 func parseAdminSystemInput(form url.Values, configMaxUploadBytes int64) (adminSystemInput, error) {
 	customFragmentsEnabled := form.Get("custom_fragments_enabled") == "on"
 	syncMode, err := settingspolicy.ParseSyncMode(form.Get("sync_mode"))
@@ -272,6 +296,8 @@ func parseAdminSystemInput(form url.Values, configMaxUploadBytes int64) (adminSy
 	}, nil
 }
 
+// parseSystemInteger 解析表单中的十进制整数
+// 解析失败或数值超过 MiB 换算安全范围时返回带字段名的校验错误
 func parseSystemInteger(form url.Values, field string) (int64, error) {
 	value, err := strconv.ParseInt(strings.TrimSpace(form.Get(field)), 10, 64)
 	if err != nil || value > (int64(^uint64(0)>>1)/bytesPerMegabyte) {
@@ -280,10 +306,13 @@ func parseSystemInteger(form url.Values, field string) (int64, error) {
 	return value, nil
 }
 
+// invalidSystemField 构造携带字段名与原因的设置校验错误
 func invalidSystemField(field, message string) error {
 	return &adminSystemInputError{Field: field, Message: message}
 }
 
+// configuredMaxUploadBytes 返回部署配置的单文件上传硬上限（字节）
+// 配置缺失或非正数时按 100 MiB 兜底
 func (h *Handler) configuredMaxUploadBytes() int64 {
 	maxMB := h.Cfg.Server.MaxFileSizeMB
 	if maxMB <= 0 {

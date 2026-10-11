@@ -166,6 +166,9 @@ func (m *Manager) hostShareCreate(ctx context.Context, params map[string]json.Ra
 		TargetPath string `json:"target_path"`
 		IsFolder   bool   `json:"is_folder"`
 		AllowCopy  bool   `json:"allow_copy"`
+		// Visibility 取 public / password / login；password 必须提供 SharePassword
+		Visibility    string `json:"visibility"`
+		SharePassword string `json:"share_password"`
 	}
 	inputRaw, err := json.Marshal(params)
 	if err != nil {
@@ -180,7 +183,10 @@ func (m *Manager) hostShareCreate(ctx context.Context, params map[string]json.Ra
 		return models.Share{}, err
 	}
 	handler := &shares.Handler{DB: db}
-	id, err := handler.CreateWeb(vault.OwnerID, vault.ID, input.TargetPath, input.IsFolder, input.AllowCopy)
+	id, err := handler.CreateWeb(vault.OwnerID, vault.ID, input.TargetPath, input.IsFolder, input.AllowCopy, shares.ShareAccess{
+		Visibility: input.Visibility,
+		Password:   input.SharePassword,
+	})
 	if err != nil {
 		return models.Share{}, err
 	}

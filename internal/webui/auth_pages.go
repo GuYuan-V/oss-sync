@@ -22,6 +22,8 @@ type registerView struct {
 	SuccessMessage      string
 }
 
+// registerPage 渲染注册页：GET /register
+// 注册开关读取失败时返回 500 而不渲染页面
 func (h *Handler) registerPage(c *gin.Context) {
 	enabled, err := auth.RegistrationEnabled(h.DB, h.Cfg.Auth.AllowAnonymousRegistration)
 	if err != nil {
@@ -31,6 +33,9 @@ func (h *Handler) registerPage(c *gin.Context) {
 	h.renderAuth(c, http.StatusOK, "register", registerView{RegistrationEnabled: enabled})
 }
 
+// registerSubmit 处理注册提交：POST /register
+// 先按来源 IP 限流，再校验注册开关、两次密码一致性与账户输入规则
+// 注册关闭返回 403，用户名冲突返回 409，首注账户成为 admin 并在成功页提示
 func (h *Handler) registerSubmit(c *gin.Context) {
 	if !h.registerLimit.Allow("web-register:" + c.ClientIP()) {
 		h.renderAuth(c, http.StatusTooManyRequests, "register", registerView{Error: h.t(c, "err.too_many_attempts")})

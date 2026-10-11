@@ -3,6 +3,7 @@ package webui
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"net/http"
@@ -181,6 +182,8 @@ func (h *Handler) adminPluginUpload(c *gin.Context) {
 				return
 			}
 		} else {
+			// 详细错误写入日志，便于排查安装失败原因
+			fmt.Printf("[OSS] plugin install failed: %v\n", err)
 			h.redirectPluginError(c, "admin.plugin_install_failed")
 			return
 		}

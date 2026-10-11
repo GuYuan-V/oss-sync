@@ -113,7 +113,7 @@ func Build(deps Dependencies) (*gin.Engine, error) {
 	return r, nil
 }
 
-// registerHealthRoutes 在功能路由之前暴露存活与就绪检查
+// registerHealthRoutes 在功能路由注册前暴露存活与就绪检查
 func registerHealthRoutes(r *gin.Engine, db *gorm.DB) {
 	r.GET("/healthz", healthz)
 	r.GET("/readyz", readyz(db))

@@ -1,6 +1,7 @@
 import type { BaselineEntry } from "./baseline.js";
 import { decodeMergeableText } from "./text-merge.js";
 
+/** 本地确认输入；bytes 用于判定是否可保留合并祖先 */
 export type LiveAcknowledgement = {
   readonly kind: "live";
   readonly path: string;
@@ -12,6 +13,7 @@ export type LiveAcknowledgement = {
   readonly localSize: number;
 };
 
+/** 删除确认输入 */
 export type DeletedAcknowledgement = {
   readonly kind: "deleted";
   readonly path: string;
@@ -22,6 +24,7 @@ export type DeletedAcknowledgement = {
   readonly localSize: number;
 };
 
+/** 两种确认方式的统一入口 */
 export type AcknowledgementInput = LiveAcknowledgement | DeletedAcknowledgement;
 
 /** 将服务端确认结果写入同步基线，可解析文本才保留合并祖先 */

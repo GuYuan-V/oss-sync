@@ -1,8 +1,10 @@
+/** 传输通知；path 用于单文件提示，count 用于聚合提示 */
 export type TransferNotice =
   | { readonly kind: "uploaded"; readonly path?: string; readonly count?: number }
   | { readonly kind: "downloaded"; readonly path?: string; readonly count?: number }
   | { readonly kind: "failed"; readonly path: string };
 
+/** 生成传输通知；三类合计超过阈值时上传与下载改为按数量提示，失败始终逐条提示 */
 export function buildTransferNoticePlan(
   uploaded: readonly string[],
   downloaded: readonly string[],

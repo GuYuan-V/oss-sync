@@ -2,6 +2,7 @@ import { App, Modal, Notice } from "obsidian";
 import type OSSPlugin from "./main";
 import { renderShareRows } from "./share-section";
 
+/** 全量分享管理模态框；列出当前账号下所有分享并支持行内操作*/
 export class ShareManagerModal extends Modal {
   constructor(app: App, private readonly plugin: OSSPlugin) {
     super(app);

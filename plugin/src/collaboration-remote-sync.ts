@@ -15,13 +15,16 @@ import { prepareCollaborationUpload } from "./collaboration-upload-helpers.js";
 export { CollaborationSyncCoordinator };
 export type { AcceptedCollaborationFile };
 
+/** 远端同步所需的协作 API 能力 */
 export interface CollaborationRemoteSyncApi {
   readonly downloadCollabContent: (v: string, f: number) => Promise<{ content: ArrayBuffer; meta: SyncFileMeta } | null>;
   readonly collabUpload: (v: string, f: number, i: CollaborationUploadInput) => Promise<SyncFileMeta>;
 }
+/** 翻译能力 */
 export interface CollaborationRemoteSyncPlugin {
   readonly t: (k: TranslationKey, p?: TranslationParams) => string;
 }
+/** 远端同步所需的基线读写能力；removeCollaboration 与 load 可选 */
 export interface CollaborationRemoteSyncBaseline {
   readonly getCollaboration: (v: string, f: number) => CollaborationBaselineEntry | null;
   readonly setCollaboration: (v: string, f: number, e: CollaborationBaselineEntry) => void;
@@ -30,6 +33,7 @@ export interface CollaborationRemoteSyncBaseline {
   readonly load: () => Promise<void>;
   readonly bindCollaborationAccount: (a: string) => boolean;
 }
+/** 远端同步依赖；coordinator 串行化所有刷新，noticeGuard 抑制周期性失败的重复提示 */
 export interface CollaborationRemoteSyncDeps {
   readonly baseline: CollaborationRemoteSyncBaseline;
   readonly vault: CollaborationFileVault;
@@ -41,21 +45,28 @@ export interface CollaborationRemoteSyncDeps {
   readonly createOperationID: () => string;
   readonly onChange: () => void;
   readonly coordinator: CollaborationSyncCoordinator;
+  /** 通知冷却抑制；缺省时每次失败都提示 */
+  readonly noticeGuard?: { shouldShow: (key: string) => boolean; reset: (key?: string) => void };
 }
+/** 远端正文快照 */
 interface RemoteVersion {
   readonly bytes: Uint8Array;
   readonly hash: string;
   readonly revision: number;
 }
+/** 对账上下文；local 为 null 表示本地文件不存在 */
 interface ReconcileContext {
   readonly remote: RemoteVersion;
   readonly local: CollaborationContent | null;
 }
+/** 穷尽检查；新增决策类型未处理时应抛错 */
 function assertNever(value: never): never {
   throw new Error(`unhandled ${String(value)}`);
 }
+/** 拉取远端并对账每个已接受协作文件；串行执行由 coordinator 保证 */
 export class CollaborationRemoteSync {
   constructor(private readonly deps: CollaborationRemoteSyncDeps) {}
+  /** 追加到串行链尾执行刷新 */
   refresh(): Promise<void> {
     return this.deps.coordinator.run(() => this.doRefresh());
   }
@@ -73,6 +84,7 @@ export class CollaborationRemoteSync {
       await this.syncOne(ac, b);
     }
   }
+  /** 重试上次未完成的上传；本地已变时改用新哈希与新 operationID */
   private async retryPending(ac: AcceptedCollaborationFile, entry: CollaborationBaselineEntry): Promise<void> {
     if (!isValidServerRevision(entry.serverRevision)) {
       // 哨兵 -1：清掉错误 pending，以无基线方式重新拉取，避免 keep_local 阻塞
@@ -124,12 +136,17 @@ export class CollaborationRemoteSync {
       new Notice(this.deps.plugin.t("collab.uploadFailed", { error: localizeError(err, this.deps.plugin.t.bind(this.deps.plugin), this.deps.plugin.t("common.unknownError")) }));
     }
   }
+  /** 拉取单个文件的远端正文并按决策执行 */
   private async syncOne(ac: AcceptedCollaborationFile, entry: CollaborationBaselineEntry | null): Promise<void> {
     let fetched: { content: ArrayBuffer; meta: SyncFileMeta } | null;
     try {
       fetched = await this.deps.api.downloadCollabContent(ac.vaultId, ac.fileId);
     } catch (err) {
-      new Notice(this.deps.plugin.t("collab.refreshFailed", { error: localizeError(err, this.deps.plugin.t.bind(this.deps.plugin), this.deps.plugin.t("common.unknownError")) }));
+      // 刷新由轮询驱动，冷期内重复失败只提示一次；状态栏与侧边栏持续展示
+      const guard = this.deps.noticeGuard;
+      if (!guard || guard.shouldShow("collab.refresh")) {
+        new Notice(this.deps.plugin.t("collab.refreshFailed", { error: localizeError(err, this.deps.plugin.t.bind(this.deps.plugin), this.deps.plugin.t("common.unknownError")) }));
+      }
       return;
     }
     if (!fetched) return;
@@ -139,6 +156,7 @@ export class CollaborationRemoteSync {
     const remote: CollaborationContent = { path: ac.localPath, bytes: remoteBytes, hash: remoteHash };
     const remoteVersion = { bytes: remoteBytes, hash: remoteHash, revision: remoteRev };
     if (!entry || !isValidServerRevision(entry.serverRevision)) {
+      // 无基线或哨兵 revision 时删除本地记录，按首次同步重新建立
       if (entry && !isValidServerRevision(entry.serverRevision) && this.deps.baseline.removeCollaboration) {
         this.deps.baseline.removeCollaboration(ac.vaultId, ac.fileId);
         await this.deps.baseline.save();
@@ -193,6 +211,7 @@ export class CollaborationRemoteSync {
         assertNever(decision);
     }
   }
+  /** 首次同步：本地不存在时直接落地远端，内容一致时仅建立基线 */
   private async handleFirst(ac: AcceptedCollaborationFile, remote: RemoteVersion): Promise<void> {
     const local = await this.deps.vault.readExact(ac.localPath);
     if (!local) {
@@ -208,6 +227,7 @@ export class CollaborationRemoteSync {
       await this.deps.baseline.save();
     }
   }
+  /** 采纳远端：本地缺失或与远端一致时只更新基线，否则落地远端正文 */
   private async handleAdopt(ac: AcceptedCollaborationFile, entry: CollaborationBaselineEntry, ctx: ReconcileContext): Promise<void> {
     const { remote, local } = ctx;
     if (!local) {
@@ -227,6 +247,7 @@ export class CollaborationRemoteSync {
     if (!fresh || fresh.hash !== local.hash) return;
     await this.persistDownload(ac, remote, remote.hash);
   }
+  /** 应用远端：写入前再次读取确认本地未被改动，避免覆盖并发编辑 */
   private async handleApply(ac: AcceptedCollaborationFile, ctx: ReconcileContext): Promise<void> {
     const { remote, local } = ctx;
     if (!local) return;
@@ -234,6 +255,7 @@ export class CollaborationRemoteSync {
     if (!fresh || fresh.hash !== local.hash) return;
     await this.persistDownload(ac, remote, remote.hash);
   }
+  /** 上传本地或合并后的正文；先落 pending 再上传，崩溃后仍可重试 */
   private async handleUploadLocal(ac: AcceptedCollaborationFile, entry: CollaborationBaselineEntry, ctx: { local: CollaborationContent; content: string }): Promise<void> {
     if (!isValidServerRevision(entry.serverRevision)) {
       if (this.deps.baseline.removeCollaboration) {
@@ -271,6 +293,7 @@ export class CollaborationRemoteSync {
       new Notice(this.deps.plugin.t("collab.uploadFailed", { error: localizeError(err, this.deps.plugin.t.bind(this.deps.plugin), this.deps.plugin.t("common.unknownError")) }));
     }
   }
+  /** 落地远端正文并更新基线；localHash 记录写入后的本地哈希 */
   private async persistDownload(ac: AcceptedCollaborationFile, remote: RemoteVersion, localHash: string): Promise<void> {
     await this.deps.vault.writeCanonical(ac.localPath, remote.bytes);
     const baseText = decodeMergeableText(ac.localPath, remote.bytes) ?? "";

@@ -22,7 +22,7 @@ function settings(serverUrl) {
   };
 }
 
-test("builds a collaboration SSE URL only for HTTPS or loopback HTTP", async () => {
+test("builds a collaboration SSE URL for any reachable server", async () => {
   globalThis.__ossRequests = [];
   globalThis.__ossResponse = undefined;
   const { OSSApiClient, cleanup } = await loadApiClient();
@@ -32,8 +32,8 @@ test("builds a collaboration SSE URL only for HTTPS or loopback HTTP", async () 
       ["http://localhost:9090", true],
       ["http://127.0.0.1:9090", true],
       ["http://[::1]:9090", true],
-      ["http://sync.example.com:9090", false],
-      ["http://192.168.1.5:9090", false],
+      ["http://sync.example.com:9090", true],
+      ["http://192.168.1.5:9090", true],
       ["not a url", false],
     ];
 

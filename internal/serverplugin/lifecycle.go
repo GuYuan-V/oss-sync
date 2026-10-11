@@ -14,12 +14,15 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
+// Enable 加生命周期锁后启用插件
 func (m *Manager) Enable(ctx context.Context, id string) error {
 	m.lifecycleMu.Lock()
 	defer m.lifecycleMu.Unlock()
 	return m.enable(ctx, id)
 }
 
+// enable 加载插件包、启动实例并完成依赖、迁移与主题资源准备
+// 已启用且实例健康时直接返回；任一步失败会回滚实例、任务与 enabled 标记并记录 last_error
 func (m *Manager) enable(ctx context.Context, id string) (resultErr error) {
 	record, err := m.record(id)
 	if err != nil {
@@ -102,12 +105,15 @@ func (m *Manager) enable(ctx context.Context, id string) (resultErr error) {
 	return nil
 }
 
+// Disable 加生命周期锁后停用插件
 func (m *Manager) Disable(ctx context.Context, id string) error {
 	m.lifecycleMu.Lock()
 	defer m.lifecycleMu.Unlock()
 	return m.disable(ctx, id)
 }
 
+// disable 注销路由与任务、执行 deactivate 回调、清理主题资源并关闭实例
+// 各步骤错误合并返回，数据库标记始终尝试置为未启用
 func (m *Manager) disable(ctx context.Context, id string) error {
 	record, err := m.record(id)
 	if err != nil {
@@ -139,6 +145,8 @@ func (m *Manager) disable(ctx context.Context, id string) error {
 	return errors.Join(lifecycleErr, resourceErr, dbErr, closeErr)
 }
 
+// Delete 卸载插件：要求已停用，先跑 uninstall 回调，再把目录暂存后删除记录
+// 删除记录失败时回滚目录；删除暂存目录失败仅报错，插件已视为卸载完成
 func (m *Manager) Delete(id string) error {
 	m.lifecycleMu.Lock()
 	defer m.lifecycleMu.Unlock()
@@ -189,6 +197,8 @@ func (m *Manager) Delete(id string) error {
 	return nil
 }
 
+// Close 关闭全部插件实例并释放 WASM 运行时
+// 各实例关闭错误合并返回
 func (m *Manager) Close(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -206,6 +216,8 @@ func (m *Manager) Close(ctx context.Context) error {
 	return errors.Join(closeErrors...)
 }
 
+// loadRecord 校验并加载单个插件实例
+// 校验与准备阶段失败会关闭已启动的实例；替换旧实例时关闭旧实例
 func (m *Manager) loadRecord(ctx context.Context, record models.ServerPlugin) error {
 	packageData, err := readInstalledPackage(m.root, record.ID)
 	if err != nil {
@@ -242,6 +254,8 @@ func (m *Manager) loadRecord(ctx context.Context, record models.ServerPlugin) er
 	return nil
 }
 
+// verifyInstalledPackage 校验磁盘上的插件包与数据库记录一致
+// 哈希或体积变化返回 ErrInvalidPackage
 func verifyInstalledPackage(packageData Package, record models.ServerPlugin) error {
 	if !samePackage(record, packageData) {
 		return fmt.Errorf("%w: installed package hash or size changed", ErrInvalidPackage)
@@ -249,6 +263,7 @@ func verifyInstalledPackage(packageData Package, record models.ServerPlugin) err
 	return nil
 }
 
+// record 按 ID 读取插件记录，ID 非法或不存在时返回 ErrPluginNotFound
 func (m *Manager) record(id string) (models.ServerPlugin, error) {
 	if !pluginIDPattern.MatchString(id) {
 		return models.ServerPlugin{}, ErrPluginNotFound
@@ -262,6 +277,7 @@ func (m *Manager) record(id string) (models.ServerPlugin, error) {
 	return record, nil
 }
 
+// saveLastError 把插件最近一次失败原因写入 last_error 字段
 func (m *Manager) saveLastError(id string, pluginErr error) error {
 	if err := m.db.Model(&models.ServerPlugin{}).Where("id = ?", id).Update("last_error", pluginErr.Error()).Error; err != nil {
 		return fmt.Errorf("save plugin error: %w", err)
@@ -269,6 +285,7 @@ func (m *Manager) saveLastError(id string, pluginErr error) error {
 	return nil
 }
 
+// enableError 记录失败原因后原样返回该错误
 func (m *Manager) enableError(id string, pluginErr error) error {
 	if saveErr := m.saveLastError(id, pluginErr); saveErr != nil {
 		return errors.Join(pluginErr, saveErr)
@@ -276,6 +293,8 @@ func (m *Manager) enableError(id string, pluginErr error) error {
 	return pluginErr
 }
 
+// stagePluginDeletion 把插件目录改名为同文件系统内的临时目录
+// 返回的路径需调用方最终删除或改名回滚
 func stagePluginDeletion(root, pluginDir string) (string, error) {
 	tombstone, err := os.MkdirTemp(root, ".delete-")
 	if err != nil {
@@ -293,6 +312,7 @@ func stagePluginDeletion(root, pluginDir string) (string, error) {
 	return tombstone, nil
 }
 
+// restorePluginError 包装回滚插件目录失败，nil 原样返回
 func restorePluginError(err error) error {
 	if err == nil {
 		return nil
@@ -301,7 +321,7 @@ func restorePluginError(err error) error {
 }
 
 // applyMigrations 将待定迁移批次放在单个事务内执行，同时兼容 SQLite 与 PostgreSQL
-// 后续生命周期钩子可能产生外部副作用，已提交的迁移必须保持向后兼容
+// 后续生命周期钩子可能产生外部副作用，已提交的迁移不可回退
 func (m *Manager) applyMigrations(ctx context.Context, pluginID string, migrations []RegisteredMigration) error {
 	if len(migrations) == 0 {
 		return nil
@@ -329,6 +349,8 @@ func (m *Manager) applyMigrations(ctx context.Context, pluginID string, migratio
 	})
 }
 
+// checkDependencies 校验依赖插件均已启用且版本满足约束
+// 约束为空或 * 表示任意版本
 func (m *Manager) checkDependencies(dependencies []RegisteredDependency) error {
 	for _, dependency := range dependencies {
 		var record models.ServerPlugin
@@ -342,6 +364,7 @@ func (m *Manager) checkDependencies(dependencies []RegisteredDependency) error {
 	return nil
 }
 
+// versionMatches 判断版本是否满足约束，支持 >= <= > < = 与 *
 func versionMatches(version, constraint string) bool {
 	constraint = strings.TrimSpace(constraint)
 	if constraint == "" || constraint == "*" {
@@ -371,6 +394,8 @@ func versionMatches(version, constraint string) bool {
 	}
 }
 
+// compareVersion 按主次修订三级比较版本，缺省段视为 0
+// 忽略 v 前缀与段内 - 之后的预发布标识
 func compareVersion(left, right string) int {
 	leftParts := strings.Split(strings.TrimPrefix(left, "v"), ".")
 	rightParts := strings.Split(strings.TrimPrefix(right, "v"), ".")
@@ -387,6 +412,7 @@ func compareVersion(left, right string) int {
 	return 0
 }
 
+// versionPart 取版本段对应的整数值，越界或非数字均为 0
 func versionPart(parts []string, index int) int {
 	if index >= len(parts) {
 		return 0
@@ -395,6 +421,8 @@ func versionPart(parts []string, index int) int {
 	return value
 }
 
+// invokeInstanceLifecycle 以 LIFECYCLE 方法调用插件的指定阶段回调
+// 回调为空表示插件未声明该阶段；返回状态码不小于 400 视为失败
 func invokeInstanceLifecycle(ctx context.Context, instance pluginInstance, callback, phase string) error {
 	if callback == "" {
 		return nil

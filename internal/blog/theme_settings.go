@@ -28,6 +28,8 @@ type ThemeSettingField struct {
 	MaxItems    int                 `json:"max_items,omitempty"`
 	Choices     []string            `json:"choices,omitempty"`
 	Fields      []ThemeSettingField `json:"fields,omitempty"`
+	// Section 声明字段所属的二级分组，多个字段可共享同一 section 形成子菜单
+	Section string `json:"section,omitempty"`
 }
 
 func validateThemeSettingFields(fields []ThemeSettingField, nested bool) error {

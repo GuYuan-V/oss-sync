@@ -4,6 +4,8 @@ package blog
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"embed"
 	"errors"
 	"fmt"
@@ -17,10 +19,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"github.com/helantianshen/oss-sync/internal/auth"
 	"github.com/helantianshen/oss-sync/internal/config"
 	"github.com/helantianshen/oss-sync/internal/filestore"
+	"github.com/helantianshen/oss-sync/internal/jwt"
 	"github.com/helantianshen/oss-sync/internal/markdown"
 	"github.com/helantianshen/oss-sync/internal/models"
 	"github.com/helantianshen/oss-sync/internal/settingspolicy"
@@ -41,6 +46,7 @@ type Handler struct {
 // PluginHookRunner 描述博客渲染所需的宿主插件钩子契约
 type PluginHookRunner interface {
 	ApplyHook(context.Context, string, PluginHookPayload) (string, error)
+	ApplyHomePostsHook(context.Context, HomePostsHookPayload) ([]HomePost, error)
 }
 
 // PluginDataHookRunner 收集插件为模板注入的展示数据。
@@ -64,6 +70,13 @@ type PluginDataPayload struct {
 	Headers    map[string][]string `json:"headers,omitempty"`
 	Cookies    map[string]string   `json:"cookies,omitempty"`
 	ClientIP   string              `json:"client_ip,omitempty"`
+}
+
+// HomePostsHookPayload 是 blog.home_posts 钩子的输入，插件据此返回过滤或重排后的文章列表
+type HomePostsHookPayload struct {
+	VaultID string              `json:"vault_id"`
+	Posts   []HomePost          `json:"posts"`
+	Query   map[string][]string `json:"query,omitempty"`
 }
 
 // PluginHookPayload 是博客正文过滤 Hook 的输入
@@ -373,6 +386,128 @@ func (h *Handler) renderRemoved(c *gin.Context) {
 	_ = h.tpl.ExecuteTemplate(c.Writer, "removed.html", nil)
 }
 
+// isValidShareVisibility 判断分享可见性取值是否合法
+func isValidShareVisibility(visibility string) bool {
+	switch visibility {
+	case "public", "password", "login":
+		return true
+	default:
+		return false
+	}
+}
+
+// sandboxArticleHTML 把允许原始 HTML 的文章正文包进 sandbox iframe
+// 仅授予 allow-scripts：iframe 处于独立源，脚本无法读取父页 cookie、localStorage 或 DOM
+// 样式通过同源的 style.css 注入，保持与主题一致
+func sandboxArticleHTML(content, themeBaseURL string) string {
+	styleHref := ""
+	if themeBaseURL != "" {
+		styleHref = `<link rel="stylesheet" href="` + htmlEscape(themeBaseURL+"/style.css") + `">`
+	}
+	return `<iframe class="oss-article-sandbox" title="文章内容" loading="lazy" ` +
+		`sandbox="allow-scripts" ` +
+		`srcdoc="` + htmlEscapeAttribute(sandboxDocument(styleHref, content)) + `"></iframe>`
+}
+
+// sandboxDocument 组装 iframe 内的完整 HTML 文档
+// body 带 oss-content 类以继承主题的正文排版规则
+func sandboxDocument(head, body string) string {
+	return "<!doctype html><html><head><meta charset=\"utf-8\">" + head +
+		"<style>html{color-scheme:light dark}body{margin:0;background:transparent}</style>" +
+		"</head><body class=\"oss-content\">" + body + "</body></html>"
+}
+
+// shareVisible 检查当前请求是否有权访问该分享
+// public 任何人可看；password 需提交密码或持有该分享的授权令牌；login 需已登录
+func (h *Handler) shareVisible(c *gin.Context, share models.Share) bool {
+	switch share.Visibility {
+	case "password":
+		password := strings.TrimSpace(c.Query("password"))
+		if password != "" {
+			if bcrypt.CompareHashAndPassword([]byte(share.SharePassword), []byte(password)) != nil {
+				h.renderSharePasswordPrompt(c, share)
+				return false
+			}
+			h.grantShareAccess(c, share)
+			return true
+		}
+		if h.hasShareAccess(c, share) {
+			return true
+		}
+		h.renderSharePasswordPrompt(c, share)
+		return false
+	case "login":
+		token, err := c.Cookie("oss_web_session")
+		if err != nil || token == "" {
+			h.redirectToLogin(c)
+			return false
+		}
+		// 复用控制台认证链路，改密或注销导致的 TokenVersion 变化会在此失效
+		if _, err := auth.AuthenticateToken(h.DB, h.Cfg, token); err != nil {
+			h.redirectToLogin(c)
+			return false
+		}
+		return true
+	default:
+		return true
+	}
+}
+
+// shareAccessCookieName 保存密码分享的授权令牌
+const shareAccessCookieName = "oss_share_access"
+
+// shareAccessTTL 授权有效期，覆盖一次典型阅读会话
+const shareAccessTTL = 12 * time.Hour
+
+// grantShareAccess 签发该分享的授权令牌并写入 cookie
+// 令牌经 HS256 签名，签名密钥绑定分享 ID 与当前密码哈希，无法由公开信息伪造
+func (h *Handler) grantShareAccess(c *gin.Context, share models.Share) {
+	token, err := jwt.Sign(h.shareAccessSecret(share), jwt.Claims{
+		UserID:   share.UserID,
+		Username: share.ShareID,
+	}, shareAccessTTL)
+	if err != nil {
+		return
+	}
+	secure := c.Request.URL.Scheme == "https" || c.GetHeader("X-Forwarded-Proto") == "https"
+	c.SetCookie(shareAccessCookieName, token, int(shareAccessTTL.Seconds()), "/", "", secure, true)
+}
+
+// hasShareAccess 校验授权令牌：签名有效、未到期、分享 ID 匹配且未被后续改密失效
+func (h *Handler) hasShareAccess(c *gin.Context, share models.Share) bool {
+	token, err := c.Cookie(shareAccessCookieName)
+	if err != nil || token == "" {
+		return false
+	}
+	claims, err := jwt.Parse(h.shareAccessSecret(share), token)
+	if err != nil {
+		return false
+	}
+	if claims.Username != share.ShareID || claims.UserID != share.UserID {
+		return false
+	}
+	return true
+}
+
+// shareAccessSecret 隔离分享授权与账号令牌，并在密码哈希变化时使旧授权失效
+func (h *Handler) shareAccessSecret(share models.Share) string {
+	mac := hmac.New(sha256.New, []byte(h.Cfg.Auth.JWTSecret))
+	_, _ = mac.Write([]byte("oss-sync/share-access\x00" + share.ShareID + "\x00" + share.SharePassword))
+	return fmt.Sprintf("%x", mac.Sum(nil))
+}
+
+// redirectToLogin 跳转登录页并携带回跳地址
+func (h *Handler) redirectToLogin(c *gin.Context) {
+	c.Redirect(http.StatusFound, "/login?next="+url.QueryEscape(c.Request.URL.String()))
+}
+
+// renderSharePasswordPrompt 显示密码输入表单，并提示输入错误（如有）
+func (h *Handler) renderSharePasswordPrompt(c *gin.Context, share models.Share) {
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.Status(http.StatusUnauthorized)
+	c.String(http.StatusUnauthorized, `<!DOCTYPE html><html><head><meta charset="utf-8"><title>需要密码</title></head><body><form method="get"><label>密码：<input type="password" name="password" required></label><button type="submit">访问</button></form></body></html>`)
+}
+
 func (h *Handler) handleSingle(c *gin.Context) {
 	shareID := c.Param("share_id")
 	var share models.Share
@@ -382,6 +517,9 @@ func (h *Handler) handleSingle(c *gin.Context) {
 	}
 	if share.IsFolder {
 		c.Redirect(http.StatusFound, "/p/"+shareID+"/")
+		return
+	}
+	if !h.shareVisible(c, share) {
 		return
 	}
 
@@ -407,18 +545,28 @@ func (h *Handler) handleSingle(c *gin.Context) {
 	assetResolver := blogAssetResolver{shareID: share.ShareID}
 	// 有效 frontmatter 作为元数据使用并从正文隐藏，损坏区块保留原文
 	fm, body := splitFrontmatter(raw)
-	html, err := markdown.RenderMarkdownWithAssets(resolver, assetResolver, body)
+	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
+	var html string
+	if us.AllowRawHTML {
+		html, err = markdown.RenderMarkdownWithAssetsUnsafe(resolver, assetResolver, body)
+	} else {
+		html, err = markdown.RenderMarkdownWithAssets(resolver, assetResolver, body)
+	}
 	if err != nil {
 		c.String(http.StatusInternalServerError, "render failed: %v", err)
 		return
 	}
 
-	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
 	params := h.shareRenderParams(share, us)
 	params.ArticleTitle, params.ArticlePost = buildArticleMeta(fm, body, f.Path, f.UpdatedAt, assetResolver.ResolveAsset)
 	params.FilePath = f.Path
 	params.Title = params.ArticleTitle + " · OSS"
-	params.ContentHTML = template.HTML(html)
+	if us.AllowRawHTML {
+		// 原始 HTML 可能含脚本，包进 sandbox iframe 隔离执行，不接触父页 cookie 与 DOM
+		params.ContentHTML = template.HTML(sandboxArticleHTML(html, params.ThemeBaseURL))
+	} else {
+		params.ContentHTML = template.HTML(html)
+	}
 	h.renderTemplate(c, params)
 }
 
@@ -434,6 +582,9 @@ func (h *Handler) handleFolder(c *gin.Context) {
 	}
 	if !share.IsFolder {
 		c.Redirect(http.StatusFound, "/p/"+shareID)
+		return
+	}
+	if !h.shareVisible(c, share) {
 		return
 	}
 
@@ -494,18 +645,27 @@ func (h *Handler) renderFolderFile(c *gin.Context, share models.Share, f models.
 	resolver := h.buildResolver(share.UserID, share.VaultID)
 	assetResolver := blogAssetResolver{shareID: share.ShareID, markdownPath: f.Path}
 	fm, body := splitFrontmatter(raw)
-	html, err := markdown.RenderMarkdownWithAssets(resolver, assetResolver, body)
+	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
+	var html string
+	if us.AllowRawHTML {
+		html, err = markdown.RenderMarkdownWithAssetsUnsafe(resolver, assetResolver, body)
+	} else {
+		html, err = markdown.RenderMarkdownWithAssets(resolver, assetResolver, body)
+	}
 	if err != nil {
 		c.String(http.StatusInternalServerError, "render failed: %v", err)
 		return
 	}
 
-	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
 	params := h.shareRenderParams(share, us)
 	params.ArticleTitle, params.ArticlePost = buildArticleMeta(fm, body, f.Path, f.UpdatedAt, assetResolver.ResolveAsset)
 	params.FilePath = f.Path
 	params.Title = params.ArticleTitle + " · " + share.TargetPath
-	params.ContentHTML = template.HTML(html)
+	if us.AllowRawHTML {
+		params.ContentHTML = template.HTML(sandboxArticleHTML(html, params.ThemeBaseURL))
+	} else {
+		params.ContentHTML = template.HTML(html)
+	}
 	h.renderTemplate(c, params)
 }
 
@@ -517,6 +677,8 @@ func (h *Handler) handleThemeAsset(c *gin.Context) {
 		return
 	}
 	fp = strings.TrimPrefix(fp, "/")
+	// 沙箱 iframe 运行在不透明源，字体等跨源资源需要显式 CORS 授权才能加载
+	c.Header("Access-Control-Allow-Origin", "*")
 	if h.serveBuiltinTheme(c, theme, fp) {
 		return
 	}
@@ -563,6 +725,23 @@ var osReadFile = func(p string) ([]byte, error) {
 
 func htmlEscape(s string) string {
 	return template.HTMLEscapeString(s)
+}
+
+// htmlEscapeAttribute 转义可放入双引号属性值的文本
+// HTMLEscapeString 不处理空格与换行，而 srcdoc 这类属性值里的空格会提前结束属性
+func htmlEscapeAttribute(s string) string {
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&#39;",
+		" ", "&#32;",
+		"\n", "&#10;",
+		"\r", "&#13;",
+		"\t", "&#9;",
+	)
+	return replacer.Replace(s)
 }
 
 // likePrefix 转义 SQL LIKE 元字符后只追加一个通配符，用于匹配所选目录的后代；调用方的反斜杠 ESCAPE 子句同时适用于 SQLite 与 PostgreSQL

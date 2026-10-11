@@ -30,7 +30,43 @@ const OBSIDIAN_STUB = `
     open() {}
     close() {}
   }
-  export class Setting {}
+  export class Setting {
+    constructor(containerEl) {
+      this.containerEl = containerEl;
+      this.nameText = "";
+      this.toggleValue = false;
+      this.toggleDisabled = false;
+      this.toggleHandlers = [];
+    }
+    setName(text) {
+      this.nameText = text;
+      this.containerEl?.setAttribute?.("data-setting-name", text);
+      return this;
+    }
+    setDesc(text) {
+      this.containerEl?.setAttribute?.("data-setting-desc", text);
+      return this;
+    }
+    addToggle(apply) {
+      const toggle = {
+        setValue: (value) => {
+          this.toggleValue = value;
+          return toggle;
+        },
+        setDisabled: (value) => {
+          this.toggleDisabled = value;
+          return toggle;
+        },
+        onChange: (handler) => {
+          this.toggleHandlers.push(handler);
+          return toggle;
+        },
+      };
+      apply(toggle);
+      this.containerEl?.setAttribute?.("data-toggle", "true");
+      return this;
+    }
+  }
   export class TFile {}
   export function setIcon() {}
 `;

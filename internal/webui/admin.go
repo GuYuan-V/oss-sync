@@ -162,7 +162,7 @@ func (h *Handler) adminUsersPage(c *gin.Context) {
 }
 
 // adminSummary 返回管理员总数与唯一管理员 ID
-// 分页后这两项必须基于全量数据，否则最后一页会误判能否删除管理员
+// 分页后这两项必须统计全量数据，否则最后一页会误判能否删除管理员
 func (h *Handler) adminSummary() (int64, uint) {
 	var adminCount int64
 	h.DB.Model(&models.User{}).Where("role = ?", "admin").Count(&adminCount)

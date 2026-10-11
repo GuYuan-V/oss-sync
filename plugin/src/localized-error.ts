@@ -8,7 +8,8 @@ const NETWORK_ERROR_KEYS: ReadonlyArray<readonly [string, TranslationKey]> = [
   ["ERR_NAME_NOT_RESOLVED", "network.nameNotResolved"],
   ["ERR_INTERNET_DISCONNECTED", "network.disconnected"],
   ["ERR_NETWORK_CHANGED", "network.disconnected"],
-  ["ERR_TOO_MANY_REDIRECTS", "auth.unauthorized"],
+  // 重定向循环由代理或网关产生，与登录状态无关
+  ["ERR_TOO_MANY_REDIRECTS", "network.tooManyRedirects"],
   ["ERR_ABORTED", "network.disconnected"],
   ["ERR_CONNECTION_RESET", "network.connectionRefused"],
   ["ERR_NETWORK_ACCESS_DENIED", "network.connectionRefused"],
@@ -42,12 +43,29 @@ const AUTH_STATUS_KEYS: ReadonlyArray<readonly [number, TranslationKey]> = [
 
 const TOKEN_EXPIRY_FRAGMENTS: readonly string[] = ["jwt token expired", "token expired", "invalid signature"];
 
+/** requestUrl 解析非 JSON 响应体时抛 SyntaxError，转成可读的服务端故障描述 */
+const JSON_PARSE_FRAGMENTS: readonly string[] = [
+  "unexpected token",
+  "is not valid json",
+  "json.parse",
+  "unexpected end of",
+];
+
+function isJsonParseError(error: unknown): boolean {
+  if (!(error instanceof SyntaxError)) return false;
+  const message = error.message.toLowerCase();
+  return JSON_PARSE_FRAGMENTS.some((fragment) => message.includes(fragment));
+}
+
+/** 把错误转成用户可读的本地化文本；无法识别时退回原始消息或 fallback */
 export function localizeError(error: unknown, t: Translator, fallback: string): string {
   const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : "";
   for (const [candidate, key] of AUTH_CODE_KEYS) {
     if (code === candidate) return t(key);
   }
   const message = error instanceof Error ? error.message : "";
+  // 响应体解析失败先于网络与状态码判断，服务端异常页不应泄漏语法错误细节
+  if (isJsonParseError(error)) return t("network.invalidResponseBody");
   for (const [code, key] of NETWORK_ERROR_KEYS) {
     if (message.includes(code)) return t(key);
   }

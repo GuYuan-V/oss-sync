@@ -11,6 +11,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/storagequota"
 )
 
+// systemMetrics 是进程级运行指标，字节字段以字节为单位，占比为 0-100 的百分数
 type systemMetrics struct {
 	CPUModelName       string
 	CPUUsagePercent    float64
@@ -23,6 +24,7 @@ type systemMetrics struct {
 	ProjectStorageMax  int64
 }
 
+// systemMetricsResponse 是 /dashboard/metrics 接口返回的实时指标
 type systemMetricsResponse struct {
 	CPUModelName       string  `json:"cpu_model_name"`
 	CPUUsagePercent    float64 `json:"cpu_usage_percent"`
@@ -37,17 +39,21 @@ type systemMetricsResponse struct {
 	VaultStorageQuota  int64   `json:"vault_storage_quota"`
 }
 
+// cpuSample 是一次 CPU 时间片采样，total 与 idle 单位为系统 tick
 type cpuSample struct {
 	total uint64
 	idle  uint64
 	at    time.Time
 }
 
+// cpuSampler 保存上一次 CPU 采样，供相邻两次读数计算使用率
 var cpuSampler struct {
 	sync.Mutex
 	previous cpuSample
 }
 
+// readSystemMetrics 采集进程级 CPU、内存、磁盘与项目存储指标
+// 首次调用会等待 200ms 取第二个采样点，否则 CPU 使用率为 0
 func readSystemMetrics(dataDir string, projectStorageMax int64) systemMetrics {
 	current := readCPUSample()
 	cpuSampler.Lock()
@@ -78,6 +84,8 @@ func readSystemMetrics(dataDir string, projectStorageMax int64) systemMetrics {
 	}
 }
 
+// systemMetricsPage 返回实时指标 JSON：GET /dashboard/metrics
+// 普通用户看到自有仓库的存储用量与配额，管理员改为统计全部仓库且不返回配额
 func (h *Handler) systemMetricsPage(c *gin.Context) {
 	user := h.webUser(c)
 	metrics := readSystemMetrics(h.Cfg.Storage.DataDir, h.Cfg.Storage.MaxTotalSizeBytes())
@@ -111,6 +119,8 @@ func (h *Handler) systemMetricsPage(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// cpuUsage 根据相邻两次采样计算 CPU 使用率
+// 计数器回退、总量未增长或 idle 超过总量时返回 0
 func cpuUsage(previous, current cpuSample) float64 {
 	if current.total <= previous.total || current.idle < previous.idle {
 		return 0

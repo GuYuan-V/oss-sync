@@ -1,10 +1,12 @@
 import type { SyncFileMeta } from "./api.js";
 
+/** 上传被服务端拒绝时返回的 409；current 为服务端当前版本 */
 export type OrdinarySyncConflict409 = {
   readonly status: 409;
   readonly current: SyncFileMeta;
 };
 
+/** 判断错误是否为普通同步 409，且携带可用的服务端当前版本 */
 export function isOrdinarySyncConflict409(
   error: unknown,
 ): error is OrdinarySyncConflict409 {

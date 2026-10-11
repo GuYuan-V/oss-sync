@@ -10,8 +10,11 @@ import (
 )
 
 const (
-	RoleOwner       = "owner"
-	RoleManager     = "manager"
+	// RoleOwner 表示仓库所有者，拥有最高权限
+	RoleOwner = "owner"
+	// RoleManager 表示仓库管理员，可管理成员与设置
+	RoleManager = "manager"
+	// RoleParticipant 表示仓库参与者，仅具备读写权限
 	RoleParticipant = "participant"
 	// RoleAdmin 表示管理员通过平台权限访问任意仓库
 	RoleAdmin = "admin"

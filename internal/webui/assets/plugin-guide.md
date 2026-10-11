@@ -341,10 +341,12 @@ Declare settings in runtime registration (and keep the manifest registration con
 
 ```go
 Settings: []ossplugin.SettingField{
-    {Key: "endpoint", Label: "Endpoint", Type: "url", MaxLength: 500},
-    {Key: "label", Label: "Label", Type: "text", MaxLength: 100},
+    {Key: "endpoint", Label: "Endpoint", Type: "url", MaxLength: 500, Section: "Home"},
+    {Key: "label", Label: "Label", Type: "text", MaxLength: 100, Section: "Posts"},
 },
 ```
+
+`Section` groups fields into a second-level sidebar menu: fields sharing a `Section` land in one child entry, `?section=<name>` renders only that group, and the default view renders everything. `text`, `url`, and `textarea` fields must declare `MaxLength` between 1 and 2000; `choice` must leave `MaxLength` unset; at most 64 top-level fields per plugin. Violations are rejected during ready-frame validation with `设置字段 max_length 不合法` and the plugin process fails to start.
 
 The host settings schema supports `text`, `textarea`, `url`, `choice`, and non-nested `group`. The current Go SDK `SettingField` only describes simple fields: `choice` requires `choices`, and `group` requires nested fields, so neither can be declared with the SDK type shown above. Settings are stored per Vault. A blog theme resource may declare public keys in `theme.json` under `public_settings`; the host exposes only those keys through the generic blog fields and `.ThemeConfigJS`. Other public routes do not receive Vault settings.
 
@@ -383,7 +385,7 @@ client.On("blog.content", func(_ context.Context, request ossplugin.Request) (os
 
 Use `action` when you only need a side effect and must not replace the value. Filters run in priority order and the output of one filter becomes the input of the next.
 
-Common host-called names include `blog.content`, `theme.render`, and `blog.data`. Hook names are validated, but plugin-defined names can be triggered through the host hook mechanism where the caller supports them.
+Common host-called names include `blog.content`, `theme.render`, `blog.data`, and `blog.home_posts`. Hook names are validated, but plugin-defined names can be triggered through the host hook mechanism where the caller supports them.
 
 ### 8.2 Blog data
 
@@ -403,6 +405,45 @@ Return JSON. The blog exposes it under `.PluginData[plugin-id]`. A theme can rea
 ```
 
 Use `safeHTML` only for HTML produced by trusted plugin code. Never pass user comments or database text directly to `safeHTML` without sanitizing it yourself.
+
+### 8.3 blog.home_posts homepage list filter
+
+Before rendering the public blog homepage (`/b/:vault_id`), the host hands the post list to `blog.home_posts` for pinning, ordering, or tag filtering:
+
+```go
+Hooks: []ossplugin.Hook{
+    {Name: "blog.home_posts", Kind: "filter", Callback: "posts.filter"},
+},
+```
+
+The payload and the result are JSON; the `posts` field is the list:
+
+```json
+{
+  "vault_id": "…",
+  "posts": [{"Title":"…","Summary":"…","URL":"/p/xxx","Date":"…","Category":"…","Tags":["go"],"CoverURL":"…","WordCount":120}],
+  "query": {"tag": ["go"]}
+}
+```
+
+Return a full replacement `posts` array, or return the list unchanged to leave it alone; `query` carries the URL query string so you can implement `?tag=` filtering:
+
+```go
+client.On("posts.filter", func(_ context.Context, request ossplugin.Request) (ossplugin.Response, error) {
+    posts, _ := request.Payload["posts"].([]any)
+    var pinned, rest []any
+    for _, p := range posts {
+        if post, ok := p.(map[string]any); ok && strings.HasPrefix(fmt.Sprint(post["Title"]), "[PINNED] ") {
+            pinned = append(pinned, p)
+        } else {
+            rest = append(rest, p)
+        }
+    }
+    return client.WriteJSONResponse(200, append(pinned, rest...))
+})
+```
+
+If the filter fails the host keeps the original list and logs the error; the homepage still renders. Available fields: `Title`, `Summary`, `URL`, `Date`, `Time`, `Category`, `Tags`, `CoverURL`, `WordCount`.
 
 ## 9. Database, migrations, and host services
 
@@ -672,7 +713,7 @@ Only advertise homepage support when the template implements `.IsHome`. Legacy t
 | `.Title`, `.ThemeName`, `.ThemeBaseURL` | Page title, theme resource name, asset URL prefix |
 | `.VaultID`, `.ShareID` | Vault and share IDs; ShareID is empty on the homepage |
 | `.IsHome`, `.HomePosts` | `/b/<vault-id>` homepage and all valid individually shared Markdown posts, ordered by share creation descending then share ID; no pagination; folder-only shares are excluded |
-| HomePosts item | `.Title`, `.Summary`, `.URL`, `.Date`, `.Time`, `.Category`, `.Tags`, `.CoverURL`, `.WordCount`; Time is file update time, Date prefers frontmatter |
+| HomePosts item | Home page post list; it is filtered through `blog.home_posts` (§8.3) before rendering, so pinning and tag-filtering plugins reorder or narrow it here. `.Title`, `.Summary`, `.URL`, `.Date`, `.Time`, `.Category`, `.Tags`, `.CoverURL`, `.WordCount`; Time is file update time, Date prefers frontmatter |
 | `.IsFolder`, `.FolderTitle` | Folder index and title; an article inside a folder has IsFolder=false |
 | `.ArticleTitle`, `.ArticlePost` | Article title and metadata; ArticlePost has `.Summary`, `.Date`, `.Category`, `.Tags`, `.CoverURL`, `.WordCount`, `.ReadingMinutes` |
 | `.ContentHTML` | Rendered article or directory HTML; empty on homepages, which must use HomePosts |
@@ -688,6 +729,27 @@ Only advertise homepage support when the template implements `.IsHome`. Legacy t
 Frontmatter starts at the beginning of the document and ends with a standalone `---` line. Fields are `title`, `description` (fallback `summary`), `published` (fallback `date`), `category`, `tags`, and `image` (fallback `cover`). Primary keys take precedence. YAML literal/folded multiline descriptions, quoted strings, tag lists and comma-separated tag text are supported. Valid frontmatter is hidden; malformed/unclosed blocks remain visible. Defaults are the filename for title, first non-heading body line for summary, and file update time for date.
 
 `./` and `../` attachment references resolve only relative to the article and cannot escape the Vault. Other paths prefer an exact Vault-root match, then an article-relative match; bare names finally match same-Vault attachment basenames, preferring the latest mtime. Use `./` to avoid root-name collisions. Markdown image and frontmatter cover URLs support encoded paths, query parameters and fragments: only the decoded path selects the attachment, while the fragment remains on the generated URL. Wiki embeds use literal filenames, so percent signs and hash characters do not become URL escapes or fragments. Remote HTTP(S) images/covers retain their URL; covers starting with `/` are site URLs. Folder asset URLs carry a `source` article path, checked against share scope, live article existence and its actual references.
+
+### Public access control and raw HTML in articles
+
+A share has one of three visibility levels, chosen at creation and editable afterwards:
+
+| Level | Behaviour |
+| --- | --- |
+| `public` | Anyone can access; the default |
+| `password` | Requires the share password; stored as a bcrypt digest, verified but never recoverable |
+| `login` | Requires a signed-in OSS Sync account; anonymous visitors are redirected to `/login?next=...` |
+
+Password access submits `?password=` as a query parameter. It is used only for verification and never reaches logs or template context. Switching to `public` or `login` clears any stored password digest. Plugins creating shares through `host.share.create` accept the same `visibility` and `share_password` fields.
+
+The Vault setting **Allow raw HTML in articles** controls whether Markdown rendering keeps raw tags:
+
+- Off (default): every HTML tag is escaped and `<script>` renders as text
+- On: `html.WithUnsafe()` applies, so tags and scripts execute as written
+
+When enabled the article body is wrapped in `<iframe sandbox="allow-scripts" srcdoc="…">`. The content is injected through `srcdoc` together with the current theme's `style.css`, so typography still matches the theme. Because `allow-same-origin` is not granted, the iframe runs in an opaque origin: scripts inside the article can execute, but they cannot read the parent page's cookies, `localStorage` or DOM, and cannot manipulate the parent. The theme stylesheet is same-origin and therefore still loads.
+
+The switch is per Vault and only affects public page rendering; admin pages and plugin rendering paths are unchanged. It is meant for trusted content vaults such as an author's demo library. Do not enable it for public, multi-writer vaults.
 
 ### Diagnostics and acceptance
 

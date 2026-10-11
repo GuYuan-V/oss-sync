@@ -1,6 +1,7 @@
 import { App, Modal, Notice, Setting, TFile, TFolder } from "obsidian";
 import type OSSPlugin from "./main";
 
+/** 生成分享链接的模态框；支持文件与文件夹目标，可配置是否允许复制*/
 export class ShareModal extends Modal {
   private isFolder: boolean;
   private targetPath: string;

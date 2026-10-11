@@ -5,25 +5,32 @@ import (
 	"strings"
 )
 
+// registeredRoute 是命中了插件动态路由的已注册路由
 type registeredRoute struct {
 	PluginID string
 	Route    RegisteredRoute
 	Params   map[string]string
 }
 
+// registeredMiddleware 是命中了请求路径的已注册中间件
 type registeredMiddleware struct {
 	PluginID   string
 	Middleware RegisteredMiddleware
 }
 
+// setRegistration 写入或覆盖插件的运行时注册信息
+// 调用方须持有 m.mu 写锁
 func (m *Manager) setRegistration(pluginID string, registration ExtensionRegistration) {
 	m.registrations[pluginID] = registration
 }
 
+// removeRegistration 删除插件的运行时注册信息
+// 调用方须持有 m.mu 写锁
 func (m *Manager) removeRegistration(pluginID string) {
 	delete(m.registrations, pluginID)
 }
 
+// Registrations 返回全部注册信息的副本
 func (m *Manager) Registrations() map[string]ExtensionRegistration {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -34,6 +41,7 @@ func (m *Manager) Registrations() map[string]ExtensionRegistration {
 	return result
 }
 
+// RegistrationFor 查询单个插件的注册信息
 func (m *Manager) RegistrationFor(pluginID string) (ExtensionRegistration, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -41,6 +49,8 @@ func (m *Manager) RegistrationFor(pluginID string) (ExtensionRegistration, bool)
 	return registration, ok
 }
 
+// matchingHooks 返回注册了指定钩子且实例已加载的插件
+// 按钩子优先级升序，同优先级按插件 ID 稳定排序
 func (m *Manager) matchingHooks(name string) []pluginRegistration {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -64,6 +74,7 @@ func (m *Manager) matchingHooks(name string) []pluginRegistration {
 	return registrations
 }
 
+// registeredHook 取插件注册信息中指定名称的钩子
 func (m *Manager) registeredHook(pluginID, name string) (RegisteredHook, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -79,6 +90,8 @@ func (m *Manager) registeredHook(pluginID, name string) (RegisteredHook, bool) {
 	return RegisteredHook{}, false
 }
 
+// matchingRoute 在所有已加载插件中查找命中该请求的路由
+// 多个命中时取优先级最小者，同优先级按插件 ID 排序
 func (m *Manager) matchingRoute(method, requestPath string) (registeredRoute, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -109,6 +122,8 @@ func (m *Manager) matchingRoute(method, requestPath string) (registeredRoute, bo
 	return routes[0], true
 }
 
+// matchingMiddleware 返回指定阶段且路径匹配的已注册中间件
+// 按优先级升序，同优先级按插件 ID 稳定排序
 func (m *Manager) matchingMiddleware(stage, requestPath string) []registeredMiddleware {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -132,6 +147,7 @@ func (m *Manager) matchingMiddleware(stage, requestPath string) []registeredMidd
 	return result
 }
 
+// hookPriority 取指定钩子的优先级，未注册时为 0
 func hookPriority(hooks []RegisteredHook, name string) int {
 	for _, hook := range hooks {
 		if hook.Name == name {
@@ -141,6 +157,7 @@ func hookPriority(hooks []RegisteredHook, name string) int {
 	return 0
 }
 
+// hookCallback 取指定钩子的回调名，未声明回调时回落到钩子名
 func hookCallback(hooks []RegisteredHook, name string) string {
 	for _, hook := range hooks {
 		if hook.Name == name {
@@ -153,15 +170,20 @@ func hookCallback(hooks []RegisteredHook, name string) string {
 	return name
 }
 
+// middlewareMatches 判断中间件是否作用于该请求路径
+// PathPrefix 为空表示匹配所有路径
 func middlewareMatches(middleware RegisteredMiddleware, requestPath string) bool {
 	return middleware.PathPrefix == "" || strings.HasPrefix(requestPath, middleware.PathPrefix)
 }
 
+// dynamicPathMatches 判断请求路径是否命中动态路由模式
 func dynamicPathMatches(pattern, requestPath string) bool {
 	matched, _ := dynamicPathParams(pattern, requestPath)
 	return matched
 }
 
+// dynamicPathParams 解析动态路由模式并返回路径参数
+// 模式以 :name 声明单段参数，仅末尾的 * 匹配剩余全部段
 func dynamicPathParams(pattern, requestPath string) (bool, map[string]string) {
 	if pattern == requestPath || pattern == "/*" {
 		return true, map[string]string{}
@@ -196,6 +218,8 @@ type PluginAdminPage struct {
 	Position int
 }
 
+// AdminPages 返回已加载插件注册的管理页投影
+// 按 Position 升序，同位置按插件 ID 与 slug 排序
 func (m *Manager) AdminPages() []PluginAdminPage {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

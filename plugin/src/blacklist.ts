@@ -19,12 +19,13 @@ const DEVICE_LOCAL_OBSIDIAN: BlacklistEntry[] = [
   { kind: "glob", value: ".obsidian/plugins/*/data.json" },
 ];
 
+/** 黑名单条目：exact 为整路径，prefix 为目录前缀，glob 仅支持段内 * */
 interface BlacklistEntry {
   kind: "exact" | "prefix" | "glob";
   value: string;
 }
 
-/** 判断路径是否应同步*/
+/** 判断相对路径是否应同步；allowDeviceLocalObsidian 控制 .obsidian 下本地状态是否放行 */
 export function shouldSync(relativePath: string, allowDeviceLocalObsidian: boolean): boolean {
   const p = normalize(relativePath);
   if (p === "") return false;
@@ -64,6 +65,7 @@ function globMatch(pattern: string, path: string): boolean {
   return new RegExp("^" + regexStr + "$").test(path);
 }
 
+/** 仅供测试访问黑名单表与匹配逻辑 */
 export const _internal = {
   ABSOLUTE_BLACKLIST,
   DEVICE_LOCAL_OBSIDIAN,

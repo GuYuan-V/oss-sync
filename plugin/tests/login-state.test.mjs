@@ -64,3 +64,30 @@ test("pending device login defers authorized session initialization", async () =
     await cleanup();
   }
 });
+
+function makeToken(expOffsetSec) {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ uid: 1, exp: Math.floor(Date.now() / 1000) + expOffsetSec })).toString("base64url");
+  return `${header}.${payload}.signature`;
+}
+
+test("expired tokens are rejected so the login form renders again", async () => {
+  const { module, cleanup } = await loadLoginState();
+  try {
+    assert.equal(module.isTokenExpired(makeToken(-60)), true);
+    assert.equal(module.isTokenExpired(makeToken(3600)), false);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("malformed tokens are treated as expired", async () => {
+  const { module, cleanup } = await loadLoginState();
+  try {
+    assert.equal(module.isTokenExpired("not-a-jwt"), true);
+    assert.equal(module.isTokenExpired("a.b.c"), true);
+    assert.equal(module.isTokenExpired(""), true);
+  } finally {
+    await cleanup();
+  }
+});

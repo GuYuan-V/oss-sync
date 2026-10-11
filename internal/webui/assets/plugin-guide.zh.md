@@ -379,10 +379,12 @@ app.css
 
 ```go
 Settings: []ossplugin.SettingField{
-    {Key: "endpoint", Label: "Endpoint", Type: "url", MaxLength: 500},
-    {Key: "label", Label: "Label", Type: "text", MaxLength: 100},
+    {Key: "endpoint", Label: "Endpoint", Type: "url", MaxLength: 500, Section: "首页设置"},
+    {Key: "label", Label: "Label", Type: "text", MaxLength: 100, Section: "文章设置"},
 },
 ```
+
+`Section` 把设置分组成侧边栏的二级菜单：同一 `Section` 的字段进入同一个子项，`?section=<名称>` 只展示该组，缺省展示全部。`text`、`url`、`textarea` 三类必须声明 `MaxLength` 且在 1-2000 之间，`choice` 必须把 `MaxLength` 留空；每个插件最多 64 个顶层字段。违反会在 ready 帧校验阶段被拒（`设置字段 max_length 不合法`），插件进程启动失败。
 
 宿主设置格式支持 `text`、`textarea`、`url`、`choice` 和非嵌套 `group`，但当前 Go SDK 的 `SettingField` 只包含简单字段；`choice` 需要 `choices`，`group` 需要嵌套字段，不能直接用上面的 SDK 类型声明。设置按 Vault 保存；博客主题资源可在 `theme.json` 的 `public_settings` 中声明允许公开的键，宿主只将这些键映射到通用博客字段和 `.ThemeConfigJS`，其他公共路由不会收到 Vault settings。
 
@@ -419,7 +421,7 @@ client.On("blog.content", func(_ context.Context, request ossplugin.Request) (os
 
 `filter` 返回替换值,`action` 只执行副作用。多个 filter 按 priority 执行,前一个输出会成为下一个输入。
 
-常用宿主 Hook 包括 `blog.content`、`theme.render` 和 `blog.data`。插件自定义 Hook 可以通过宿主 Hook 机制触发,但必须先注册。
+常用宿主 Hook 包括 `blog.content`、`theme.render`、`blog.data` 和 `blog.home_posts`。插件自定义 Hook 可以通过宿主 Hook 机制触发,但必须先注册。
 
 ### 8.2 blog.data
 
@@ -439,6 +441,45 @@ client.On("blog.content", func(_ context.Context, request ossplugin.Request) (os
 ```
 
 `safeHTML` 只用于插件自己生成且已经确认安全的 HTML。用户评论、数据库正文不能未经清洗直接传给 `safeHTML`。
+
+### 8.3 blog.home_posts 首页文章过滤
+
+公开博客首页（`/b/:vault_id`）渲染前,宿主把文章列表交给 `blog.home_posts` 过滤,用于置顶、排序、按标签筛选:
+
+```go
+Hooks: []ossplugin.Hook{
+    {Name: "blog.home_posts", Kind: "filter", Callback: "posts.filter"},
+},
+```
+
+入参与返回都是 JSON 数组,`posts` 字段是文章列表:
+
+```json
+{
+  "vault_id": "…",
+  "posts": [{"Title":"…","Summary":"…","URL":"/p/xxx","Date":"…","Category":"…","Tags":["go"],"CoverURL":"…","WordCount":120}],
+  "query": {"tag": ["go"]}
+}
+```
+
+返回完整的新 `posts` 数组即替换,原样返回表示不过滤;`query` 透传 URL 查询参数,可用来实现 `?tag=` 筛选:
+
+```go
+client.On("posts.filter", func(_ context.Context, request ossplugin.Request) (ossplugin.Response, error) {
+    posts, _ := request.Payload["posts"].([]any)
+    var pinned, rest []any
+    for _, p := range posts {
+        if post, ok := p.(map[string]any); ok && strings.HasPrefix(fmt.Sprint(post["Title"]), "【置顶】") {
+            pinned = append(pinned, p)
+        } else {
+            rest = append(rest, p)
+        }
+    }
+    return client.WriteJSONResponse(200, append(pinned, rest...))
+})
+```
+
+过滤失败时宿主保留原列表并记录错误,不会让首页渲染失败。可读字段:`Title`、`Summary`、`URL`、`Date`、`Time`、`Category`、`Tags`、`CoverURL`、`WordCount`。
 
 ## 9. 数据库、迁移和宿主服务
 
@@ -711,7 +752,7 @@ blog/clean/theme.json
 | `.Title` / `.ThemeName` / `.ThemeBaseURL` | 页面标题、模板资源名称、静态资源 URL 前缀 |
 | `.VaultID` / `.ShareID` | 当前仓库和分享 ID；首页 ShareID 为空 |
 | `.IsHome` / `.HomePosts` | `/b/<vault-id>` 首页及全部有效单篇 Markdown 分享；按分享创建时间倒序，同时间按分享 ID 排序，不分页，不包含仅通过文件夹分享的文章 |
-| `.HomePosts` 元素 | `.Title`、`.Summary`、`.URL`、`.Date`、`.Time`、`.Category`、`.Tags`、`.CoverURL`、`.WordCount`；Time 为文件更新时间，Date 优先取 frontmatter |
+| `.HomePosts` / `.HomePosts` 元素 | 首页文章列表。先经 `blog.home_posts` 过滤（§8.3）再渲染，置顶与标签筛选插件在此改写顺序或子集；元素含 `.Title`、`.Summary`、`.URL`、`.Date`、`.Time`、`.Category`、`.Tags`、`.CoverURL`、`.WordCount`；Time 为文件更新时间，Date 优先取 frontmatter |
 | `.IsFolder` / `.FolderTitle` | 文件夹目录视图及目录名；目录内文章 IsFolder 为 false |
 | `.ArticleTitle` / `.ArticlePost` | 文章标题与元数据；ArticlePost 含 `.Summary`、`.Date`、`.Category`、`.Tags`、`.CoverURL`、`.WordCount`、`.ReadingMinutes` |
 | `.ContentHTML` | 已渲染的正文或目录 HTML；首页为空，必须读取 HomePosts |
@@ -727,6 +768,27 @@ blog/clean/theme.json
 YAML frontmatter 必须位于文首并由独立的 `---` 行闭合。支持 `title`、`description`（备用 `summary`）、`published`（备用 `date`）、`category`、`tags`、`image`（备用 `cover`）。摘要支持 `|` 和 `>` 多行写法，标签支持 YAML 列表或逗号分隔文本；同组字段优先使用主字段。有效块从正文隐藏，损坏或未闭合块保留。标题缺省使用文件名，摘要缺省使用首个非标题正文行，日期缺省使用文件更新时间。
 
 附件引用中，`./`、`../` 仅相对文章目录解析且不能越出仓库；其他路径先查仓库根路径，再查文章相对路径，裸文件名最后匹配同仓库附件名（重名时取 mtime 最新者）。若要避开根目录同名文件，请使用 `./`。Markdown 图片和 frontmatter 封面 URL 支持编码路径、查询参数和片段：附件查找只使用解码后的路径，片段保留在生成的 URL 中。Wiki 嵌入按字面文件名处理，百分号和井号不会被当成 URL 转义或片段。远程 `http(s)` 图片和封面直接使用原 URL，以 `/` 开头的封面也是站点 URL。文件夹分享的资源地址携带 `source` 文章路径，服务端会校验分享范围、文章存续和实际引用关系。
+
+### 公开访问控制与文章内 HTML
+
+分享有三种可见范围，创建时选择，也可之后修改：
+
+| 范围 | 行为 |
+| --- | --- |
+| `public` | 任何人可访问，默认值 |
+| `password` | 需提交访问密码；密码以 bcrypt 存储，只校验不还原 |
+| `login` | 需登录 OSS Sync 账号，未登录跳转 `/login?next=...` |
+
+密码访问使用 `?password=` 查询参数提交，仅用于访问校验，不进入任何日志或模板上下文。切换到 `public` 或 `login` 会自动清除已保存的密码哈希。插件通过 `host.share.create` 创建分享时同样支持 `visibility` 与 `share_password` 字段。
+
+仓库设置中的「允许文章内原始 HTML」控制 Markdown 渲染是否保留原始标签：
+
+- 关闭（默认）：所有 HTML 一律转义，`<script>` 按文本显示
+- 开启：`html.WithUnsafe()` 生效，标签与脚本原样执行
+
+开启时正文会被包进 `<iframe sandbox="allow-scripts" srcdoc="…">`，通过 `srcdoc` 注入并带上当前主题的 `style.css`，因此排版与主题一致。由于没有授予 `allow-same-origin`，iframe 处于独立源：文章内脚本可以运行，但读不到父页的 cookie、`localStorage`、DOM，也无法操作父页。主题 CSS 与页面同源，样式仍能加载。
+
+该开关按 Vault 生效，只影响公开页渲染；管理后台与插件渲染路径不受影响。它面向可信内容仓库（例如作者自建的演示库），公开且多人可写的仓库不要开启。
 
 ### 排错与验收
 

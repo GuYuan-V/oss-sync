@@ -5,17 +5,23 @@ import type { OSSSettings } from "./settings";
 import { validateLoginCredentials, validateServerURL } from "./login-state";
 import { normalizeUpdateSource, resolveUpdateURL, isUpdateAvailable } from "./plugin-update";
 
+/** 插件设置页：按语言、服务端、仓库、设备、同步与更新分组渲染表单，并维护仓库下拉的定时刷新 */
 export class OSSSettingTab extends PluginSettingTab {
+  /** 仓库下拉的轮询句柄，离开设置页或重新渲染时必须清理，否则计时器叠加 */
   private vaultRefreshTimer: number | null = null;
 
+  /** 构造设置页，app 由基类持有，plugin 提供设置读写与业务操作入口 */
   constructor(app: App, private plugin: OSSPlugin) {
     super(app, plugin);
   }
 
+  /** 重建整个设置页；未设置设备名时只渲染初始化分区并提前返回 */
   display(): void {
     this.stopVaultRefresh();
     const { containerEl } = this;
     containerEl.empty();
+
+    // 语言与服务端分区：界面语言、服务端地址与登录态，登录前后渲染不同表单
 
     new Setting(containerEl).setName(this.plugin.t("settings.language.title")).setHeading();
 
@@ -139,6 +145,7 @@ export class OSSSettingTab extends PluginSettingTab {
           })
         );
 
+      // 服务端地址可用时预取注册状态，据需要更新登录区的说明文案
       if (!validateServerURL(this.plugin.settings.serverUrl)) {
         void this.plugin.api.authStatus().then((status) => {
           if (status.needs_first_admin) {
@@ -154,6 +161,8 @@ export class OSSSettingTab extends PluginSettingTab {
         });
       }
     }
+
+    // 仓库分区：绑定已有仓库、下拉选项按 3 秒轮询刷新、以及新建仓库
 
     new Setting(containerEl).setName(this.plugin.t("settings.vault.title")).setHeading();
 
@@ -196,14 +205,22 @@ export class OSSSettingTab extends PluginSettingTab {
             : "";
           dropdown.setValue(selected);
         };
+        // 轮询刷新仓库选项，失败时静默保留现有选项，等下一轮重试
         const refreshVaultOptions = async (): Promise<void> => {
           if (!this.plugin.isLoggedIn()) return;
           try {
-            applyVaultOptions(await this.plugin.refreshVaults());
+            const vaults = await this.plugin.refreshVaults();
+            applyVaultOptions(vaults);
+            // 登录后未绑定（例如绑定请求曾失败）时自动落到默认仓库
+            if (!this.plugin.settings.vaultId && vaults.length > 0) {
+              await this.plugin.ensureVaultBinding();
+              applyVaultOptions(await this.plugin.refreshVaults());
+            }
           } catch {
             // 保留现有选项，下一次轮询继续尝试
           }
         };
+        // 3 秒轮询覆盖登录成功后仓库列表到位的时间差，重渲染前由 stopVaultRefresh 清理
         void refreshVaultOptions();
         this.vaultRefreshTimer = window.setInterval(() => {
           void refreshVaultOptions();
@@ -239,6 +256,8 @@ export class OSSSettingTab extends PluginSettingTab {
         })
       );
 
+    // 设备分区：列出当前账号下各设备的同步游标，仅作只读展示
+
     new Setting(containerEl).setName(this.plugin.t("settings.devices.title")).setHeading();
 
     const devicesEl = containerEl.createDiv({ cls: "oss-device-list" });
@@ -266,6 +285,9 @@ export class OSSSettingTab extends PluginSettingTab {
       devicesEl.setText(this.plugin.t("settings.devices.loadFailed"));
       new Notice(this.plugin.t("notice.devicesLoadFailed", { error: this.errorMessage(error) }));
     });
+
+    // 同步分区：间隔、轮询模式、并发、黑名单与诊断开关，均即时保存
+    // 涉及运行时机参数的项在保存后立即作用于同步引擎，不等待重启
 
     new Setting(containerEl).setName(this.plugin.t("settings.sync.title")).setHeading();
 
@@ -365,6 +387,7 @@ export class OSSSettingTab extends PluginSettingTab {
         toggle
           .setValue(this.plugin.settings.forceSSE)
           .onChange(async (value) => {
+            // SSE 连接方式需重建协作管理器才能生效，仅在运行中才重启
             this.plugin.settings.forceSSE = value;
             await this.plugin.saveSettings();
             if (this.plugin.collabManager.isRunning()) {
@@ -418,11 +441,13 @@ export class OSSSettingTab extends PluginSettingTab {
     }
   }
 
+  /** 设置页隐藏时停止仓库轮询，避免后台持续请求 */
   hide(): void {
     this.stopVaultRefresh();
     super.hide();
   }
 
+  /** 清理仓库下拉轮询句柄 */
   private stopVaultRefresh(): void {
     if (this.vaultRefreshTimer !== null) {
       window.clearInterval(this.vaultRefreshTimer);
@@ -430,6 +455,7 @@ export class OSSSettingTab extends PluginSettingTab {
     }
   }
 
+  /** 未登录状态下渲染设备名输入，保存后写入设置并刷新页面 */
   private renderLoggedOutDeviceName(containerEl: HTMLElement): void {
     let deviceName = this.plugin.settings.deviceName;
     new Setting(containerEl)
@@ -457,6 +483,7 @@ export class OSSSettingTab extends PluginSettingTab {
         }));
   }
 
+  /** 首次使用时的设备名初始化分区，未填写设备名时其余设置项不渲染 */
   private renderInitialDeviceName(containerEl: HTMLElement): void {
     new Setting(containerEl).setName(this.plugin.t("settings.devices.setupTitle")).setHeading();
     let deviceName = this.plugin.settings.deviceName;
@@ -481,6 +508,7 @@ export class OSSSettingTab extends PluginSettingTab {
       }));
   }
 
+  /** 插件自更新分区：来源与代理参数变化即废弃旧检查结果，安装期间禁用全部控件 */
   private renderUpdateSection(containerEl: HTMLElement): void {
     new Setting(containerEl).setName(this.plugin.t("settings.update.title")).setHeading();
     const controls: { setDisabled(value: boolean): unknown }[] = [];
@@ -608,6 +636,7 @@ export class OSSSettingTab extends PluginSettingTab {
     });
   }
 
+  /** 服务端更新分区：状态检查与触发更新串行执行，更新期间禁用检查与触发按钮 */
   private renderServerUpdateSection(containerEl: HTMLElement): void {
     new Setting(containerEl).setName(this.plugin.t("settings.serverUpdate.title")).setHeading();
     containerEl.createEl("p", { text: this.plugin.t("settings.serverUpdate.desc"), cls: "setting-item-description" });
@@ -773,6 +802,7 @@ export class OSSSettingTab extends PluginSettingTab {
     });
   }
 
+  /** 校验登录表单，返回可直接提示的错误文案，通过时返回 null */
   private validateCredentials(): string | null {
     const error = validateLoginCredentials(
       this.plugin.settings.username,
@@ -788,11 +818,13 @@ export class OSSSettingTab extends PluginSettingTab {
     }
   }
 
+  /** 把异常转为本语言可读文案，设置页提示统一入口 */
   private errorMessage(error: unknown): string {
     return this.plugin.localizedError(error);
   }
 }
 
+/** 把下拉值解析为受支持的语言设置，未知值回落为 auto */
 function parseLanguage(value: string): OSSSettings["language"] {
   switch (value) {
     case "zh":

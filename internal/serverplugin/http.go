@@ -28,6 +28,8 @@ func (m *Manager) RegisterRoutes(r *gin.Engine, cfg *config.Config) {
 	m.registerDynamicRoutes(r, cfg)
 }
 
+// applyHookHTTP 处理编辑器命令钩子，仅接受 editor.command
+// 校验用户、设备与 vault 访问权限后调用插件回调；action 类钩子不改写内容
 func (m *Manager) applyHookHTTP(c *gin.Context) {
 	if c.Param("hook") != "editor.command" {
 		c.Status(http.StatusNotFound)
@@ -102,6 +104,7 @@ func (m *Manager) applyHookHTTP(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"content": content})
 }
 
+// capabilities 返回已启用插件声明的编辑器命令，供客户端展示入口
 func (m *Manager) capabilities(c *gin.Context) {
 	var records []models.ServerPlugin
 	if err := m.db.Where("enabled = ?", true).Order("id asc").Find(&records).Error; err != nil {
@@ -132,14 +135,18 @@ func (m *Manager) capabilities(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"plugins": result})
 }
 
+// servePublic 处理公开命名空间下的插件请求
 func (m *Manager) servePublic(c *gin.Context) {
 	m.serve(c, true)
 }
 
+// serveAuthenticated 处理需登录命名空间下的插件请求
 func (m *Manager) serveAuthenticated(c *gin.Context) {
 	m.serve(c, false)
 }
 
+// serve 校验插件启用状态与路由声明后转发请求
+// 请求体超过 MaxRequestBytes 返回 413；鉴权命名空间带 vault_id 时需校验 vault 访问并注入该 vault 的设置
 func (m *Manager) serve(c *gin.Context, public bool) {
 	record, err := m.record(c.Param("plugin_id"))
 	if err != nil || !record.Enabled {
@@ -216,6 +223,8 @@ func (m *Manager) serve(c *gin.Context, public bool) {
 	writePluginResponse(c, response)
 }
 
+// serveRegisteredAsset 从已安装目录直出注册过的静态资源
+// 资源必须出现在 registration.Assets 中，内容类型缺省时按内容探测
 func (m *Manager) serveRegisteredAsset(c *gin.Context, pluginID, assetPath string) {
 	registration, ok := m.RegistrationFor(pluginID)
 	if !ok {
@@ -241,6 +250,8 @@ func (m *Manager) serveRegisteredAsset(c *gin.Context, pluginID, assetPath strin
 	c.Status(http.StatusNotFound)
 }
 
+// writePluginResponse 把插件响应原样写给客户端
+// 响应体不可解码返回 502，内容类型缺省为 application/octet-stream
 func writePluginResponse(c *gin.Context, response PluginResponse) {
 	responseBody, err := decodePluginBody(response)
 	if err != nil {
@@ -257,6 +268,8 @@ func writePluginResponse(c *gin.Context, response PluginResponse) {
 	c.Data(response.Status, contentType, responseBody)
 }
 
+// routeExists 判断请求的方法与路径是否被 manifest 路由声明覆盖
+// 公开与鉴权命名空间分别按 route.Public 匹配
 func routeExists(manifest Manifest, method, path string, public bool) bool {
 	for _, route := range manifest.Routes {
 		if route.Method == method && route.Path == path && route.Public == public {
@@ -266,6 +279,7 @@ func routeExists(manifest Manifest, method, path string, public bool) bool {
 	return false
 }
 
+// responseHeader 按大小写不敏感方式读取插件响应头
 func responseHeader(response PluginResponse, wanted string) string {
 	for name, value := range response.Headers {
 		if strings.EqualFold(name, wanted) {

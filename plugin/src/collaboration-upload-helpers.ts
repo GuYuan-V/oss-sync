@@ -5,11 +5,13 @@ import { isValidOperationID, isValidServerRevision, createOperationID } from "./
 import type { CollaborationBaselineEntry } from "./collaboration-state.js";
 import type { CollaborationUploadInput } from "./api.js";
 
+/** 准备好的上传参数与对应的 pending 标识 */
 export interface PreparedCollaborationUpload {
   readonly input: CollaborationUploadInput;
   readonly pendingID: string;
 }
 
+/** 组装协作上传参数；参数非法时返回错误码而不抛异常 */
 export function prepareCollaborationUpload(
   entry: CollaborationBaselineEntry,
   content: string,
@@ -38,6 +40,7 @@ export function prepareCollaborationUpload(
   };
 }
 
+/** 把原始 operationID 归类为缺失或非法 */
 export function operationIDErrorCode(raw: string): "missing_operation_id" | "invalid_operation_id" {
   return raw.trim() === "" ? "missing_operation_id" : "invalid_operation_id";
 }

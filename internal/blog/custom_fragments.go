@@ -10,8 +10,11 @@ import (
 	htmlparse "golang.org/x/net/html"
 )
 
+// maxCustomFragmentRunes 限制自定义片段的最大字符数，超出部分按 rune 截断
 const maxCustomFragmentRunes = 2000
 
+// renderSafeCustomFragment 渲染用户自定义片段，先按字符上限截断，
+// Markdown 渲染失败时退化为纯文本转义，成功后经过 HTML 白名单清洗
 func renderSafeCustomFragment(raw string) template.HTML {
 	trimmed := trimByRunes(raw, maxCustomFragmentRunes)
 	if trimmed == "" {
@@ -26,6 +29,7 @@ func renderSafeCustomFragment(raw string) template.HTML {
 	return template.HTML(sanitizeBlogHTML(htmlText))
 }
 
+// renderSafeCustomFragmentEnabled 在自定义片段开关关闭时返回空，开启时按安全流程渲染
 func renderSafeCustomFragmentEnabled(raw string, enabled bool) template.HTML {
 	if !enabled {
 		return ""
@@ -33,6 +37,7 @@ func renderSafeCustomFragmentEnabled(raw string, enabled bool) template.HTML {
 	return renderSafeCustomFragment(raw)
 }
 
+// sanitizeBlogHTML 按白名单重写 HTML 片段，解析失败时整体转义输出
 func sanitizeBlogHTML(raw string) string {
 	root := strings.TrimSpace(raw)
 	if root == "" {
@@ -52,6 +57,7 @@ func sanitizeBlogHTML(raw string) string {
 	return out.String()
 }
 
+// writeSanitizedNode 递归输出单个节点，白名单外的标签只保留其子节点
 func writeSanitizedNode(out *strings.Builder, node *htmlparse.Node) {
 	switch node.Type {
 	case htmlparse.ElementNode:
@@ -96,6 +102,7 @@ func writeSanitizedNode(out *strings.Builder, node *htmlparse.Node) {
 	}
 }
 
+// isAllowedCustomTag 判断标签是否在自定义片段白名单内
 func isAllowedCustomTag(tag string) bool {
 	switch tag {
 	case "a", "abbr", "b", "blockquote", "br", "code", "del", "em", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "li", "ol", "p", "pre", "strong", "sub", "sup", "table", "tbody", "td", "th", "thead", "tr", "u", "ul", "span", "div", "small":
@@ -104,6 +111,7 @@ func isAllowedCustomTag(tag string) bool {
 	return false
 }
 
+// isVoidTag 判断标签是否为无闭合标签的空元素
 func isVoidTag(tag string) bool {
 	switch tag {
 	case "br", "hr", "img", "source", "track", "meta", "link", "base", "input":
@@ -113,6 +121,8 @@ func isVoidTag(tag string) bool {
 	}
 }
 
+// sanitizeCustomAttr 过滤属性并归一化取值，返回属性名、属性值与是否保留，
+// 丢弃事件属性与取值不合法的属性
 func sanitizeCustomAttr(tag, name, value string) (string, string, bool) {
 	key := strings.TrimSpace(strings.ToLower(name))
 	if key == "" || strings.HasPrefix(key, "on") {
@@ -155,6 +165,7 @@ func sanitizeCustomAttr(tag, name, value string) (string, string, bool) {
 	return "", "", false
 }
 
+// isPositiveInteger 判断字符串是否只由十进制数字组成且非空
 func isPositiveInteger(value string) bool {
 	for _, r := range value {
 		if r < '0' || r > '9' {
@@ -164,6 +175,8 @@ func isPositiveInteger(value string) bool {
 	return value != ""
 }
 
+// sanitizeCustomURL 校验链接安全性，拒绝 javascript、vbscript、data 协议、
+// 含 NUL 字符与无法解析的伪协议，仅放行空协议、http 与 https
 func sanitizeCustomURL(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

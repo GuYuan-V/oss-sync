@@ -358,6 +358,76 @@
   background: var(--background-modifier-hover);
 }
 
+/* 分区标题行：标题、数量与查看按钮同行 */
+.oss-manager-modal .oss-collab-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.oss-manager-modal .oss-collab-section-header:first-child {
+  margin-top: 0;
+}
+
+.oss-manager-modal .oss-collab-section-header .oss-collab-section-title {
+  margin: 0;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+}
+
+/* 数量徽章：小字号、深灰底，紧贴标题右侧 */
+.oss-manager-modal .oss-collab-section-count {
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: #333333;
+  color: #b0b0b0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* 查看按钮推到行尾，与弹窗右边距贴合 */
+.oss-manager-modal .oss-collab-section-header .oss-collab-view {
+  margin-left: auto;
+}
+
+/* 文件名与协作者名过长时省略，完整内容由 title 悬停展示 */
+.oss-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 行内历史开关容器；Setting 收起为单个开关控件，避免挤占同行其他元素 */
+.oss-manager-modal .oss-collaborator-history-toggle {
+  display: flex;
+  align-items: center;
+  min-width: max-content;
+}
+
+/* Setting 在行内渲染时去掉自身的上下间距与内边距 */
+.oss-manager-modal .oss-collaborator-history-toggle .setting-item {
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.oss-manager-modal .oss-collaborator-history-toggle .setting-item-info {
+  display: none;
+}
+
+.oss-manager-modal .oss-collaborator-history-toggle .setting-item-control {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding: 0;
+  width: auto;
+}
+
 .oss-manager-modal .oss-sidebar-share,
 .oss-manager-modal .oss-sidebar-collab-row,
 .oss-manager-modal .oss-sidebar-recycle-row {
@@ -531,12 +601,19 @@
   text-overflow: ellipsis;
 }
 
+/* 含勾选框的行沿用 3 列基础布局；协作者详情行由前面的规则覆盖为 5 列 */
 .oss-manager-modal .oss-sidebar-collab-row:has(.oss-manager-select) {
   grid-template-columns: minmax(0, 1fr) max-content auto;
 }
 
-.oss-manager-modal .oss-collab-article-row {
-  grid-template-columns: minmax(0, 1fr) max-content auto;
+/* 文件行 3 列：勾选框与文件名、协作者数、按钮组 */
+.oss-manager-modal .oss-sidebar-collab-row.oss-collab-article-row {
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
+}
+
+/* 协作者详情行 3 列：勾选框与名称、修改记录开关、撤回按钮 */
+.oss-manager-modal .oss-sidebar-collab-row.oss-collaborator-row {
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
 }
 
 .oss-manager-modal .oss-collab-article-bulk-actions {
@@ -544,7 +621,7 @@
   margin-block-end: 6px;
 }
 
-.oss-collaborators-modal .oss-collaborators-actions {
+.oss-collab-detail-modal .oss-collaborators-actions {
   justify-content: flex-end;
   margin-block-end: 6px;
 }

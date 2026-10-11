@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -25,6 +26,20 @@ type pluginSettingVaultOption struct {
 	Name string
 }
 
+// filterSettingsBySection 返回指定分组的设置字段；section 为空时返回全部字段
+func filterSettingsBySection(fields []blog.ThemeSettingField, section string) []blog.ThemeSettingField {
+	if section == "" {
+		return fields
+	}
+	var filtered []blog.ThemeSettingField
+	for _, field := range fields {
+		if field.Section == section {
+			filtered = append(filtered, field)
+		}
+	}
+	return filtered
+}
+
 type pluginSettingsData struct {
 	VaultID       string
 	VaultName     string
@@ -34,6 +49,8 @@ type pluginSettingsData struct {
 	Fields        []pluginSettingFieldView
 	// Vaults 是插件设置生效的仓库选择项
 	Vaults []pluginSettingVaultOption
+	// Section 是当前展示的设置分组名，空值表示全部
+	Section string
 	// NoVault 表示当前无满足插件生效条件的仓库
 	NoVault bool
 	Error   string
@@ -63,20 +80,28 @@ func (h *Handler) pluginSettingsPage(c *gin.Context) {
 		return
 	}
 	pluginName := manifest.Name
+	// section 参数限定当前展示的设置分组；缺省显示全部字段
+	section := strings.TrimSpace(c.Query("section"))
+	fields := manifest.Settings
+	if section != "" {
+		fields = filterSettingsBySection(manifest.Settings, section)
+	}
 	d := pluginSettingsData{
 		VaultID:       vault.ID,
 		VaultName:     vault.Name,
 		PluginID:      manifest.ID,
 		PluginName:    pluginName,
 		PluginVersion: manifest.Version,
-		Fields:        buildPluginSettingViews(manifest.Settings, config),
+		Fields:        buildPluginSettingViews(fields, config),
 		Vaults:        h.pluginSettingVaults(u, pluginID),
+		Section:       section,
 		Error:         c.Query("error"),
 		Saved:         c.Query("saved") == "1",
 	}
 	ld := layoutData{}
 	h.setVaultLayout(&ld, vault)
 	ld.ActivePluginID = manifest.ID
+	ld.ActiveSection = section
 	h.renderVault(c, ld, "vault-plugin-settings", h.t(c, "page.plugin_settings", vault.Name, pluginName), d)
 }
 
@@ -242,7 +267,13 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 	if !resolved {
 		return
 	}
+	// section 由表单携带，决定本次只接受并校验哪个分组的字段；
+	// 其余分组沿用库里已有值，避免未展示的字段被空值覆盖
+	section := strings.TrimSpace(c.PostForm("section"))
 	redirect := "/dashboard/plugins/" + url.PathEscape(c.Param("plugin_id")) + "/settings?vault_id=" + url.QueryEscape(vault.ID)
+	if section != "" {
+		redirect += "&section=" + url.QueryEscape(section)
+	}
 	errorRedirect := redirect + "&error="
 	if !vaultaccess.CanManage(role) {
 		c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.no_permission")))
@@ -253,14 +284,29 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	raw := pluginSettingsFromForm(c, manifest.Settings)
+	fields := manifest.Settings
+	if section != "" {
+		fields = filterSettingsBySection(manifest.Settings, section)
+	}
+	raw := pluginSettingsFromForm(c, fields)
+	var existing models.JSONMap
+	if _, prev, err := h.loadPluginSettings(manifest.ID, vault.ID); err == nil {
+		existing = prev
+	}
+	// 未在本次提交中的字段保留原值，使校验与落库都只针对当前分区
+	for key, value := range existing {
+		if _, ok := raw[key]; !ok {
+			raw[key] = value
+		}
+	}
 	clean, err := blog.ValidateSettingConfig(manifest.Settings, raw)
 	pluginName := manifest.Name
 	if err != nil {
-		d := pluginSettingsData{VaultID: vault.ID, VaultName: vault.Name, PluginID: manifest.ID, PluginName: pluginName, PluginVersion: manifest.Version, Fields: buildPluginSettingViews(manifest.Settings, models.JSONMap(raw)), Error: err.Error()}
+		d := pluginSettingsData{VaultID: vault.ID, VaultName: vault.Name, PluginID: manifest.ID, PluginName: pluginName, PluginVersion: manifest.Version, Fields: buildPluginSettingViews(fields, models.JSONMap(raw)), Section: section, Error: err.Error()}
 		ld := layoutData{}
 		h.setVaultLayout(&ld, vault)
 		ld.ActivePluginID = manifest.ID
+		ld.ActiveSection = section
 		h.renderVaultStatus(c, http.StatusBadRequest, ld, "vault-plugin-settings", h.t(c, "page.plugin_settings", vault.Name, pluginName), d)
 		return
 	}

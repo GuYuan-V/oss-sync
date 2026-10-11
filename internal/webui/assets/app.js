@@ -13,6 +13,7 @@
     initPublicBlogThemeCapability();
     initPluginUploadProgress();
     initPageSizeForms();
+    initShareVisibility();
     initPluginGuideCopy();
     initPapertrailPreview();
     initServerUpdate();
@@ -265,6 +266,23 @@
       select.addEventListener("change", function () {
         form.submit();
       });
+    });
+  }
+
+  function initShareVisibility() {
+    document.querySelectorAll("[data-share-visibility]").forEach(function (select) {
+      var form = select.form;
+      if (!form) return;
+      var password = form.querySelector("[data-share-password]");
+      function sync() {
+        if (!password) return;
+        var needPassword = select.value === "password";
+        password.hidden = !needPassword;
+        var input = password.querySelector("input");
+        if (input) input.required = needPassword;
+      }
+      select.addEventListener("change", sync);
+      sync();
     });
   }
 

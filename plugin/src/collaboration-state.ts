@@ -1,8 +1,10 @@
+/** 协作待传输操作标记 */
 export interface CollaborationPendingOperation {
   readonly id: string;
   readonly createdAt: number;
 }
 
+/** 已持久化的协作冲突；remoteText 为冲突时刻的远端正文 */
 export interface CollaborationConflict {
   readonly remoteRevision: number;
   readonly remoteHash: string;
@@ -10,6 +12,7 @@ export interface CollaborationConflict {
   readonly detectedAt: number;
 }
 
+/** 协作文件基线；serverRevision 为 -1 表示需要从远端恢复 */
 export interface CollaborationBaselineEntry {
   readonly vaultId: string;
   readonly fileId: number;
@@ -22,10 +25,12 @@ export interface CollaborationBaselineEntry {
   readonly conflict: CollaborationConflict | null;
 }
 
+/** 生成协作基线的持久化键 */
 export function collaborationKey(vaultId: string, fileId: number): string {
   return `${vaultId}:${fileId}`;
 }
 
+/** 深拷贝协作条目，避免调用方持有内部引用后绕过写入路径修改 */
 export function cloneCollaborationEntry(
   entry: CollaborationBaselineEntry
 ): CollaborationBaselineEntry {
@@ -59,10 +64,12 @@ function isValidServerRevision(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
+/** serverRevision 非法即需要从远端恢复 */
 export function isCollaborationNeedsRecovery(entry: CollaborationBaselineEntry): boolean {
   return !isValidServerRevision(entry.serverRevision);
 }
 
+/** 校验并清洗持久化的协作条目；无法修补的字段缺失时返回 null 表示丢弃该条 */
 export function sanitizeCollaborationEntry(raw: unknown): CollaborationBaselineEntry | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;

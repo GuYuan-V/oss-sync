@@ -14,8 +14,10 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
+// historyFilterTimeLayout 是历史筛选时间输入框使用的本地时间格式
 const historyFilterTimeLayout = "2006-01-02T15:04"
 
+// historyRow 是修改记录列表一行的显示数据
 type historyRow struct {
 	ID           uint
 	FilePath     string
@@ -29,6 +31,8 @@ type historyRow struct {
 	CreatedAt    time.Time
 }
 
+// historyFilters 保存历史列表的筛选条件
+// Action、Username、Device、From、To 为原始字符串，fromTime 与 toTime 为解析后的本地时间
 type historyFilters struct {
 	Action   string
 	Username string
@@ -39,6 +43,7 @@ type historyFilters struct {
 	toTime   time.Time
 }
 
+// historyData 是修改记录页的显示数据
 type historyData struct {
 	VaultID  string
 	FilePath string
@@ -49,11 +54,16 @@ type historyData struct {
 	PageSize int
 }
 
+// paginationPage 返回分页视图所需的当前页信息
 func (d historyData) paginationPage() Page { return d.Page }
+
+// paginationBasePath 返回分页链接的基础路径
 func (d historyData) paginationBasePath() string {
 	return "/dashboard/vaults/" + d.VaultID + "/history"
 }
 
+// parseHistoryFilters 解析查询参数中的历史筛选条件
+// 空操作类型表示不限；时间必须匹配 historyFilterTimeLayout 且开始时间不得晚于结束时间
 func parseHistoryFilters(values url.Values, location *time.Location) (historyFilters, error) {
 	filters := historyFilters{
 		Action:   strings.TrimSpace(values.Get("action")),
@@ -85,6 +95,8 @@ func parseHistoryFilters(values url.Values, location *time.Location) (historyFil
 	return filters, nil
 }
 
+// apply 把筛选条件叠加到查询上，空条件不追加 WHERE 子句
+// Device 同时匹配设备名称与 client_id，时间条件为闭区间
 func (f historyFilters) apply(query *gorm.DB) *gorm.DB {
 	if f.Action != "" {
 		query = query.Where("action = ?", f.Action)
@@ -104,6 +116,7 @@ func (f historyFilters) apply(query *gorm.DB) *gorm.DB {
 	return query
 }
 
+// isHistoryAction 判断操作类型是否为已知历史动作，空字符串视为不限
 func isHistoryAction(action string) bool {
 	switch action {
 	case "", history.ActionCreate, history.ActionModify, history.ActionDelete, history.ActionRestore, history.ActionRename:
@@ -113,6 +126,9 @@ func isHistoryAction(action string) bool {
 	}
 }
 
+// historyPage 渲染仓库修改记录页：GET /dashboard/vaults/:vault_id/history
+// 筛选参数非法时以 400 渲染错误；path 参数限定单文件历史
+// 用户设置读取失败仅记录不存在以外的情况才中断，数据库查询失败返回 500
 func (h *Handler) historyPage(c *gin.Context) {
 	vault, _, ok := h.resolveVaultPage(c)
 	if !ok {
@@ -168,6 +184,7 @@ func (h *Handler) historyPage(c *gin.Context) {
 	h.renderVault(c, ld, "vault-history", h.t(c, "page.vault_history", vault.Name), d)
 }
 
+// historyActionLabel 返回历史动作的中文展示名，未知动作原样返回
 func historyActionLabel(action string) string {
 	switch action {
 	case history.ActionCreate:

@@ -2,6 +2,7 @@ package middleware
 
 import "github.com/gin-gonic/gin"
 
+// obsidianDesktopOrigin 是 Obsidian 桌面端用于协作 SSE 与轮询请求的来源标识
 const obsidianDesktopOrigin = "app://obsidian.md"
 
 // AllowObsidianDesktopOrigin 放行 Obsidian 桌面端来源的协作 SSE 与轮询请求，

@@ -20,27 +20,32 @@ import {
 import { decodeMergeableText } from "./text-merge.js";
 import { decideCollaborationReconciliation } from "./collaboration-file-reconcile.js";
 
+/** 已接受的协作文件 */
 export interface AcceptedCollaborationFile {
   readonly vaultId: string;
   readonly fileId: number;
   readonly localPath: string;
 }
 
+/** 文件同步所需的协作上传能力；downloadCollabContent 可选，缺失时 409 无法自动处理 */
 export interface CollaborationFileSyncApi {
   readonly collabUpload: (vaultId: string, fileId: number, input: CollaborationUploadInput) => Promise<SyncFileMeta>;
   readonly downloadCollabContent?: (vaultId: string, fileId: number) => Promise<{ content: ArrayBuffer; meta: SyncFileMeta } | null>;
 }
 
+/** 翻译能力；只取 t 方法，避免依赖整个插件实例 */
 export interface CollaborationFileSyncPlugin {
   readonly t: (key: TranslationKey, params?: TranslationParams) => string;
 }
 
+/** 文件同步所需的基线读写能力 */
 export interface CollaborationBaseline {
   readonly getCollaboration: (vaultId: string, fileId: number) => CollaborationBaselineEntry | null;
   readonly setCollaboration: (vaultId: string, fileId: number, entry: CollaborationBaselineEntry) => void;
   readonly save: () => Promise<void>;
 }
 
+/** 文件同步依赖；coordinator 保证同一时刻只有一个上传在跑 */
 export interface CollaborationFileSyncDeps {
   readonly baseline: CollaborationBaseline;
   readonly vault: CollaborationFileVault;
@@ -60,6 +65,7 @@ export class CollaborationFileSync {
 
   constructor(private readonly deps: CollaborationFileSyncDeps) {}
 
+/** 本地协作文件被编辑后防抖上传；非协作路径与抑制窗口内的编辑被忽略 */
   handleLocalEdit(path: string): void {
     if (!isCollabPath(path)) return;
     const key = normalizePath(path);
@@ -73,12 +79,14 @@ export class CollaborationFileSync {
     this.timers.set(key, timer);
   }
 
+  /** 取消全部待执行上传并清除抑制状态 */
   stop(): void {
     for (const timer of this.timers.values()) window.clearTimeout(timer);
     this.timers.clear();
     this.deps.vault.clearSuppressed();
   }
 
+  /** 按本地路径在已接受列表中定位协作文件 */
   private findAccepted(localPath: string): AcceptedCollaborationFile | null {
     const key = normalizePath(localPath);
     for (const accepted of this.deps.getAccepted()) {
@@ -87,6 +95,7 @@ export class CollaborationFileSync {
     return null;
   }
 
+  /** 读取本地正文并上传；未接受、无基线或被抑制时直接跳过 */
   private async doUpload(path: string): Promise<void> {
     const key = normalizePath(path);
     if (this.deps.vault.isSuppressed(key)) return;
@@ -97,6 +106,7 @@ export class CollaborationFileSync {
     const read = await this.deps.vault.readLocal(key);
     if (!read) return;
     if (!isValidServerRevision(entry.serverRevision)) {
+      // 哨兵 revision 会被服务端拒绝，先拉取远端重建基线再重试
       await this.recoverFromInvalidRevision(accepted, entry);
       return;
     }
@@ -238,6 +248,7 @@ export class CollaborationFileSync {
     }
   }
 
+  /** 本地未变时复用 pending 的 operationID 以保留幂等性，否则生成新的 */
   private resolveOperationID(entry: CollaborationBaselineEntry, hash: string): string {
     if (entry.pending && entry.localHash === hash && isValidOperationID(entry.pending.id)) {
       return entry.pending.id;
@@ -247,6 +258,7 @@ export class CollaborationFileSync {
     return createValidOperationID();
   }
 
+  /** 哨兵 revision 恢复：拉取远端正文后按对账决策重建本地与基线 */
   private async recoverFromInvalidRevision(
     accepted: AcceptedCollaborationFile,
     entry: CollaborationBaselineEntry,
@@ -278,6 +290,7 @@ export class CollaborationFileSync {
     // 使用当前 entry 的 baseText 作为祖先，若无效则按无祖先处理
     const ancestorText = typeof entry.baseText === "string" ? entry.baseText : null;
     // 构造一个临时 baseline 以复用现有三方合并决策
+    // 合成一份以远端为准的基线，使未改动判定与远端比对，而非与已失效的本地 revision 比对
     const synthetic: CollaborationBaselineEntry = {
       vaultId: entry.vaultId,
       fileId: entry.fileId,
@@ -310,7 +323,7 @@ export class CollaborationFileSync {
       return;
     }
     // 本地已存在则进入正常 reconcile 流程，防止未校验 revision 导致 400
-    // 注意：哨兵恢复时 baseline 必须以远端为准判定本地是否已改动，避免 pending 已更新导致误判 keep_local→adopt
+    // 注意：哨兵恢复时 baseline 必须以远端为准判定本地是否已改动，避免 pending 已更新导致误判 keep_local 为 adopt
     const decision = decideCollaborationReconciliation({
       path: accepted.localPath,
       baseline: synthetic,

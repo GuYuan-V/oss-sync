@@ -15,6 +15,7 @@ import type {
 export { isOrdinarySyncConflict409 } from "./ordinary-sync-conflict-409.js";
 export type { OrdinarySyncConflict409 } from "./ordinary-sync-conflict-409.js";
 
+/** 解析器所需的基线读写能力 */
 export interface OrdinarySyncResolverBaseline {
   readonly get: (path: string) => BaselineEntry | null;
   readonly set: (path: string, entry: BaselineEntry) => void;
@@ -24,6 +25,7 @@ export interface OrdinarySyncResolverBaseline {
   readonly removePendingForPath: (path: string) => void;
 }
 
+/** 解析器所需的下载与上传能力 */
 export interface OrdinarySyncResolverApi {
   readonly downloadV2: (
     vaultId: string,
@@ -43,6 +45,7 @@ export interface OrdinarySyncResolverApi {
   ) => Promise<SyncFileMeta>;
 }
 
+/** 解析器依赖；now 与 createOperationID 可注入以便测试 */
 export interface OrdinarySyncResolverDeps {
   readonly baseline: OrdinarySyncResolverBaseline;
   readonly fileAccess: OrdinarySyncFileAccess;
@@ -56,6 +59,7 @@ export interface OrdinarySyncResolverDeps {
   readonly now: () => number;
 }
 
+/** 解析输入；expectedHash 为发起时记录的本地哈希，用于检测期间是否又被编辑 */
 export interface OrdinarySyncResolveInput {
   readonly vaultId: string;
   readonly path: string;
@@ -86,6 +90,7 @@ type Conflict = {
 export class OrdinarySyncConflictResolver {
   constructor(private readonly deps: OrdinarySyncResolverDeps) {}
 
+  /** 以远端为准对账本地；本地已变或无法合并时转为冲突 */
   async resolve(input: OrdinarySyncResolveInput): Promise<OrdinarySyncActionOutcome> {
     const expected: ExpectedLocalState = { kind: "hash", hash: input.expectedHash };
     if (input.remote.deleted) {
@@ -113,6 +118,7 @@ export class OrdinarySyncConflictResolver {
       remoteBytes: copyBytes(downloaded.content),
       remote: downloaded.meta,
     };
+    // 哈希相等后再逐字节比对，避免哈希碰撞导致跳过远端写入
     if (change.local.hash === change.remote.hash &&
         change.local.bytes.length === change.remoteBytes.length &&
         change.local.bytes.every((value, index) => value === change.remoteBytes[index])) {

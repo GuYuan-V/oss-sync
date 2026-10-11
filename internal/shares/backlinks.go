@@ -12,8 +12,11 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
+// wikilinkRe 匹配 [[目标]] 与 [[目标|别名]] 形式的 wiki 链接
 var wikilinkRe = regexp.MustCompile(`\[\[([^\[\]\|]+)(?:\|[^\[\]]+)?\]\]`)
 
+// collectBacklinks 读取源文件正文，解析其中 wiki 链接指向的目标，
+// 同一目标去重后按库内相对路径返回，源文件不存在时返回错误
 func (h *Handler) collectBacklinks(userID uint, vaultID, sourcePath string) ([]string, error) {
 	var f models.File
 	if err := h.DB.Where(
@@ -72,6 +75,7 @@ func (h *Handler) collectBacklinks(userID uint, vaultID, sourcePath string) ([]s
 	return out, nil
 }
 
+// isSafeSharePath 判断分享路径是否为库内相对路径，拒绝绝对路径、上级目录与盘符前缀
 func isSafeSharePath(p string) bool {
 	if p == "" || filepath.IsAbs(p) || strings.HasPrefix(p, "/") || strings.HasPrefix(p, "\\") {
 		return false
@@ -86,6 +90,7 @@ func isSafeSharePath(p string) bool {
 	return true
 }
 
+// normalizeRelPath 将反斜杠路径统一为斜杠并清理为规范的库内相对路径
 func normalizeRelPath(p string) string {
 	p = strings.ReplaceAll(p, "\\", "/")
 	p = strings.TrimPrefix(p, "./")
@@ -93,10 +98,12 @@ func normalizeRelPath(p string) string {
 	return path.Clean(p)
 }
 
+// readAbsFile 读取磁盘文件，作为可注入的读文件入口便于测试替换
 var readAbsFile = func(p string) ([]byte, error) {
 	return readFileBytes(p)
 }
 
+// readFileBytes 读取整个文件内容
 func readFileBytes(p string) ([]byte, error) {
 	return os.ReadFile(p)
 }

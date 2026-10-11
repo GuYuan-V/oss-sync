@@ -2,6 +2,7 @@ import { App, Modal, Notice } from "obsidian";
 import type { RecycleBinFile } from "./api";
 import type OSSPlugin from "./main";
 
+/** 回收站管理弹窗；恢复后重新拉取列表 */
 export class RecycleManagerModal extends Modal {
   constructor(app: App, private readonly plugin: OSSPlugin) {
     super(app);
@@ -17,6 +18,7 @@ export class RecycleManagerModal extends Modal {
     this.contentEl.empty();
   }
 
+  /** 拉取回收站列表并渲染；未绑定仓库时给出引导 */
   private async load(): Promise<void> {
     const vaultID = this.plugin.settings.vaultId;
     this.contentEl.empty();
@@ -45,6 +47,7 @@ export class RecycleManagerModal extends Modal {
     }
   }
 
+  /** 渲染单行回收站条目；can_restore 为 false 时禁用恢复按钮 */
   private renderFile(vaultID: string, file: RecycleBinFile): void {
     const row = this.contentEl.createDiv({ cls: "oss-sidebar-recycle-row" });
     row.createDiv({ cls: "oss-manager-path", text: file.path });
@@ -79,6 +82,7 @@ export class RecycleManagerModal extends Modal {
     }
   }
 
+  /** 彻底删除前需用户确认，防止误操作不可恢复 */
   private async delete(vaultID: string, fileID: number, path: string): Promise<void> {
     if (!window.confirm(this.plugin.t("recycle.deleteConfirm", { path }))) return;
     try {

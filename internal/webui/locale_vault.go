@@ -1,5 +1,6 @@
 package webui
 
+// 本地化条目：仓库列表、文件、设置、分享、回收站、修改记录与成员页面文案
 func init() {
 	registerEntries(map[string][2]string{
 		// vault 开头的键用于仓库列表、创建、文件与设置页面
@@ -40,6 +41,8 @@ func init() {
 		"vault.public_blog":                   {"公开首页博客", "Public blog homepage"},
 		"vault.public_blog_hint":              {"开启后，此 Vault 会显示在服务器首页，并可通过 /b/%s 访问。", "When enabled, this vault appears on the server homepage and is accessible via /b/%s."},
 		"vault.public_blog_unsupported":       {"该模板不支持公开博客。", "This template does not support public blogs."},
+		"vault.allow_raw_html":                {"允许文章内原始 HTML", "Allow raw HTML in articles"},
+		"vault.allow_raw_html_hint":           {"开启后文章中的 HTML 标签将原样输出，脚本在独立沙箱 iframe 中执行，无法读取本页 cookie、存储或 DOM。未开启时一律转义。只对可信内容仓库开启。", "When enabled, HTML tags in articles render as-is and scripts run inside an isolated sandbox iframe that cannot read this page's cookies, storage or DOM. When off they are always escaped. Enable only for trusted content."},
 		"vault.custom_header":                 {"自定义页眉", "Custom header"},
 		"vault.custom_footer":                 {"自定义页脚", "Custom footer"},
 		"vault.custom_fragments_desc":         {"仓库的自定义页眉/页脚只会影响该仓库的公开页面（首页与分享页），可用于品牌与说明。", "Custom header/footer only affects this vault's public pages (blog homepage and shares), useful for branding and notices."},
@@ -70,6 +73,13 @@ func init() {
 		"share.path_placeholder":     {"Notes/文章.md", "Notes/article.md"},
 		"share.folder_share":         {"文件夹分享", "Folder share"},
 		"share.allow_copy":           {"允许复制", "Allow copy"},
+		"share.visibility":           {"可见范围", "Visibility"},
+		"share.visibility_desc":      {"公开：任何人可访问；登录访问：需登录账号；密码访问：需输入密码。", "Public: anyone; Login: signed-in accounts; Password: requires the share password."},
+		"share.visibility_public":    {"公开", "Public"},
+		"share.visibility_login":     {"登录访问", "Login required"},
+		"share.visibility_password":  {"密码访问", "Password"},
+		"share.share_password":       {"访问密码", "Share password"},
+		"share.password_required":    {"密码访问必须设置访问密码", "Password visibility requires a share password"},
 		"share.created_shares":       {"已创建分享", "Created shares"},
 		"share.public_url":           {"公开 URL", "Public URL"},
 		"share.views":                {"浏览量", "Views"},

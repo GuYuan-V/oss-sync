@@ -85,6 +85,7 @@ func (m *Manager) SetFileWriter(writer FileWriter) {
 	m.fileWriter = writer
 }
 
+// pluginInstance 是插件运行时的统一抽象，覆盖 WASM 与可执行两种运行时
 type pluginInstance interface {
 	Invoke(context.Context, PluginRequest) (PluginResponse, error)
 	Close(context.Context) error
@@ -92,24 +93,29 @@ type pluginInstance interface {
 	Registration() ExtensionRegistration
 }
 
+// wasmPluginInstance 包装已编译的 WASM 模块
 type wasmPluginInstance struct {
 	runtime      *Runtime
 	module       wazero.CompiledModule
 	registration ExtensionRegistration
 }
 
+// Invoke 在运行时内执行一次插件调用
 func (p *wasmPluginInstance) Invoke(ctx context.Context, request PluginRequest) (PluginResponse, error) {
 	return p.runtime.Invoke(ctx, p.module, request)
 }
 
+// Close 释放已编译模块
 func (p *wasmPluginInstance) Close(ctx context.Context) error {
 	return p.module.Close(ctx)
 }
 
+// Healthy 恒为真，WASM 模块不存在进程级健康状态
 func (p *wasmPluginInstance) Healthy() bool {
 	return true
 }
 
+// Registration 返回 manifest 推导出的注册信息
 func (p *wasmPluginInstance) Registration() ExtensionRegistration {
 	return p.registration
 }
@@ -140,6 +146,8 @@ func NewManager(ctx context.Context, db *gorm.DB, dataDir string) (*Manager, err
 	}, nil
 }
 
+// LoadEnabled 加载全部已启用插件
+// 单个插件失败不阻塞其余插件，错误合并返回并写入 last_error
 func (m *Manager) LoadEnabled(ctx context.Context) error {
 	var records []models.ServerPlugin
 	if err := m.db.Where("enabled = ?", true).Order("id asc").Find(&records).Error; err != nil {
@@ -161,6 +169,8 @@ func (m *Manager) LoadEnabled(ctx context.Context) error {
 	return errors.Join(loadErrors...)
 }
 
+// orderEnabledRecords 按依赖关系对插件排序，使被依赖者先加载
+// 依赖环直接报错；不在启用集合内的依赖被忽略
 func (m *Manager) orderEnabledRecords(records []models.ServerPlugin) ([]models.ServerPlugin, error) {
 	byID := make(map[string]models.ServerPlugin, len(records))
 	dependencies := make(map[string][]string, len(records))
@@ -205,6 +215,8 @@ func (m *Manager) orderEnabledRecords(records []models.ServerPlugin) ([]models.S
 	return ordered, nil
 }
 
+// List 返回全部已安装插件的管理面视图
+// 按 ID 升序，附加关联摘要、运行中注册信息与磁盘实际占用
 func (m *Manager) List() ([]PluginInfo, error) {
 	var records []models.ServerPlugin
 	if err := m.db.Order("id asc").Find(&records).Error; err != nil {
@@ -376,6 +388,8 @@ func (m *Manager) CheckPluginUpdates(ctx context.Context) ([]PluginUpdateInfo, e
 	return results, nil
 }
 
+// fetchPluginUpdate 查询作者的更新接口，取回最新版本号、下载地址与说明
+// 响应体限制为 1 MiB，字段值统一去除首尾空白
 func (m *Manager) fetchPluginUpdate(ctx context.Context, updateURL string) (version, downloadURL, notes string, err error) {
 	if !validPluginUpdateURL(updateURL) {
 		return "", "", "", errors.New("plugin update endpoint uses an unsafe URL")
@@ -420,6 +434,7 @@ func versionGreater(candidate, current string) bool {
 	return order > 0
 }
 
+// pluginAssociations 查询插件关联的资源，查询失败返回空列表
 func pluginAssociations(db *gorm.DB, pluginID string) []PluginAssociation {
 	var rows []models.ServerPluginAssociation
 	if err := db.Where("plugin_id = ?", pluginID).Order("kind asc, target_id asc").Find(&rows).Error; err != nil {
@@ -432,6 +447,8 @@ func pluginAssociations(db *gorm.DB, pluginID string) []PluginAssociation {
 	return associations
 }
 
+// Install 安装插件包：写入文件、落库，可执行运行时先启停一次验证可启动
+// ID 已存在返回 ErrPluginExists；任何一步失败都会清理已写入的目录
 func (m *Manager) Install(ctx context.Context, reader io.ReaderAt, size int64) (PluginInfo, error) {
 	m.lifecycleMu.Lock()
 	defer m.lifecycleMu.Unlock()
@@ -491,6 +508,8 @@ func (m *Manager) Install(ctx context.Context, reader io.ReaderAt, size int64) (
 	return infoFromRecord(record)
 }
 
+// EnabledThemeOptions 返回内置主题与已启用插件提供的主题选项
+// 分别对应博客主题与控制台主题，manifest 解析失败的插件跳过
 func (m *Manager) EnabledThemeOptions() ([]ThemeOption, []ThemeOption) {
 	blogThemes := []ThemeOption{{Name: "default", Label: "default", Builtin: true}, {Name: "papertrail", Label: "papertrail", Builtin: true, SupportsPublicBlog: true}}
 	consoleThemes := []ThemeOption{{Name: "default", Label: "default", Builtin: true}}
@@ -536,13 +555,16 @@ func (m *Manager) InstallOrReuse(ctx context.Context, reader io.ReaderAt, size i
 }
 
 // Upgrade 替换已安装的插件包，失败时恢复旧运行时
-// 已提交的插件迁移与外部生命周期副作用必须保持向后兼容
+// 已提交的插件迁移与外部生命周期副作用不可回退
 func (m *Manager) Upgrade(ctx context.Context, reader io.ReaderAt, size int64) (PluginInfo, error) {
 	m.lifecycleMu.Lock()
 	defer m.lifecycleMu.Unlock()
 	return m.upgrade(ctx, reader, size)
 }
 
+// upgrade 替换插件包并重新加载
+// 旧目录先暂存，任一步失败时回滚目录、记录与运行时；已提交的迁移与外部副作用不回滚
+// 成功后才删除暂存目录，删除失败仅报错而不影响升级结果
 func (m *Manager) upgrade(ctx context.Context, reader io.ReaderAt, size int64) (info PluginInfo, resultErr error) {
 	packageData, err := ParsePackage(reader, size)
 	if err != nil {
@@ -675,6 +697,7 @@ func (m *Manager) upgrade(ctx context.Context, reader io.ReaderAt, size int64) (
 	return info, nil
 }
 
+// info 读取单个插件的管理面视图
 func (m *Manager) info(id string) (PluginInfo, error) {
 	record, err := m.record(id)
 	if err != nil {
@@ -683,6 +706,8 @@ func (m *Manager) info(id string) (PluginInfo, error) {
 	return infoFromRecord(record)
 }
 
+// validatePackage 预编译 WASM 以在安装与升级前确认模块可用
+// 非 WASM 运行时直接通过
 func (m *Manager) validatePackage(ctx context.Context, packageData Package) error {
 	if manifestRuntime(packageData.Manifest) != RuntimeWASM {
 		return nil
@@ -697,6 +722,8 @@ func (m *Manager) validatePackage(ctx context.Context, packageData Package) erro
 	return nil
 }
 
+// openInstance 按运行时启动插件实例
+// WASM 走编译模块，注册信息由 manifest 推导；可执行运行时启动子进程并由 hostCall 提供宿主服务
 func (m *Manager) openInstance(ctx context.Context, dir string, packageData Package) (pluginInstance, error) {
 	switch manifestRuntime(packageData.Manifest) {
 	case RuntimeWASM:
@@ -722,6 +749,8 @@ func (m *Manager) openInstance(ctx context.Context, dir string, packageData Pack
 	}
 }
 
+// invokeCallback 调用指定插件的回调
+// 插件未加载或实例不健康时报不可用错误
 func (m *Manager) invokeCallback(
 	ctx context.Context,
 	pluginID string,
@@ -738,6 +767,7 @@ func (m *Manager) invokeCallback(
 	return instance.Invoke(ctx, request)
 }
 
+// legacyHookSpecs 把动态钩子投影为管理面的 HookSpec 列表
 func legacyHookSpecs(hooks []RegisteredHook) []HookSpec {
 	result := make([]HookSpec, 0, len(hooks))
 	for _, hook := range hooks {
@@ -746,6 +776,8 @@ func legacyHookSpecs(hooks []RegisteredHook) []HookSpec {
 	return result
 }
 
+// samePackage 判断数据库记录与待安装包是否同一份内容
+// 运行时、manifest 哈希与载荷哈希体积全部一致才视为相同；旧记录缺省载荷字段时回退 wasm 字段
 func samePackage(record models.ServerPlugin, packageData Package) bool {
 	recordRuntime := record.Runtime
 	if recordRuntime == "" {

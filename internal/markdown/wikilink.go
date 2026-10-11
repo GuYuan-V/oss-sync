@@ -168,9 +168,27 @@ func newMarkdown(resolver LinkResolver, assets AssetResolver) goldmark.Markdown 
 	)
 }
 
+// newMarkdownUnsafe 在允许原始 HTML 的 vault 中渲染 Markdown，保留 HTML 标签
+func newMarkdownUnsafe(resolver LinkResolver, assets AssetResolver) goldmark.Markdown {
+	return goldmark.New(
+		goldmark.WithExtensions(extension.GFM, &wikilinkExtension{resolver: resolver, assets: assets}, &highlightExtension{}),
+		goldmark.WithRendererOptions(html.WithHardWraps(), html.WithUnsafe()),
+	)
+}
+
 // RenderMarkdownWithAssets 渲染 Markdown，并通过 resolver 解析 wikilink 与资源地址
 func RenderMarkdownWithAssets(resolver LinkResolver, assets AssetResolver, source string) (string, error) {
 	md := newMarkdown(resolver, assets)
+	var buf strings.Builder
+	if err := md.Convert([]byte(source), &buf); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// RenderMarkdownWithAssetsUnsafe 渲染 Markdown 并保留原始 HTML 标签，仅用于 vault 显式开启 allow_raw_html 的场景
+func RenderMarkdownWithAssetsUnsafe(resolver LinkResolver, assets AssetResolver, source string) (string, error) {
+	md := newMarkdownUnsafe(resolver, assets)
 	var buf strings.Builder
 	if err := md.Convert([]byte(source), &buf); err != nil {
 		return "", err

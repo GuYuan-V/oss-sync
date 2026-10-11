@@ -18,6 +18,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/helantianshen/oss-sync/internal/auth"
+	"github.com/helantianshen/oss-sync/internal/blog"
 	"github.com/helantianshen/oss-sync/internal/config"
 	"github.com/helantianshen/oss-sync/internal/models"
 	"github.com/helantianshen/oss-sync/internal/serverplugin"
@@ -66,15 +67,17 @@ func (h *Handler) SetFileWriter(writer fileContentWriter) {
 
 // layoutData 是所有控制台页面共用的外壳数据
 type layoutData struct {
-	Page             string // 要渲染的页面模板名，如 "overview"
-	Title            string
-	Username         string
-	IsAdmin          bool
-	CSRF             string
-	ShowSidebar      bool // 登录/注册页为 false
-	ActiveGroup      string
-	ActivePage       string
-	ActivePluginID   string
+	Page           string // 要渲染的页面模板名，如 "overview"
+	Title          string
+	Username       string
+	IsAdmin        bool
+	CSRF           string
+	ShowSidebar    bool // 登录/注册页为 false
+	ActiveGroup    string
+	ActivePage     string
+	ActivePluginID string
+	// ActiveSection 是当前插件设置的二级分组名，来自 ?section= 查询参数
+	ActiveSection    string
 	PluginSettings   []pluginNav
 	PluginAdminPages []serverplugin.PluginAdminPage
 	CurrentVault     *vaultNav  // 当前仓库页的上下文
@@ -110,6 +113,8 @@ type vaultNav struct {
 type pluginNav struct {
 	ID   string
 	Name string
+	// Sections 是插件设置内的二级分组名，来自 manifest settings 的 section 字段
+	Sections []string
 }
 
 // templateFuncs 返回控制台模板共用的函数表
@@ -411,7 +416,7 @@ func requestedWebLanguage(c *gin.Context) string {
 			}
 		}
 		tag := strings.TrimSpace(piece)
-		// 取主语言子标签：zh-CN → zh, en-US → en
+		// 取主语言子标签：zh-CN -> zh, en-US -> en
 		if idx := strings.Index(tag, "-"); idx > 0 {
 			tag = tag[:idx]
 		}
@@ -486,6 +491,8 @@ func (h *Handler) render(c *gin.Context, status int, page, title, activeGroup, a
 // 插件通过 manifest 的 settings_visibility 声明可见范围：
 //   - always：插件启用即显示，不依赖模板或主题是否被选用（纯功能插件）
 //   - when_used 或缺省：仅当插件的博客/控制台主题资源被某个仓库选用时显示
+//
+// settings 字段带 section 时导航会展开为二级分组
 func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 	if u == nil {
 		return
@@ -522,17 +529,30 @@ func (h *Handler) setPluginNavigationForUser(ld *layoutData, u *models.User) {
 			continue
 		}
 		if !manifest.SettingsVisibleWhenUsed() {
-			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: plugin.ID, Name: plugin.Name})
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: plugin.ID, Name: plugin.Name, Sections: settingSections(manifest.Settings)})
 			continue
 		}
 		if !manifest.HasThemeResources() {
-			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: plugin.ID, Name: plugin.Name})
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: plugin.ID, Name: plugin.Name, Sections: settingSections(manifest.Settings)})
 			continue
 		}
 		if h.pluginThemeInUse(manifest, usedThemes) {
-			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: plugin.ID, Name: plugin.Name})
+			ld.PluginSettings = append(ld.PluginSettings, pluginNav{ID: plugin.ID, Name: plugin.Name, Sections: settingSections(manifest.Settings)})
 		}
 	}
+}
+
+// settingSections 提取设置字段的分组名，保持出现顺序并去重
+func settingSections(fields []blog.ThemeSettingField) []string {
+	seen := make(map[string]bool, len(fields))
+	var sections []string
+	for _, field := range fields {
+		if field.Section != "" && !seen[field.Section] {
+			seen[field.Section] = true
+			sections = append(sections, field.Section)
+		}
+	}
+	return sections
 }
 
 // usedThemeNames 返回当前用户可访问仓库已选用的博客与控制台主题名集合

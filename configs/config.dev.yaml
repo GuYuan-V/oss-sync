@@ -30,6 +30,8 @@ sync:
   reconcile_interval_hours: 24 # 后台存储对账周期；服务启动时还会立即执行一次
   temp_file_max_age_hours: 24  # 后台清理临时上传文件的最小年龄
   orphan_file_grace_hours: 24  # 后台隔离孤立存储对象前的保护时间
+  # 反代在内网以明文 http 转发 SSE 时打开；令牌会经过未加密链路
+  allow_insecure_query_token: false
 
 update:
   github_repo: "helantianshen/oss-sync" # GitHub Release 仓库（owner/repo）

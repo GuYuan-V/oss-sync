@@ -33,6 +33,19 @@
         <span class="switch-control__track" aria-hidden="true"></span>
         <span>{{.Layout.T "share.allow_copy"}}</span>
       </label>
+      <label>
+        <span>{{.Layout.T "share.visibility"}}</span>
+        <select name="visibility" data-share-visibility>
+          <option value="public">{{.Layout.T "share.visibility_public"}}</option>
+          <option value="login">{{.Layout.T "share.visibility_login"}}</option>
+          <option value="password">{{.Layout.T "share.visibility_password"}}</option>
+        </select>
+        <small>{{.Layout.T "share.visibility_desc"}}</small>
+      </label>
+      <label data-share-password hidden>
+        <span>{{.Layout.T "share.share_password"}}</span>
+        <input type="password" name="share_password" autocomplete="new-password" minlength="4" maxlength="64">
+      </label>
       <button class="button button--primary" type="submit">{{.Layout.T "share.create_share"}}</button>
     </form>
   </article>
@@ -48,7 +61,7 @@
     {{if .Data.Shares}}
     <div class="table-wrap">
       <table>
-        <thead><tr><th>{{$.Layout.T "common.path"}}</th><th>{{$.Layout.T "share.public_url"}}</th><th>{{$.Layout.T "share.views"}}</th><th>{{$.Layout.T "common.created"}}</th><th>{{$.Layout.T "share.allow_copy"}}</th><th>{{$.Layout.T "common.actions"}}</th></tr></thead>
+        <thead><tr><th>{{$.Layout.T "common.path"}}</th><th>{{$.Layout.T "share.public_url"}}</th><th>{{$.Layout.T "share.views"}}</th><th>{{$.Layout.T "common.created"}}</th><th>{{$.Layout.T "share.visibility"}}</th><th>{{$.Layout.T "share.allow_copy"}}</th><th>{{$.Layout.T "common.actions"}}</th></tr></thead>
         <tbody>
           {{range .Data.Shares}}
           <tr>
@@ -56,6 +69,9 @@
             <td><code class="share-url">{{.URL}}</code></td>
             <td>{{.Views}}</td>
             <td><time>{{timeFmt .CreatedAt}}</time></td>
+            <td>
+              <span class="role role--{{if eq .Visibility "public"}}user{{else}}admin{{end}}" data-share-visibility-label>{{if eq .Visibility "public"}}{{$.Layout.T "share.visibility_public"}}{{else if eq .Visibility "login"}}{{$.Layout.T "share.visibility_login"}}{{else}}{{$.Layout.T "share.visibility_password"}}{{end}}</span>
+            </td>
             <td>
               <form method="post" action="/dashboard/vaults/{{$.Data.VaultID}}/shares/{{.ShareID}}/allow_copy" class="inline-form">
                 <input type="hidden" name="_csrf" value="{{$.Layout.CSRF}}">

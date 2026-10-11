@@ -534,6 +534,7 @@ type shareRow struct {
 	URL        string
 	Views      int
 	AllowCopy  bool
+	Visibility string
 	CreatedAt  time.Time
 }
 
@@ -556,9 +557,13 @@ func (h *Handler) sharesPage(c *gin.Context) {
 		return
 	}
 	for _, r := range rows {
+		visibility := r.Visibility
+		if visibility == "" {
+			visibility = "public"
+		}
 		d.Shares = append(d.Shares, shareRow{
 			ShareID: r.ShareID, TargetPath: r.TargetPath, URL: "/p/" + r.ShareID,
-			Views: r.Views, AllowCopy: r.AllowCopy, CreatedAt: r.CreatedAt,
+			Views: r.Views, AllowCopy: r.AllowCopy, Visibility: visibility, CreatedAt: r.CreatedAt,
 		})
 	}
 	ld := layoutData{}
@@ -582,9 +587,14 @@ func (h *Handler) createShare(c *gin.Context) {
 	}
 	isFolder := c.PostForm("is_folder") == "on"
 	allowCopy := c.PostForm("allow_copy") == "on"
+	visibility := strings.TrimSpace(c.PostForm("visibility"))
+	sharePassword := c.PostForm("share_password")
 
 	// 复用 shares 服务生成 ID 与校验
-	if _, err := h.newSharesService().CreateWeb(vault.OwnerID, vault.ID, target, isFolder, allowCopy); err != nil {
+	if _, err := h.newSharesService().CreateWeb(vault.OwnerID, vault.ID, target, isFolder, allowCopy, shares.ShareAccess{
+		Visibility: visibility,
+		Password:   sharePassword,
+	}); err != nil {
 		c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/shares?error="+url.QueryEscape(err.Error()))
 		return
 	}
@@ -894,6 +904,7 @@ type vaultSettingsData struct {
 	RecycleBinDays          int
 	DefaultRecycleDays      int
 	IsPublicBlog            bool
+	AllowRawHTML            bool
 	CustomFragmentsEnabled  bool
 	CanManage               bool
 	Error                   string
@@ -931,6 +942,7 @@ func (h *Handler) vaultSettingsPage(c *gin.Context) {
 			d.ThemeName = setting.ThemeName
 		}
 		d.RecycleBinDays, d.IsPublicBlog = setting.RecycleBinDays, setting.IsPublicBlog
+		d.AllowRawHTML = setting.AllowRawHTML
 		d.CustomHeader, d.CustomFooter = setting.CustomHeader, setting.CustomFooter
 	}
 	for _, theme := range themes {
@@ -983,6 +995,7 @@ func (h *Handler) saveVaultSettings(c *gin.Context) {
 		days = 0
 	}
 	isPublic := c.PostForm("is_public_blog") == "on" && supportsPublic
+	allowRawHTML := c.PostForm("allow_raw_html") == "on"
 	customHeader, customFooter := "", ""
 	if settingspolicy.CustomFragmentsEnabled(h.DB) {
 		customHeader, customFooter = trimCustomHTMLFragment(c.PostForm("custom_header")), trimCustomHTMLFragment(c.PostForm("custom_footer"))
@@ -990,7 +1003,7 @@ func (h *Handler) saveVaultSettings(c *gin.Context) {
 	var setting models.VaultSetting
 	findErr := h.DB.Where("vault_id = ?", vault.ID).First(&setting).Error
 	if errors.Is(findErr, gorm.ErrRecordNotFound) {
-		setting = models.VaultSetting{VaultID: vault.ID, ThemeName: themeName, KeepDirectoryTree: true, RecycleBinDays: days, IsPublicBlog: isPublic, CustomHeader: customHeader, CustomFooter: customFooter}
+		setting = models.VaultSetting{VaultID: vault.ID, ThemeName: themeName, KeepDirectoryTree: true, RecycleBinDays: days, IsPublicBlog: isPublic, AllowRawHTML: allowRawHTML, CustomHeader: customHeader, CustomFooter: customFooter}
 		if err := h.DB.Create(&setting).Error; err != nil {
 			c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/settings?error="+url.QueryEscape(h.t(c, "err.save_failed")))
 			return
@@ -999,7 +1012,7 @@ func (h *Handler) saveVaultSettings(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/dashboard/vaults/"+vault.ID+"/settings?error="+url.QueryEscape(h.t(c, "err.save_failed")))
 		return
 	} else {
-		updates := map[string]any{"theme_name": themeName, "recycle_bin_days": days, "is_public_blog": isPublic}
+		updates := map[string]any{"theme_name": themeName, "recycle_bin_days": days, "is_public_blog": isPublic, "allow_raw_html": allowRawHTML}
 		if settingspolicy.CustomFragmentsEnabled(h.DB) {
 			updates["custom_header"], updates["custom_footer"] = customHeader, customFooter
 		}

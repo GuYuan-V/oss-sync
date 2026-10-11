@@ -1,5 +1,6 @@
 package webui
 
+// 本地化条目：全站通用按钮、表单、分页与导航文案
 func init() {
 	registerEntries(map[string][2]string{
 		"common.delete":                   {"删除", "Delete"},
@@ -46,6 +47,7 @@ func init() {
 		"pagination.prev":                 {"上一页", "Previous"},
 		"pagination.next":                 {"下一页", "Next"},
 		"pagination.per_page":             {"每页", "Per page"},
+		"common.overview":                 {"概览", "Overview"},
 		"common.path":                     {"路径", "Path"},
 		"common.type":                     {"类型", "Type"},
 		"common.size":                     {"大小", "Size"},

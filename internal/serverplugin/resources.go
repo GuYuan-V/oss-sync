@@ -9,14 +9,18 @@ import (
 	"strings"
 )
 
+// resourceMarkerName 是主题资源目录内的归属标记文件名
 const resourceMarkerName = ".oss-plugin-resource.json"
 
+// resourceMarker 记录主题资源目录的归属，用于卸载与冲突检测
 type resourceMarker struct {
 	PluginID   string `json:"plugin_id"`
 	ResourceID string `json:"resource_id"`
 	Name       string `json:"name"`
 }
 
+// syncThemeResources 按 manifest 重建该插件声明的全部主题资源
+// 任一资源失败会清理已写入的部分，避免残留半成品
 func (m *Manager) syncThemeResources(pluginID string, packageData Package) error {
 	if err := m.removeOwnedThemeResources(pluginID); err != nil {
 		return err
@@ -36,6 +40,9 @@ func (m *Manager) syncThemeResources(pluginID string, packageData Package) error
 	return nil
 }
 
+// materializeThemeResource 把资源文件从插件包复制到主题根目录
+// console 为真时落到 console-themes；目标目录已被其他资源占用时报冲突
+// 复制在临时目录完成后整体改名，失败时清理临时目录
 func (m *Manager) materializeThemeResource(pluginID string, resource ThemeResource, files map[string][]byte, console bool) error {
 	root := filepath.Join(filepath.Dir(m.root), "themes")
 	if console {
@@ -102,6 +109,8 @@ func (m *Manager) materializeThemeResource(pluginID string, resource ThemeResour
 	return nil
 }
 
+// removeOwnedThemeResources 删除标记归属为该插件的主题资源目录
+// 无标记或归属不同的目录原样保留，各目录错误合并返回
 func (m *Manager) removeOwnedThemeResources(pluginID string) error {
 	var joined error
 	for _, rootName := range []string{"themes", "console-themes"} {
@@ -134,6 +143,8 @@ func (m *Manager) removeOwnedThemeResources(pluginID string) error {
 	return joined
 }
 
+// readResourceMarker 读取并校验主题资源目录的归属标记
+// 标记缺失返回 os.ErrNotExist，字段不完整视为无效
 func readResourceMarker(dir string) (resourceMarker, error) {
 	raw, err := os.ReadFile(filepath.Join(dir, resourceMarkerName))
 	if err != nil {

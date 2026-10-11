@@ -41,6 +41,15 @@
       </label>
 
       {{if .Data.CanManage}}
+      <label class="switch-control" title="{{.Layout.T "vault.allow_raw_html_hint"}}">
+        <input type="checkbox" name="allow_raw_html" {{if .Data.AllowRawHTML}}checked{{end}}>
+        <span class="switch-control__track" aria-hidden="true"></span>
+        <span>{{.Layout.T "vault.allow_raw_html"}}</span>
+        <small>{{.Layout.T "vault.allow_raw_html_hint"}}</small>
+      </label>
+      {{end}}
+
+      {{if .Data.CanManage}}
       {{if .Data.CustomFragmentsEnabled}}
         <label>
           <span>{{.Layout.T "vault.custom_header"}}</span>

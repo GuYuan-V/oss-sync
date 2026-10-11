@@ -1,5 +1,6 @@
 package webui
 
+// 本地化条目：管理后台与系统设置页面文案
 func init() {
 	registerEntries(map[string][2]string{
 		"admin.all_users":                        {"全部用户", "All users"},
