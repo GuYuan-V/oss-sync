@@ -38,6 +38,9 @@ with tempfile.TemporaryDirectory(prefix='oss-sse-test-') as directory:
     config.write_text('sync:\n  extension:\n    allow_insecure_query_token: true\n')
     run('insecure_query_token_value "$1" false', config)
     assert config.read_text() == 'sync:\n  allow_insecure_query_token: false\n  extension:\n    allow_insecure_query_token: true\n'
+    config.write_text('sync:')
+    run('insecure_query_token_value "$1" true', config)
+    assert config.read_text() == 'sync:\n  allow_insecure_query_token: true\n'
     with lock.open('w') as holder:
         fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
         inode = lock.stat().st_ino

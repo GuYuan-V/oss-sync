@@ -490,6 +490,8 @@ if next_value not in ('true', 'false'):
 if keys:
     lines[keys[0]] = match[1] + next_value + match[3] + (match[4] or '')
 else:
+    if not lines[start - 1].endswith('\n'):
+        lines[start - 1] += '\n'
     lines.insert(start, ' ' * indent + 'allow_insecure_query_token: ' + next_value + '\n')
 metadata = path.stat()
 fd, temporary = tempfile.mkstemp(prefix='.oss-config-', dir=path.parent)
