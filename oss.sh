@@ -437,7 +437,7 @@ manage_modify() {
   value="${2:-}"
   if [[ -z "$choice" ]]; then
     local sse_state='关闭'
-    [[ "$(sed -n 's/^[[:space:]]*allow_insecure_query_token:[[:space:]]*//p' "$INSTALL_DIR/configs/config.prod.yaml" 2>/dev/null | head -1)" == 'true' ]] && sse_state='开启'
+    [[ "$(sed -n 's/^[[:space:]]*allow_insecure_query_token:[[:space:]]*//p' "$DIR/configs/config.prod.yaml" 2>/dev/null | head -1)" == 'true' ]] && sse_state='开启'
     printf '1 修改容量\n2 修改端口\n3 切换 SSE 明文令牌（当前：%s）\n0 返回\n' "$sse_state"
     choice="$(prompt '选择 [0]：')"
     choice="${choice:-0}"
@@ -464,7 +464,7 @@ manage_modify() {
 # toggle_insecure_query_token 切换 config.prod.yaml 中 SSE 查询参数令牌的明文放行
 # 反代在内网以明文 http 转发 SSE 时需要开启，此时令牌会经过未加密链路
 toggle_insecure_query_token() {
-  local config="$INSTALL_DIR/configs/config.prod.yaml"
+  local config="$DIR/configs/config.prod.yaml"
   [[ -f "$config" ]] || fail '未找到配置文件，请先完成安装'
   acquire_lock
   local current
