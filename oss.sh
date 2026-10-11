@@ -690,35 +690,6 @@ manage() {
   done
 }
 
-# sync_self_to_install_dir 处理 curl 管道执行的版本落地问题
-# 管道运行时 stdin 即脚本本身且已被消耗，无法自读内容；
-# 改为从发布地址拉取 oss.sh 写入部署目录，再用磁盘副本继续执行
-sync_self_to_install_dir() {
-  [[ -d "$DIR" ]] || return 0
-  [[ "$(id -u)" == 0 ]] || return 0
-  [[ -f "$DIR/deployment.env" ]] || return 0
-  # 磁盘副本运行时无需处理
-  [[ -n "$SELF" && "$SELF" == "$(readlink -f "$DIR/oss.sh" 2>/dev/null)" ]] && return 0
-  # 能读到脚本文件说明不是管道运行，交由常规更新流程
-  [[ -n "${BASH_SOURCE[0]:-}" && -r "${BASH_SOURCE[0]}" ]] && return 0
-  info '检测到通过 curl 管道运行，先同步脚本到部署目录'
-  local base="${OSS_RELEASE_BASE_URL:-https://gh-proxy.com/https://raw.githubusercontent.com/GuYuan-V/oss-sync/main}"
-  local tmp="$DIR/.oss.sh.self.$$"
-  if curl -fsSL --max-time 60 "$base/oss.sh" -o "$tmp" 2>/dev/null \
-    && bash -n "$tmp" 2>/dev/null \
-    && ! cmp -s "$tmp" "$DIR/oss.sh" 2>/dev/null; then
-    chmod 755 "$tmp"
-    if mv -f "$tmp" "$DIR/oss.sh"; then
-      info "已更新 $DIR/oss.sh"
-    else
-      rm -f "$tmp"
-    fi
-  else
-    rm -f "$tmp"
-    info '脚本已是最新或拉取失败，继续使用当前版本'
-  fi
-}
-
 main() {
   require_runtime
   SELF=""
@@ -731,9 +702,6 @@ main() {
     DIR="$(sed -n 's/^WorkingDirectory=//p' /etc/systemd/system/oss-sync.service)"
   fi
   DIR="${DIR:-/opt/oss-sync}"
-  # curl 管道运行时脚本只存在于内存，先把当前内容落盘到部署目录，
-  # 再以磁盘版本继续执行，避免 oss 命令仍指向旧副本
-  sync_self_to_install_dir
   if [[ "${1:-}" == install || ! -f "$DIR/deployment.env" ]]; then
     [[ -z "${1:-}" || "$1" == install ]] || fail '尚未安装，请先运行 sudo bash oss.sh install'
     if [[ -f "$DIR/deployment.env" ]]; then OSS_INSTALL_DIR="$DIR" deploy install; else deploy install; fi
