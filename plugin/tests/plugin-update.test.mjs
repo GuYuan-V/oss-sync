@@ -475,6 +475,34 @@ test("applyPluginUpdate restores earlier targets when a rename fails midway", as
   }
 });
 
+// Windows 的 rename 不覆盖已存在目标，实现必须先删目标；删除后 rename 失败时目标仍须恢复
+test("applyPluginUpdate removes existing target before rename and restores it on failure", async () => {
+  const { applyPluginUpdate, cleanup } = await loadUpdateModule("src/plugin-update-apply.ts");
+  try {
+    const adapter = makeFakeAdapter(ORIGINAL_FILES);
+    const reload = makeReloadController(() => "0.2.0");
+    // 让第二个文件的 rename 失败，验证其目标已被预先删除但仍能恢复
+    adapter.renameFailFor.add("dir/manifest.json.oss-update-tmp");
+
+    await assert.rejects(
+      applyPluginUpdate({ adapter, reload, dir: "dir", pluginID: "oss-sync", files: updateFiles() }),
+      /rename failed/
+    );
+
+    // 每个 rename 之前都必须先 remove 目标，这是 Windows 覆盖语义的前提
+    const removals = adapter.ops.filter(([op, path]) => op === "remove" && !path.includes(".oss-update-tmp"));
+    assert.ok(removals.length >= 1, "target should be removed before rename");
+
+    // 失败目标同样恢复到备份内容
+    assert.equal(adapter.files.get("dir/manifest.json"), '{"id":"oss-sync","version":"0.1.0"}');
+    assert.equal(adapter.files.get("dir/main.js"), "old-main");
+    assert.equal(adapter.files.get("dir/styles.css"), "old-css");
+    assert.ok(![...adapter.files.keys()].some((path) => path.includes(".oss-update-tmp")));
+  } finally {
+    await cleanup();
+  }
+});
+
 test("applyPluginUpdate handles missing originals when creating the plugin directory", async () => {
   const { applyPluginUpdate, cleanup } = await loadUpdateModule("src/plugin-update-apply.ts");
   try {
