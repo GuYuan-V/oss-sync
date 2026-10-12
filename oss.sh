@@ -3,7 +3,6 @@ set -Eeuo pipefail
 
 fail() { printf '[OSS] 错误: %s\n' "$*" >&2; exit 1; }
 info() { printf '[OSS] %s\n' "$*"; }
-warn() { printf '[OSS] 警告: %s\n' "$*" >&2; }
 prompt() {
   local value=""
   if [[ -r /dev/tty ]] && { exec 3</dev/tty; } 2>/dev/null; then
@@ -401,22 +400,7 @@ print_menu() {
 
 acquire_lock() {
   exec 9>/run/lock/oss-sync-deploy.lock
-  flock -n 9 && return 0
-  # 锁被占用时只报告持锁进程，由用户决定是否终止
-  # 不自动 kill：部署可能正在写二进制或改 systemd 单元，强杀会留下半成品状态
-  local holders
-  holders="$(fuser /run/lock/oss-sync-deploy.lock 2>/dev/null | tr -dc '0-9 ')"
-  local pid reported=0
-  for pid in $holders; do
-    [[ "$pid" == "$$" ]] && continue
-    [[ -r "/proc/$pid/cmdline" ]] || continue
-    warn "进程 $pid 持有锁：$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)"
-    reported=1
-  done
-  if [[ "$reported" == 1 ]]; then
-    fail '已有部署操作正在运行。确认无部署在跑可执行：fuser -k /run/lock/oss-sync-deploy.lock'
-  fi
-  fail '锁被占用但找不到持有进程，可执行：rm -f /run/lock/oss-sync-deploy.lock 后重试'
+  flock -n 9 || fail '已有部署操作正在运行，请等待操作结束后重试；不要删除锁文件'
 }
 
 manage_update() {
@@ -450,8 +434,9 @@ manage_modify() {
   choice="${1:-}"
   value="${2:-}"
   if [[ -z "$choice" ]]; then
-    local sse_state='关闭'
-    [[ "$(sed -n 's/^[[:space:]]*allow_insecure_query_token:[[:space:]]*//p' "$DIR/configs/config.prod.yaml" 2>/dev/null | head -1)" == 'true' ]] && sse_state='开启'
+    local sse_state='关闭' sse_value
+    sse_value="$(insecure_query_token_value "$DIR/configs/config.prod.yaml")"
+    [[ "$sse_value" == 'true' ]] && sse_state='开启'
     printf '1 修改容量\n2 修改端口\n3 切换 SSE 明文令牌（当前：%s）\n0 返回\n' "$sse_state"
     choice="$(prompt '选择 [0]：')"
     choice="${choice:-0}"
@@ -473,14 +458,65 @@ manage_modify() {
   esac
 }
 
-# toggle_insecure_query_token 切换 config.prod.yaml 中 SSE 查询参数令牌的明文放行
+# insecure_query_token_value 读取或原子更新 sync 段的明文令牌开关，保留其他配置与文件权限
+insecure_query_token_value() {
+  python3 - "$1" "${2:-}" <<'PYCONFIG'
+import os, re, stat, sys, tempfile
+from pathlib import Path
+path = Path(sys.argv[1])
+lines = path.read_text().splitlines(keepends=True)
+sections = [i for i, line in enumerate(lines) if re.fullmatch(r"sync:\s*(?:#.*)?", line.strip("\r\n"))]
+if len(sections) != 1:
+    sys.exit('配置需要唯一的 sync 段，未修改文件')
+start = sections[0] + 1
+end = next((i for i in range(start, len(lines)) if re.match(r"^[^\s#].*:", lines[i])), len(lines))
+indent = min((len(re.match(r" *", lines[i])[0]) for i in range(start, end) if re.match(r" +[^ #].*:", lines[i])), default=2)
+keys = [i for i in range(start, end) if lines[i].startswith(" " * indent + "allow_insecure_query_token:")]
+if len(keys) > 1:
+    sys.exit('sync 段存在重复开关，未修改文件')
+current = 'false'
+match = None
+if keys:
+    match = re.fullmatch(r"( +allow_insecure_query_token: *)(true|false)([ \t]*(?:#.*)?)(\r?\n)?", lines[keys[0]])
+    if not match:
+        sys.exit('明文令牌开关必须为 true 或 false，未修改文件')
+    current = match[2]
+if not sys.argv[2]:
+    print(current)
+    sys.exit(0)
+next_value = sys.argv[2]
+if next_value not in ('true', 'false'):
+    sys.exit('无效开关值')
+if keys:
+    lines[keys[0]] = match[1] + next_value + match[3] + (match[4] or '')
+else:
+    if not lines[start - 1].endswith('\n'):
+        lines[start - 1] += '\n'
+    lines.insert(start, ' ' * indent + 'allow_insecure_query_token: ' + next_value + '\n')
+metadata = path.stat()
+fd, temporary = tempfile.mkstemp(prefix='.oss-config-', dir=path.parent)
+try:
+    with os.fdopen(fd, 'w') as output:
+        output.write(''.join(lines))
+        output.flush()
+        os.fchmod(output.fileno(), stat.S_IMODE(metadata.st_mode))
+        os.fchown(output.fileno(), metadata.st_uid, metadata.st_gid)
+        os.fsync(output.fileno())
+    os.replace(temporary, path)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+PYCONFIG
+}
+
+# toggle_insecure_query_token 切换 SSE 明文令牌设置，退出子进程时释放部署锁
 # 反代在内网以明文 http 转发 SSE 时需要开启，此时令牌会经过未加密链路
-toggle_insecure_query_token() {
+toggle_insecure_query_token() (
   local config="$DIR/configs/config.prod.yaml"
   [[ -f "$config" ]] || fail '未找到配置文件，请先完成安装'
   acquire_lock
   local current
-  current="$(sed -n 's/^[[:space:]]*allow_insecure_query_token:[[:space:]]*//p' "$config" | head -1)"
+  current="$(insecure_query_token_value "$config")"
   local state='关闭'
   [[ "$current" == 'true' ]] && state='开启'
   printf 'SSE 明文令牌当前为：%s\n' "$state"
@@ -490,17 +526,10 @@ toggle_insecure_query_token() {
   [[ "$answer" == 'y' || "$answer" == 'Y' ]] || return 0
   local next='true'
   [[ "$current" == 'true' ]] && next='false'
-  if grep -qE '^[[:space:]]*allow_insecure_query_token:' "$config"; then
-    sed -i "s/^[[:space:]]*allow_insecure_query_token:.*/  allow_insecure_query_token: $next/" "$config"
-  else
-    # 缺少该键时追加到 sync: 段末尾，保持既有缩进风格
-    sed -i "/^sync:/a\\  allow_insecure_query_token: $next" "$config"
-  fi
-  chown root:oss-sync "$config" 2>/dev/null || true
-  chmod 640 "$config" 2>/dev/null || true
+  insecure_query_token_value "$config" "$next"
   printf 'SSE 明文令牌已切换为 %s\n' "$([[ "$next" == 'true' ]] && echo 开启 || echo 关闭)"
   printf '重启服务后生效：systemctl restart oss-sync\n'
-}
+)
 
 manage_uninstall() {
   printf '1 卸载全部（同时删除数据）\n2 保留数据\n0 返回\n'
@@ -656,40 +685,12 @@ manage() {
       apply-web-update) manage_apply_web_update ;;
       *) fail '无效操作' ;;
     esac
+    exec 9>&-
     # 命令行一次性调用执行完即退出；交互模式返回主菜单。
     if [[ -n "${1:-}" ]]; then return 0; fi
     if ((MENU_EXIT)); then return 0; fi
     choice=""
   done
-}
-
-# sync_self_to_install_dir 处理 curl 管道执行的版本落地问题
-# 管道运行时 stdin 即脚本本身且已被消耗，无法自读内容；
-# 改为从发布地址拉取 oss.sh 写入部署目录，再用磁盘副本继续执行
-sync_self_to_install_dir() {
-  [[ -d "$DIR" ]] || return 0
-  [[ "$(id -u)" == 0 ]] || return 0
-  [[ -f "$DIR/deployment.env" ]] || return 0
-  # 磁盘副本运行时无需处理
-  [[ -n "$SELF" && "$SELF" == "$(readlink -f "$DIR/oss.sh" 2>/dev/null)" ]] && return 0
-  # 能读到脚本文件说明不是管道运行，交由常规更新流程
-  [[ -n "${BASH_SOURCE[0]:-}" && -r "${BASH_SOURCE[0]}" ]] && return 0
-  info '检测到通过 curl 管道运行，先同步脚本到部署目录'
-  local base="${OSS_RELEASE_BASE_URL:-https://gh-proxy.com/https://raw.githubusercontent.com/GuYuan-V/oss-sync/main}"
-  local tmp="$DIR/.oss.sh.self.$$"
-  if curl -fsSL --max-time 60 "$base/oss.sh" -o "$tmp" 2>/dev/null \
-    && bash -n "$tmp" 2>/dev/null \
-    && ! cmp -s "$tmp" "$DIR/oss.sh" 2>/dev/null; then
-    chmod 755 "$tmp"
-    if mv -f "$tmp" "$DIR/oss.sh"; then
-      info "已更新 $DIR/oss.sh"
-    else
-      rm -f "$tmp"
-    fi
-  else
-    rm -f "$tmp"
-    info '脚本已是最新或拉取失败，继续使用当前版本'
-  fi
 }
 
 main() {
@@ -704,9 +705,6 @@ main() {
     DIR="$(sed -n 's/^WorkingDirectory=//p' /etc/systemd/system/oss-sync.service)"
   fi
   DIR="${DIR:-/opt/oss-sync}"
-  # curl 管道运行时脚本只存在于内存，先把当前内容落盘到部署目录，
-  # 再以磁盘版本继续执行，避免 oss 命令仍指向旧副本
-  sync_self_to_install_dir
   if [[ "${1:-}" == install || ! -f "$DIR/deployment.env" ]]; then
     [[ -z "${1:-}" || "$1" == install ]] || fail '尚未安装，请先运行 sudo bash oss.sh install'
     if [[ -f "$DIR/deployment.env" ]]; then OSS_INSTALL_DIR="$DIR" deploy install; else deploy install; fi
