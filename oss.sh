@@ -400,13 +400,12 @@ print_menu() {
 
 acquire_lock() {
   exec 9>/run/lock/oss-sync-deploy.lock
-  flock -n 9 || fail '已有部署操作正在运行'
+  flock -n 9 || fail '已有部署操作正在运行，请等待操作结束后重试；不要删除锁文件'
 }
 
 manage_update() {
   local source_url="${OSS_RELEASE_PROXY:-}"
   if [[ -n "$source_url" ]]; then
-    acquire_lock
     OSS_INSTALL_DIR="$DIR" OSS_RELEASE_PROXY="$source_url" deploy install
     return 0
   fi
@@ -427,7 +426,6 @@ manage_update() {
     https://*) source_url="$selection" ;;
     *) fail '无效更新源' ;;
   esac
-  acquire_lock
   OSS_INSTALL_DIR="$DIR" OSS_RELEASE_PROXY="$source_url" deploy install
 }
 
@@ -436,25 +434,102 @@ manage_modify() {
   choice="${1:-}"
   value="${2:-}"
   if [[ -z "$choice" ]]; then
-    printf '1 修改容量\n2 修改端口\n0 返回\n'
+    local sse_state='关闭' sse_value
+    sse_value="$(insecure_query_token_value "$DIR/configs/config.prod.yaml")"
+    [[ "$sse_value" == 'true' ]] && sse_state='开启'
+    printf '1 修改容量\n2 修改端口\n3 切换 SSE 明文令牌（当前：%s）\n0 返回\n' "$sse_state"
     choice="$(prompt '选择 [0]：')"
     choice="${choice:-0}"
   fi
   case "$choice" in
     1|storage)
-      acquire_lock
       [[ -n "$value" ]] || value="$(prompt "容量上限 GiB（当前 ${DEPLOY_LIMIT:-0}，0 不限）：")"
       OSS_INSTALL_DIR="$DIR" OSS_STORAGE_LIMIT_GB="$value" deploy configure
       ;;
     2|port)
-      acquire_lock
       [[ -n "$value" ]] || value="$(prompt "新端口（当前 ${DEPLOY_PORT:-8080}：")"
       OSS_INSTALL_DIR="$DIR" OSS_PORT="$value" deploy configure
+      ;;
+    3|sse)
+      toggle_insecure_query_token
       ;;
     0) return 0 ;;
     *) fail '无效操作' ;;
   esac
 }
+
+# insecure_query_token_value 读取或原子更新 sync 段的明文令牌开关，保留其他配置与文件权限
+insecure_query_token_value() {
+  python3 - "$1" "${2:-}" <<'PYCONFIG'
+import os, re, stat, sys, tempfile
+from pathlib import Path
+path = Path(sys.argv[1])
+lines = path.read_text().splitlines(keepends=True)
+sections = [i for i, line in enumerate(lines) if re.fullmatch(r"sync:\s*(?:#.*)?", line.strip("\r\n"))]
+if len(sections) != 1:
+    sys.exit('配置需要唯一的 sync 段，未修改文件')
+start = sections[0] + 1
+end = next((i for i in range(start, len(lines)) if re.match(r"^[^\s#].*:", lines[i])), len(lines))
+indent = min((len(re.match(r" *", lines[i])[0]) for i in range(start, end) if re.match(r" +[^ #].*:", lines[i])), default=2)
+keys = [i for i in range(start, end) if lines[i].startswith(" " * indent + "allow_insecure_query_token:")]
+if len(keys) > 1:
+    sys.exit('sync 段存在重复开关，未修改文件')
+current = 'false'
+match = None
+if keys:
+    match = re.fullmatch(r"( +allow_insecure_query_token: *)(true|false)([ \t]*(?:#.*)?)(\r?\n)?", lines[keys[0]])
+    if not match:
+        sys.exit('明文令牌开关必须为 true 或 false，未修改文件')
+    current = match[2]
+if not sys.argv[2]:
+    print(current)
+    sys.exit(0)
+next_value = sys.argv[2]
+if next_value not in ('true', 'false'):
+    sys.exit('无效开关值')
+if keys:
+    lines[keys[0]] = match[1] + next_value + match[3] + (match[4] or '')
+else:
+    if not lines[start - 1].endswith('\n'):
+        lines[start - 1] += '\n'
+    lines.insert(start, ' ' * indent + 'allow_insecure_query_token: ' + next_value + '\n')
+metadata = path.stat()
+fd, temporary = tempfile.mkstemp(prefix='.oss-config-', dir=path.parent)
+try:
+    with os.fdopen(fd, 'w') as output:
+        output.write(''.join(lines))
+        output.flush()
+        os.fchmod(output.fileno(), stat.S_IMODE(metadata.st_mode))
+        os.fchown(output.fileno(), metadata.st_uid, metadata.st_gid)
+        os.fsync(output.fileno())
+    os.replace(temporary, path)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+PYCONFIG
+}
+
+# toggle_insecure_query_token 切换 SSE 明文令牌设置，退出子进程时释放部署锁
+# 反代在内网以明文 http 转发 SSE 时需要开启，此时令牌会经过未加密链路
+toggle_insecure_query_token() (
+  local config="$DIR/configs/config.prod.yaml"
+  [[ -f "$config" ]] || fail '未找到配置文件，请先完成安装'
+  acquire_lock
+  local current
+  current="$(insecure_query_token_value "$config")"
+  local state='关闭'
+  [[ "$current" == 'true' ]] && state='开启'
+  printf 'SSE 明文令牌当前为：%s\n' "$state"
+  printf '开启后 JWT 会出现在 URL 查询参数中，明文 http 链路段可被同链路设备观察\n'
+  local answer
+  answer="$(prompt '切换为相反状态？[y/N]：')"
+  [[ "$answer" == 'y' || "$answer" == 'Y' ]] || return 0
+  local next='true'
+  [[ "$current" == 'true' ]] && next='false'
+  insecure_query_token_value "$config" "$next"
+  printf 'SSE 明文令牌已切换为 %s\n' "$([[ "$next" == 'true' ]] && echo 开启 || echo 关闭)"
+  printf '重启服务后生效：systemctl restart oss-sync\n'
+)
 
 manage_uninstall() {
   printf '1 卸载全部（同时删除数据）\n2 保留数据\n0 返回\n'
@@ -610,6 +685,7 @@ manage() {
       apply-web-update) manage_apply_web_update ;;
       *) fail '无效操作' ;;
     esac
+    exec 9>&-
     # 命令行一次性调用执行完即退出；交互模式返回主菜单。
     if [[ -n "${1:-}" ]]; then return 0; fi
     if ((MENU_EXIT)); then return 0; fi

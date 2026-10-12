@@ -83,11 +83,18 @@ type Asset struct {
 }
 
 // SettingField 声明按 Vault 保存的设置字段
+// 字段集合与宿主的 blog.ThemeSettingField 逐字对应，
+// 缺失的字段会在 registration 覆盖 manifest 声明时退化为纯文本输入
 type SettingField struct {
-	Key       string `json:"key"`
-	Label     string `json:"label"`
-	Type      string `json:"type"`
-	MaxLength int    `json:"max_length,omitempty"`
+	Key         string        `json:"key"`
+	Label       string        `json:"label"`
+	Type        string        `json:"type"`
+	Placeholder string        `json:"placeholder,omitempty"`
+	MaxLength   int           `json:"max_length,omitempty"`
+	Required    bool          `json:"required,omitempty"`
+	MaxItems    int           `json:"max_items,omitempty"`
+	Choices     []string      `json:"choices,omitempty"`
+	Fields      []SettingField `json:"fields,omitempty"`
 	// Section 声明字段所属的二级分组，多个字段可共享同一 section 形成子菜单
 	Section string `json:"section,omitempty"`
 }

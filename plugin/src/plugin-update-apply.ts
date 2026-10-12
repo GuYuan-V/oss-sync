@@ -128,10 +128,14 @@ async function replacePluginFiles(
   }
 
   for (let i = 0; i < files.length; i++) {
+    const target = joinPath(dir, files[i].name);
     try {
-      await adapter.rename(joinPath(dir, temps[i]), joinPath(dir, files[i].name));
+      // Windows 的 rename 不覆盖已存在的目标，先删除再改名
+      await removePath(adapter, target);
+      await adapter.rename(joinPath(dir, temps[i]), target);
     } catch (error) {
-      await restoreTargets(adapter, dir, files, backup, i);
+      // 含当前目标：删除已发生，必须与已覆盖的目标一起恢复
+      await restoreTargets(adapter, dir, files, backup, i + 1);
       await removePaths(adapter, dir, temps.slice(i));
       throw error;
     }
@@ -175,6 +179,11 @@ async function restoreOne(
   } else {
     await adapter.write(path, content);
   }
+}
+
+/** 删除单个文件，不存在时视为成功 */
+async function removePath(adapter: PluginFileAdapter, path: string): Promise<void> {
+  await adapter.remove(path).catch(() => undefined);
 }
 
 /** 并发删除指定路径；单个删除失败被忽略，保证清理路径自身不抛错*/

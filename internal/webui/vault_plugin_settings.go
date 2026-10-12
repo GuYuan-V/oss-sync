@@ -26,6 +26,64 @@ type pluginSettingVaultOption struct {
 	Name string
 }
 
+// mergeSettingFields 按 key 合并两组设置字段
+// base 为基准，override 只更新同名键；base 独有键与 override 新增键均保留
+// 嵌套的 group 子字段递归按同一规则合并
+func mergeSettingFields(base, override []blog.ThemeSettingField) []blog.ThemeSettingField {
+	byKey := make(map[string]blog.ThemeSettingField, len(override))
+	for _, field := range override {
+		byKey[field.Key] = field
+	}
+	merged := make([]blog.ThemeSettingField, 0, len(base)+len(override))
+	used := make(map[string]struct{}, len(base))
+	for _, field := range base {
+		used[field.Key] = struct{}{}
+		if next, ok := byKey[field.Key]; ok {
+			field = mergeSettingField(field, next)
+		}
+		merged = append(merged, field)
+	}
+	for _, field := range override {
+		if _, ok := used[field.Key]; ok {
+			continue
+		}
+		merged = append(merged, field)
+	}
+	return merged
+}
+
+// mergeSettingField 合并单个字段；override 的非零值覆盖 base，嵌套子字段递归合并
+func mergeSettingField(base, override blog.ThemeSettingField) blog.ThemeSettingField {
+	if override.Label != "" {
+		base.Label = override.Label
+	}
+	if override.Type != "" {
+		base.Type = override.Type
+	}
+	if override.Placeholder != "" {
+		base.Placeholder = override.Placeholder
+	}
+	if override.MaxLength != 0 {
+		base.MaxLength = override.MaxLength
+	}
+	if override.Required {
+		base.Required = true
+	}
+	if override.MaxItems != 0 {
+		base.MaxItems = override.MaxItems
+	}
+	if len(override.Choices) > 0 {
+		base.Choices = override.Choices
+	}
+	if len(override.Fields) > 0 {
+		base.Fields = mergeSettingFields(base.Fields, override.Fields)
+	}
+	if override.Section != "" {
+		base.Section = override.Section
+	}
+	return base
+}
+
 // filterSettingsBySection 返回指定分组的设置字段；section 为空时返回全部字段
 func filterSettingsBySection(fields []blog.ThemeSettingField, section string) []blog.ThemeSettingField {
 	if section == "" {
@@ -350,7 +408,9 @@ func (h *Handler) loadPluginSettings(pluginID, vaultID string) (serverplugin.Man
 	}
 	if h.pluginManager != nil {
 		if registration, ok := h.pluginManager.RegistrationFor(manifest.ID); ok && len(registration.Settings) > 0 {
-			manifest.Settings = registration.Settings
+			// 按 key 合并：manifest 声明为基准，registration 只覆盖同名键
+			// 整体替换会让 Go 侧漏声明 Choices 等字段时把下拉框退化成输入框
+			manifest.Settings = mergeSettingFields(manifest.Settings, registration.Settings)
 		}
 	}
 	if !h.pluginSettingsLinkedToVault(manifest, vaultID) {

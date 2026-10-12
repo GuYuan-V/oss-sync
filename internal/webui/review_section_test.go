@@ -127,3 +127,94 @@ func TestReviewPR13SectionRedirect(t *testing.T) {
 		t.Errorf("redirect %q should keep section=a", location)
 	}
 }
+
+// 按 key 合并设置字段：manifest 的下拉声明不能被 Go 侧漏字段的 registration 覆盖
+func TestMergeSettingFieldsPreservesManifestChoices(t *testing.T) {
+	base := []blog.ThemeSettingField{
+		{Key: "theme", Label: "主题", Type: "select", Choices: []string{"light", "dark"}, Placeholder: "选择主题"},
+		{Key: "title", Label: "标题", Type: "text", MaxLength: 64, Required: true},
+		{Key: "legacy", Label: "旧字段", Type: "text"},
+	}
+	// Go 侧只声明了 key 与 label，其余字段为零值
+	override := []blog.ThemeSettingField{
+		{Key: "theme", Label: "主题模式"},
+		{Key: "extra", Label: "新增字段", Type: "text"},
+	}
+
+	merged := mergeSettingFields(base, override)
+	byKey := map[string]blog.ThemeSettingField{}
+	for _, f := range merged {
+		byKey[f.Key] = f
+	}
+
+	if len(merged) != 4 {
+		t.Fatalf("merged count = %d, want 4", len(merged))
+	}
+	// 同名键的 Choices 与 Placeholder 必须保留，否则下拉框退化成输入框
+	if got := byKey["theme"].Choices; len(got) != 2 || got[0] != "light" || got[1] != "dark" {
+		t.Errorf("theme choices = %v, want [light dark]", got)
+	}
+	if got := byKey["theme"].Placeholder; got != "选择主题" {
+		t.Errorf("theme placeholder = %q, want 选择主题", got)
+	}
+	if got := byKey["theme"].Label; got != "主题模式" {
+		t.Errorf("theme label = %q, want 主题模式 from override", got)
+	}
+	// override 未声明的字段保持 base 原值
+	if got := byKey["title"].MaxLength; got != 64 {
+		t.Errorf("title max length = %d, want 64", got)
+	}
+	if !byKey["title"].Required {
+		t.Error("title required should be preserved")
+	}
+	// base 独有键与 override 新增键都保留
+	if _, ok := byKey["legacy"]; !ok {
+		t.Error("base-only key legacy should be kept")
+	}
+	if _, ok := byKey["extra"]; !ok {
+		t.Error("override-only key extra should be appended")
+	}
+}
+
+// 嵌套 group 的子字段按同一规则递归合并
+func TestMergeSettingFieldsNestedGroup(t *testing.T) {
+	base := []blog.ThemeSettingField{
+		{
+			Key: "group", Label: "分组", Type: "group", MaxItems: 5,
+			Fields: []blog.ThemeSettingField{
+				{Key: "inner", Label: "内层", Type: "select", Choices: []string{"a", "b"}},
+				{Key: "keep", Label: "保留", Type: "text"},
+			},
+		},
+	}
+	override := []blog.ThemeSettingField{
+		{
+			Key: "group",
+			Fields: []blog.ThemeSettingField{
+				{Key: "inner", Label: "内层改"},
+			},
+		},
+	}
+
+	merged := mergeSettingFields(base, override)
+	if len(merged) != 1 {
+		t.Fatalf("merged count = %d, want 1", len(merged))
+	}
+	group := merged[0]
+	if group.MaxItems != 5 {
+		t.Errorf("group max items = %d, want 5", group.MaxItems)
+	}
+	if len(group.Fields) != 2 {
+		t.Fatalf("nested fields = %d, want 2", len(group.Fields))
+	}
+	inner := group.Fields[0]
+	if inner.Label != "内层改" {
+		t.Errorf("inner label = %q, want 内层改", inner.Label)
+	}
+	if len(inner.Choices) != 2 {
+		t.Errorf("inner choices = %v, want [a b] preserved", inner.Choices)
+	}
+	if group.Fields[1].Key != "keep" {
+		t.Errorf("nested base-only field = %q, want keep", group.Fields[1].Key)
+	}
+}
