@@ -376,6 +376,9 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 			c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
 			return
 		}
+		// 首次保存时把旧位置遗留的值并入 VaultSetting.ThemeConfig，
+		// 只覆盖本次声明过的键，避免清掉其他主题写入的配置
+		h.migrateLegacyThemeConfig(vault.ID, manifest.ID, clean)
 	} else if query.Error != nil {
 		c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
 		return
@@ -383,13 +386,29 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
 		return
 	}
-	if manifest.ID == "papertrail-settings" {
-		if err := h.DB.Model(&models.VaultSetting{}).Where("vault_id = ?", vault.ID).Update("theme_config", models.JSONMap(clean)).Error; err != nil {
-			c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
-			return
-		}
-	}
 	c.Redirect(http.StatusSeeOther, redirect+"&saved=1")
+}
+
+// migrateLegacyThemeConfig 把旧位置 VaultSetting.ThemeConfig 的值并入新存储
+// papertrail 的设置曾直接写在 ThemeConfig 上，该字段是 vault 级且与主题无关，
+// 整体覆盖会让其他主题的配置丢失；此处只按本次声明键做定向合并
+func (h *Handler) migrateLegacyThemeConfig(vaultID, pluginID string, clean models.JSONMap) {
+	var themeSetting models.VaultSetting
+	if err := h.DB.Where("vault_id = ?", vaultID).First(&themeSetting).Error; err != nil {
+		return
+	}
+	if len(themeSetting.ThemeConfig) == 0 {
+		return
+	}
+	merged := make(models.JSONMap, len(themeSetting.ThemeConfig)+len(clean))
+	for key, value := range themeSetting.ThemeConfig {
+		merged[key] = value
+	}
+	for key, value := range clean {
+		merged[key] = value
+	}
+	_ = h.DB.Model(&models.VaultSetting{}).Where("vault_id = ?", vaultID).
+		Update("theme_config", merged).Error
 }
 
 func (h *Handler) loadPluginSettings(pluginID, vaultID string) (serverplugin.Manifest, models.JSONMap, error) {

@@ -87,9 +87,57 @@ func publicThemeSettings(dataDir, themeName string) []string {
 	return keys
 }
 
+// filterBuiltinThemeConfig 按内置主题声明的公开键过滤 base 配置
+// papertrail 的设置历史上直接写在 VaultSetting.ThemeConfig 上，
+// 该字段与主题无关，切换到其他内置主题时必须剔除不属于它的键
+func (h *Handler) filterBuiltinThemeConfig(themeName string, base models.JSONMap) models.JSONMap {
+	if len(base) == 0 || h.DB == nil {
+		return base
+	}
+	var plugin models.ServerPlugin
+	if err := h.DB.Where("id = ? AND enabled = ?", "papertrail-settings", true).First(&plugin).Error; err != nil {
+		return base
+	}
+	var manifest struct {
+		Settings []struct {
+			Key string `json:"key"`
+		} `json:"settings"`
+		Registration struct {
+			Settings []struct {
+				Key string `json:"key"`
+			} `json:"settings"`
+		} `json:"registration"`
+	}
+	if err := json.Unmarshal([]byte(plugin.ManifestJSON), &manifest); err != nil {
+		return base
+	}
+	declared := make(map[string]struct{}, len(manifest.Settings)+len(manifest.Registration.Settings))
+	for _, field := range manifest.Settings {
+		declared[field.Key] = struct{}{}
+	}
+	for _, field := range manifest.Registration.Settings {
+		declared[field.Key] = struct{}{}
+	}
+	if len(declared) == 0 {
+		return base
+	}
+	filtered := make(models.JSONMap, len(base))
+	for key, value := range base {
+		if _, ok := declared[key]; ok {
+			filtered[key] = value
+		}
+	}
+	return filtered
+}
+
 func (h *Handler) publicThemeConfig(vaultID, themeName string, base models.JSONMap) models.JSONMap {
+	// 内置主题同样要按自身声明键过滤 base：
+	// VaultSetting.ThemeConfig 是 vault 级字段，可能残留其他主题写入的配置
 	pluginID := themePluginID(h.Cfg.Storage.DataDir, themeName)
-	if pluginID == "" || h.DB == nil {
+	if pluginID == "" {
+		return h.filterBuiltinThemeConfig(themeName, base)
+	}
+	if h.DB == nil {
 		return base
 	}
 	publicSettings := publicThemeSettings(h.Cfg.Storage.DataDir, themeName)
