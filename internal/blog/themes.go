@@ -88,46 +88,20 @@ func publicThemeSettings(dataDir, themeName string) []string {
 }
 
 // filterBuiltinThemeConfig 按内置主题声明的公开键过滤 base 配置
-// papertrail 的设置历史上直接写在 VaultSetting.ThemeConfig 上，
-// 该字段与主题无关，切换到其他内置主题时必须剔除不属于它的键
-func (h *Handler) filterBuiltinThemeConfig(themeName string, base models.JSONMap) models.JSONMap {
-	if len(base) == 0 || h.DB == nil {
-		return base
-	}
-	var plugin models.ServerPlugin
-	if err := h.DB.Where("id = ? AND enabled = ?", "papertrail-settings", true).First(&plugin).Error; err != nil {
-		return base
-	}
-	var manifest struct {
-		Settings []struct {
-			Key string `json:"key"`
-		} `json:"settings"`
-		Registration struct {
-			Settings []struct {
-				Key string `json:"key"`
-			} `json:"settings"`
-		} `json:"registration"`
-	}
-	if err := json.Unmarshal([]byte(plugin.ManifestJSON), &manifest); err != nil {
-		return base
-	}
-	declared := make(map[string]struct{}, len(manifest.Settings)+len(manifest.Registration.Settings))
-	for _, field := range manifest.Settings {
-		declared[field.Key] = struct{}{}
-	}
-	for _, field := range manifest.Registration.Settings {
-		declared[field.Key] = struct{}{}
-	}
+// papertrail 的配置经 syncBuiltinThemeConfig 同步到 VaultSetting.ThemeConfig，
+// 但该字段是 vault 级且与主题无关，会残留其他主题写入的键，此处按声明键剔除
+func (h *Handler) filterBuiltinThemeConfig(vaultID string, base models.JSONMap) models.JSONMap {
+	declared := h.declaredBuiltinSettingKeys()
 	if len(declared) == 0 {
 		return base
 	}
-	filtered := make(models.JSONMap, len(base))
+	config := make(models.JSONMap, len(base))
 	for key, value := range base {
 		if _, ok := declared[key]; ok {
-			filtered[key] = value
+			config[key] = value
 		}
 	}
-	return filtered
+	return config
 }
 
 func (h *Handler) publicThemeConfig(vaultID, themeName string, base models.JSONMap) models.JSONMap {
@@ -135,7 +109,7 @@ func (h *Handler) publicThemeConfig(vaultID, themeName string, base models.JSONM
 	// VaultSetting.ThemeConfig 是 vault 级字段，可能残留其他主题写入的配置
 	pluginID := themePluginID(h.Cfg.Storage.DataDir, themeName)
 	if pluginID == "" {
-		return h.filterBuiltinThemeConfig(themeName, base)
+		return h.filterBuiltinThemeConfig(vaultID, base)
 	}
 	if h.DB == nil {
 		return base

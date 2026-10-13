@@ -1,6 +1,7 @@
 package blog
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,8 +20,7 @@ func TestFilterBuiltinThemeConfigDropsForeignKeys(t *testing.T) {
 	manifest := `{"id":"papertrail-settings","name":"Papertrail","version":"1.0.0","settings":[
 		{"key":"blog_name"},{"key":"description"},{"key":"logo_url"},{"key":"buttons"},
 		{"key":"banner_url"},{"key":"mobile_banner_url"}]}`
-	db := newBuiltinThemeConfigDB(t, manifest)
-	h := &Handler{DB: db}
+	h := newBuiltinThemeConfigHandler(t, manifest)
 
 	base := models.JSONMap{
 		"blog_name":     "我的博客",
@@ -28,7 +28,7 @@ func TestFilterBuiltinThemeConfigDropsForeignKeys(t *testing.T) {
 		"foreign_theme": "来自其他主题的配置",
 		"lolimeow_only": map[string]any{"k": "v"},
 	}
-	filtered := h.filterBuiltinThemeConfig("papertrail", base)
+	filtered := h.filterBuiltinThemeConfig("vault-1", base)
 
 	if _, ok := filtered["foreign_theme"]; ok {
 		t.Error("undeclared key must be dropped")
@@ -45,29 +45,25 @@ func TestFilterBuiltinThemeConfigDropsForeignKeys(t *testing.T) {
 	}
 }
 
-// 插件缺失或未启用时不改动 base，避免公开博客因配置过滤而空白
-func TestFilterBuiltinThemeConfigKeepsBaseWithoutPlugin(t *testing.T) {
+// 未注入声明键提供者时不过滤 base，避免公开博客因缺失白名单而空白
+func TestFilterBuiltinThemeConfigKeepsBaseWithoutProvider(t *testing.T) {
 	db := newBuiltinThemeConfigDB(t, `{"id":"papertrail-settings","settings":[{"key":"blog_name"}]}`)
 	h := &Handler{DB: db}
-	if err := db.Model(&models.ServerPlugin{}).Where("id = ?", "papertrail-settings").
-		Update("enabled", false).Error; err != nil {
-		t.Fatal(err)
-	}
 	base := models.JSONMap{"blog_name": "x", "foreign": "y"}
-	filtered := h.filterBuiltinThemeConfig("papertrail", base)
+	filtered := h.filterBuiltinThemeConfig("vault-1", base)
 	if len(filtered) != 2 {
-		t.Errorf("filtered = %v, want base unchanged when plugin disabled", filtered)
+		t.Errorf("filtered = %v, want base unchanged without provider", filtered)
 	}
 }
 
 // 空 base 与非内置主题路径不触发过滤
 func TestFilterBuiltinThemeConfigEmptyBase(t *testing.T) {
-	db := newBuiltinThemeConfigDB(t, `{"id":"papertrail-settings","settings":[{"key":"blog_name"}]}`)
-	h := &Handler{DB: db}
-	if got := h.filterBuiltinThemeConfig("papertrail", nil); got != nil {
-		t.Errorf("nil base = %v, want nil", got)
+	h := newBuiltinThemeConfigHandler(t, `{"id":"papertrail-settings","settings":[{"key":"blog_name"}]}`)
+	// 空 base 得到空配置
+	if got := h.filterBuiltinThemeConfig("vault-1", nil); len(got) != 0 {
+		t.Errorf("nil base = %v, want empty", got)
 	}
-	if got := h.filterBuiltinThemeConfig("papertrail", models.JSONMap{}); len(got) != 0 {
+	if got := h.filterBuiltinThemeConfig("vault-1", models.JSONMap{}); len(got) != 0 {
 		t.Errorf("empty base = %v, want empty", got)
 	}
 }
@@ -75,8 +71,8 @@ func TestFilterBuiltinThemeConfigEmptyBase(t *testing.T) {
 // 公开博客读取配置时，内置主题同样经过键过滤
 func TestPublicThemeConfigFiltersBuiltinTheme(t *testing.T) {
 	manifest := `{"id":"papertrail-settings","settings":[{"key":"blog_name"},{"key":"buttons"}]}`
-	db := newBuiltinThemeConfigDB(t, manifest)
-	h := &Handler{DB: db, Cfg: newThemeConfigHandlerCfg(t)}
+	h := newBuiltinThemeConfigHandler(t, manifest)
+	h.Cfg = newThemeConfigHandlerCfg(t)
 
 	base := models.JSONMap{"blog_name": "公开博客", "buttons": []any{}, "foreign": "x"}
 	got := h.publicThemeConfig("vault-1", "papertrail", base)
@@ -113,6 +109,32 @@ func newBuiltinThemeConfigDB(t *testing.T, manifest string) *gorm.DB {
 	return db
 }
 
+// newBuiltinThemeConfigHandler 建带声明键提供者的 Handler
+// 提供者从 manifest 解析键集合，模拟宿主在 router 中的注入
+func newBuiltinThemeConfigHandler(t *testing.T, manifest string) *Handler {
+	t.Helper()
+	db := newBuiltinThemeConfigDB(t, manifest)
+	var fields []blogThemeSettingFieldStub
+	if err := json.Unmarshal([]byte(manifest), &struct {
+		Settings *[]blogThemeSettingFieldStub `json:"settings"`
+	}{Settings: &fields}); err != nil {
+		t.Fatal(err)
+	}
+	keys := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		if field.Key != "" {
+			keys[field.Key] = struct{}{}
+		}
+	}
+	h := &Handler{DB: db}
+	h.SetBuiltinSettingKeysProvider(func() map[string]struct{} { return keys })
+	return h
+}
+
+type blogThemeSettingFieldStub struct {
+	Key string `json:"key"`
+}
+
 // newThemeConfigHandlerCfg 给出指向临时数据目录的配置，使内置主题判定不落空
 func newThemeConfigHandlerCfg(t *testing.T) *config.Config {
 	t.Helper()
@@ -123,4 +145,22 @@ func newThemeConfigHandlerCfg(t *testing.T) *config.Config {
 	cfg := &config.Config{}
 	cfg.Storage.DataDir = dir
 	return cfg
+}
+
+// 内置主题的配置主存储是 VaultPluginSetting，公开博客必须读到它而非只读 base
+func TestFilterBuiltinThemeConfigReadsPluginSetting(t *testing.T) {
+	manifest := `{"id":"papertrail-settings","settings":[{"key":"blog_name"},{"key":"buttons"}]}`
+	h := newBuiltinThemeConfigHandler(t, manifest)
+	if err := h.DB.AutoMigrate(&models.VaultPluginSetting{}); err != nil {
+		t.Fatal(err)
+	}
+	// 配置经 syncBuiltinThemeConfig 同步进 base 后，过滤不应把它剔掉
+	base := models.JSONMap{"blog_name": "来自插件存储", "buttons": []any{}, "foreign": "x"}
+	got := h.filterBuiltinThemeConfig("vault-1", base)
+	if got["blog_name"] != "来自插件存储" {
+		t.Errorf("blog_name = %v, want 来自插件存储", got["blog_name"])
+	}
+	if _, ok := got["foreign"]; ok {
+		t.Error("undeclared key must still be dropped")
+	}
 }

@@ -91,6 +91,18 @@ func Build(deps Dependencies) (*gin.Engine, error) {
 		deps.PluginManager.SetFileWriter(syncH)
 		blogH.SetPluginHooks(deps.PluginManager)
 		blogH.SetPluginDataHooks(deps.PluginManager)
+		// 内置主题的声明键由 serverplugin 提供；该包已依赖 blog，不能反向引用
+		blogH.SetBuiltinSettingKeysProvider(func() map[string]struct{} {
+			keys := make(map[string]struct{}, 16)
+			for _, manifest := range serverplugin.BuiltinManifests() {
+				for _, field := range manifest.Settings {
+					if field.Key != "" {
+						keys[field.Key] = struct{}{}
+					}
+				}
+			}
+			return keys
+		})
 	}
 	blogH.Register(r)
 

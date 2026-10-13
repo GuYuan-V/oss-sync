@@ -376,9 +376,6 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 			c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
 			return
 		}
-		// 首次保存时把旧位置遗留的值并入 VaultSetting.ThemeConfig，
-		// 只覆盖本次声明过的键，避免清掉其他主题写入的配置
-		h.migrateLegacyThemeConfig(vault.ID, manifest.ID, clean)
 	} else if query.Error != nil {
 		c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
 		return
@@ -386,18 +383,20 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
 		return
 	}
+	// 内置主题的公开配置需要同步到 VaultSetting.ThemeConfig 才能被公开博客读到
+	h.syncBuiltinThemeConfig(vault.ID, manifest.ID, clean)
 	c.Redirect(http.StatusSeeOther, redirect+"&saved=1")
 }
 
-// migrateLegacyThemeConfig 把旧位置 VaultSetting.ThemeConfig 的值并入新存储
-// papertrail 的设置曾直接写在 ThemeConfig 上，该字段是 vault 级且与主题无关，
-// 整体覆盖会让其他主题的配置丢失；此处只按本次声明键做定向合并
-func (h *Handler) migrateLegacyThemeConfig(vaultID, pluginID string, clean models.JSONMap) {
-	var themeSetting models.VaultSetting
-	if err := h.DB.Where("vault_id = ?", vaultID).First(&themeSetting).Error; err != nil {
+// syncBuiltinThemeConfig 把内置主题的公开配置同步到 VaultSetting.ThemeConfig
+// 公开博客首页与 /b/<vault> 都以该字段为 base，内置主题没有 theme.json 白名单，
+// 需要显式同步才能让配置生效；按声明键定向合并，不清掉其他主题写入的配置
+func (h *Handler) syncBuiltinThemeConfig(vaultID, pluginID string, clean models.JSONMap) {
+	if !isBuiltinThemeSettingsPlugin(pluginID) {
 		return
 	}
-	if len(themeSetting.ThemeConfig) == 0 {
+	var themeSetting models.VaultSetting
+	if err := h.DB.Where("vault_id = ?", vaultID).First(&themeSetting).Error; err != nil {
 		return
 	}
 	merged := make(models.JSONMap, len(themeSetting.ThemeConfig)+len(clean))
@@ -447,6 +446,12 @@ func builtinThemeForBuiltinPlugin(pluginID string) string {
 		return builtinPapertrailTheme
 	}
 	return ""
+}
+
+// isBuiltinThemeSettingsPlugin 判断是否为内置主题的设置插件
+// 这类插件的配置必须同步到 VaultSetting.ThemeConfig，公开博客才能读到
+func isBuiltinThemeSettingsPlugin(pluginID string) bool {
+	return builtinThemeForBuiltinPlugin(pluginID) != ""
 }
 
 func (h *Handler) pluginSettingsLinkedToVault(manifest serverplugin.Manifest, vaultID string) bool {

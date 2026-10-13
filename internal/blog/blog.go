@@ -41,6 +41,22 @@ type Handler struct {
 	tpl         *template.Template
 	pluginHooks PluginHookRunner
 	pluginData  PluginDataHookRunner
+	// builtinSettingKeys 提供内置主题设置插件声明的键集合
+	// serverplugin 已依赖本包，不能反向引用，由宿主在启动时注入
+	builtinSettingKeys func() map[string]struct{}
+}
+
+// SetBuiltinSettingKeysProvider 注册内置主题声明键的提供者
+func (h *Handler) SetBuiltinSettingKeysProvider(provider func() map[string]struct{}) {
+	h.builtinSettingKeys = provider
+}
+
+// declaredBuiltinSettingKeys 返回内置主题声明的键；未注入时返回空集合
+func (h *Handler) declaredBuiltinSettingKeys() map[string]struct{} {
+	if h.builtinSettingKeys == nil {
+		return nil
+	}
+	return h.builtinSettingKeys()
 }
 
 // PluginHookRunner 描述博客渲染所需的宿主插件钩子契约
