@@ -384,9 +384,9 @@ Settings: []ossplugin.SettingField{
 },
 ```
 
-`Section` 把设置分组成侧边栏的二级菜单：同一 `Section` 的字段进入同一个子项，`?section=<名称>` 只展示该组，缺省展示全部。`text`、`url`、`textarea` 三类必须声明 `MaxLength` 且在 1-2000 之间，`choice` 必须把 `MaxLength` 留空；每个插件最多 64 个顶层字段。违反会在 ready 帧校验阶段被拒（`设置字段 max_length 不合法`），插件进程启动失败。
+`Section` 把设置分组成侧边栏的二级菜单：同一 `Section` 的字段进入同一个子项，`?section=<名称>` 只展示该组，缺省展示全部。保存某个分区时只提交该组字段，其他组的值从已存配置读回后合并，未展示的字段不会被清空。`text`、`url`、`textarea` 三类必须声明 `MaxLength` 且在 1-2000 之间，`choice` 必须把 `MaxLength` 留空；每个插件最多 64 个顶层字段。违反会在 ready 帧校验阶段被拒（`设置字段 max_length 不合法`），插件进程启动失败。
 
-宿主设置格式支持 `text`、`textarea`、`url`、`choice` 和非嵌套 `group`，但当前 Go SDK 的 `SettingField` 只包含简单字段；`choice` 需要 `choices`，`group` 需要嵌套字段，不能直接用上面的 SDK 类型声明。设置按 Vault 保存；博客主题资源可在 `theme.json` 的 `public_settings` 中声明允许公开的键，宿主只将这些键映射到通用博客字段和 `.ThemeConfigJS`，其他公共路由不会收到 Vault settings。
+宿主设置格式支持 `text`、`textarea`、`url`、`choice` 和非嵌套 `group`，`SettingField` 与宿主格式逐字段对应：`choice` 用 `Choices` 声明选项，`group` 用 `Fields` 声明嵌套字段，`Placeholder`、`Required`、`MaxItems` 均可使用。设置按 Vault 保存；博客主题资源可在 `theme.json` 的 `public_settings` 中声明允许公开的键，宿主只将这些键映射到通用博客字段和 `.ThemeConfigJS`，其他公共路由不会收到 Vault settings。
 
 SDK 读取设置:
 
