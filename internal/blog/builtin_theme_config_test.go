@@ -164,3 +164,13 @@ func TestFilterBuiltinThemeConfigReadsPluginSetting(t *testing.T) {
 		t.Error("undeclared key must still be dropped")
 	}
 }
+
+func TestPublicThemeConfigPreservesStandaloneCustomTheme(t *testing.T) {
+	h := newBuiltinThemeConfigHandler(t, `{"settings":[{"key":"blog_name"}]}`)
+	h.Cfg = newThemeConfigHandlerCfg(t)
+	base := models.JSONMap{"custom_banner": "banner.png"}
+	got := h.publicThemeConfig("vault-1", "standalone-theme", base)
+	if got["custom_banner"] != "banner.png" {
+		t.Fatalf("custom theme config lost: %v", got)
+	}
+}

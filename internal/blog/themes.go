@@ -108,8 +108,11 @@ func (h *Handler) publicThemeConfig(vaultID, themeName string, base models.JSONM
 	// 内置主题同样要按自身声明键过滤 base：
 	// VaultSetting.ThemeConfig 是 vault 级字段，可能残留其他主题写入的配置
 	pluginID := themePluginID(h.Cfg.Storage.DataDir, themeName)
-	if pluginID == "" {
+	if IsBuiltinTheme(themeName) {
 		return h.filterBuiltinThemeConfig(vaultID, base)
+	}
+	if pluginID == "" {
+		return base
 	}
 	if h.DB == nil {
 		return base
