@@ -87,9 +87,34 @@ func publicThemeSettings(dataDir, themeName string) []string {
 	return keys
 }
 
+// filterBuiltinThemeConfig 按内置主题声明的公开键过滤 base 配置
+// papertrail 的配置经 syncBuiltinThemeConfig 同步到 VaultSetting.ThemeConfig，
+// 但该字段是 vault 级且与主题无关，会残留其他主题写入的键，此处按声明键剔除
+func (h *Handler) filterBuiltinThemeConfig(vaultID string, base models.JSONMap) models.JSONMap {
+	declared := h.declaredBuiltinSettingKeys()
+	if len(declared) == 0 {
+		return base
+	}
+	config := make(models.JSONMap, len(base))
+	for key, value := range base {
+		if _, ok := declared[key]; ok {
+			config[key] = value
+		}
+	}
+	return config
+}
+
 func (h *Handler) publicThemeConfig(vaultID, themeName string, base models.JSONMap) models.JSONMap {
+	// 内置主题同样要按自身声明键过滤 base：
+	// VaultSetting.ThemeConfig 是 vault 级字段，可能残留其他主题写入的配置
 	pluginID := themePluginID(h.Cfg.Storage.DataDir, themeName)
-	if pluginID == "" || h.DB == nil {
+	if IsBuiltinTheme(themeName) {
+		return h.filterBuiltinThemeConfig(vaultID, base)
+	}
+	if pluginID == "" {
+		return base
+	}
+	if h.DB == nil {
 		return base
 	}
 	publicSettings := publicThemeSettings(h.Cfg.Storage.DataDir, themeName)

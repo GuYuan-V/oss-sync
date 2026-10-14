@@ -138,6 +138,19 @@ func TestLolimeowThemeRendersThroughHost(t *testing.T) {
 		t.Fatal("home page must not render the folder tree")
 	}
 
+	// 评论区已整体移除：文章页不得出现评论容器、表单或锚点
+	for _, forbidden := range []string{
+		`id="comments-container"`,
+		`id="commentform"`,
+		`id="comment"`,
+		`class="post-comments"`,
+		`class="comment-form`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("comment markup must be removed, found %q", forbidden)
+		}
+	}
+
 	// 静态资源可达且非空
 	for _, asset := range []string{
 		"/themes/" + themeName + "/assets/css/theme.min.css",
@@ -146,7 +159,6 @@ func TestLolimeowThemeRendersThroughHost(t *testing.T) {
 		"/themes/" + themeName + "/assets/js/boxmoe.js",
 		"/themes/" + themeName + "/assets/js/theme.min.js",
 		"/themes/" + themeName + "/assets/js/lib.min.js",
-		"/themes/" + themeName + "/assets/js/comments.js",
 		"/themes/" + themeName + "/assets/images/banner.jpg",
 		"/themes/" + themeName + "/assets/images/favicon.ico",
 		"/themes/" + themeName + "/assets/images/top/meow.gif",

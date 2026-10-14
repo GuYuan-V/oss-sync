@@ -70,10 +70,22 @@ func TestLolimeowPackageInstallsAndEnables(t *testing.T) {
 	if len(registration.AdminPages) != 1 || registration.AdminPages[0].Slug != "theme" {
 		t.Fatalf("admin pages = %+v", registration.AdminPages)
 	}
-	// Go 侧不得声明 settings：SDK 的 SettingField 没有 choices，
-	// 一旦注册就会覆盖 manifest.registration.settings 使下拉退化为输入框
-	if len(registration.Settings) != 0 {
-		t.Fatalf("registration must not declare settings, got %d", len(registration.Settings))
+	// 运行时注册必须带齐 47 个设置与 15 个 choice 选项：
+	// SDK 的 SettingField 曾缺 Choices 字段，导致下拉退化为输入框
+	if len(registration.Settings) != 56 {
+		t.Fatalf("registration settings = %d, want 56", len(registration.Settings))
+	}
+	regChoices := 0
+	for _, field := range registration.Settings {
+		if field.Type == "choice" {
+			regChoices++
+			if len(field.Choices) < 2 {
+				t.Fatalf("choice field %s has %d options", field.Key, len(field.Choices))
+			}
+		}
+	}
+	if regChoices != 17 {
+		t.Fatalf("registration choice fields = %d, want 17", regChoices)
 	}
 
 	// 设置声明来自 manifest，且保留 choices 与默认选项
@@ -85,8 +97,8 @@ func TestLolimeowPackageInstallsAndEnables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse installed manifest: %v", err)
 	}
-	if len(installedManifest.Settings) != 47 {
-		t.Fatalf("manifest settings = %d, want 47", len(installedManifest.Settings))
+	if len(installedManifest.Settings) != 56 {
+		t.Fatalf("manifest settings = %d, want 56", len(installedManifest.Settings))
 	}
 	choiceCount := 0
 	for _, field := range installedManifest.Registration.Settings {
@@ -97,8 +109,22 @@ func TestLolimeowPackageInstallsAndEnables(t *testing.T) {
 			}
 		}
 	}
-	if choiceCount != 15 {
-		t.Fatalf("choice fields = %d, want 15", choiceCount)
+	if choiceCount != 17 {
+		t.Fatalf("choice fields = %d, want 17", choiceCount)
+	}
+
+	// 点赞路由已注册且为公开路由（公开路由免 CSRF，vault 归属由插件自查）
+	var likeAdd, likeStatus bool
+	for _, route := range registration.Routes {
+		if route.Path == "/lolimeow/like" && route.Method == "POST" && route.Auth == "public" {
+			likeAdd = true
+		}
+		if route.Path == "/lolimeow/like" && route.Method == "GET" && route.Auth == "public" {
+			likeStatus = true
+		}
+	}
+	if !likeAdd || !likeStatus {
+		t.Fatalf("like routes missing: add=%v status=%v", likeAdd, likeStatus)
 	}
 
 	// blog.data 钩子可被调用并返回配置

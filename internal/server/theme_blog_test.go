@@ -98,7 +98,14 @@ func TestPaperTrailHomeAndBlogPages(t *testing.T) {
 	if setting.ThemeName != "papertrail" {
 		t.Fatalf("theme = %q, want papertrail", setting.ThemeName)
 	}
-	cfg := blog.ParseBlogThemeConfig(setting.ThemeConfig)
+	// papertrail 的配置主存储是 VaultPluginSetting；
+	// VaultSetting.ThemeConfig 是 vault 级字段，不得被插件设置整体覆盖
+	var pluginSetting models.VaultPluginSetting
+	if err := db.Where("vault_id = ? AND plugin_id = ?", vaultID, "papertrail-settings").
+		First(&pluginSetting).Error; err != nil {
+		t.Fatalf("papertrail plugin setting missing: %v", err)
+	}
+	cfg := blog.ParseBlogThemeConfig(pluginSetting.Config)
 	if cfg.BlogName != "我的笔记" || cfg.LogoSize != 128 || len(cfg.Buttons) != 1 || cfg.Buttons[0].Label != "关于" {
 		t.Fatalf("papertrail config: %+v", cfg)
 	}

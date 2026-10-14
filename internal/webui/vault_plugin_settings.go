@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/helantianshen/oss-sync/internal/blog"
 	"github.com/helantianshen/oss-sync/internal/models"
@@ -368,28 +369,48 @@ func (h *Handler) savePluginSettings(c *gin.Context) {
 		h.renderVaultStatus(c, http.StatusBadRequest, ld, "vault-plugin-settings", h.t(c, "page.plugin_settings", vault.Name, pluginName), d)
 		return
 	}
-	var setting models.VaultPluginSetting
-	query := h.DB.Where("vault_id = ? AND plugin_id = ?", vault.ID, manifest.ID).First(&setting)
-	if errors.Is(query.Error, gorm.ErrRecordNotFound) {
-		setting = models.VaultPluginSetting{VaultID: vault.ID, PluginID: manifest.ID, Config: models.JSONMap(clean)}
-		if err := h.DB.Create(&setting).Error; err != nil {
-			c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
-			return
+	err = h.DB.Transaction(func(tx *gorm.DB) error {
+		var setting models.VaultPluginSetting
+		query := tx.Where("vault_id = ? AND plugin_id = ?", vault.ID, manifest.ID).First(&setting)
+		if errors.Is(query.Error, gorm.ErrRecordNotFound) {
+			setting = models.VaultPluginSetting{VaultID: vault.ID, PluginID: manifest.ID, Config: models.JSONMap(clean)}
+			if err := tx.Create(&setting).Error; err != nil {
+				return err
+			}
+		} else if query.Error != nil {
+			return query.Error
+		} else if err := tx.Model(&setting).Update("config", models.JSONMap(clean)).Error; err != nil {
+			return err
 		}
-	} else if query.Error != nil {
+		return h.syncBuiltinThemeConfig(tx, vault.ID, manifest.ID, clean)
+	})
+	if err != nil {
 		c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
 		return
-	} else if err := h.DB.Model(&setting).Update("config", models.JSONMap(clean)).Error; err != nil {
-		c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
-		return
-	}
-	if manifest.ID == "papertrail-settings" {
-		if err := h.DB.Model(&models.VaultSetting{}).Where("vault_id = ?", vault.ID).Update("theme_config", models.JSONMap(clean)).Error; err != nil {
-			c.Redirect(http.StatusSeeOther, errorRedirect+url.QueryEscape(h.t(c, "err.save_failed")))
-			return
-		}
 	}
 	c.Redirect(http.StatusSeeOther, redirect+"&saved=1")
+}
+
+// syncBuiltinThemeConfig 把内置主题的公开配置同步到 VaultSetting.ThemeConfig
+// 公开博客首页与 /b/<vault> 都以该字段为 base，内置主题没有 theme.json 白名单，
+// 需要显式同步才能让配置生效；按声明键定向合并，不清掉其他主题写入的配置
+func (h *Handler) syncBuiltinThemeConfig(tx *gorm.DB, vaultID, pluginID string, clean models.JSONMap) error {
+	if !isBuiltinThemeSettingsPlugin(pluginID) {
+		return nil
+	}
+	var themeSetting models.VaultSetting
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("vault_id = ?", vaultID).First(&themeSetting).Error; err != nil {
+		return err
+	}
+	merged := make(models.JSONMap, len(themeSetting.ThemeConfig)+len(clean))
+	for key, value := range themeSetting.ThemeConfig {
+		merged[key] = value
+	}
+	for key, value := range clean {
+		merged[key] = value
+	}
+	return tx.Model(&models.VaultSetting{}).Where("vault_id = ?", vaultID).
+		Update("theme_config", merged).Error
 }
 
 func (h *Handler) loadPluginSettings(pluginID, vaultID string) (serverplugin.Manifest, models.JSONMap, error) {
@@ -428,6 +449,12 @@ func builtinThemeForBuiltinPlugin(pluginID string) string {
 		return builtinPapertrailTheme
 	}
 	return ""
+}
+
+// isBuiltinThemeSettingsPlugin 判断是否为内置主题的设置插件
+// 这类插件的配置必须同步到 VaultSetting.ThemeConfig，公开博客才能读到
+func isBuiltinThemeSettingsPlugin(pluginID string) bool {
+	return builtinThemeForBuiltinPlugin(pluginID) != ""
 }
 
 func (h *Handler) pluginSettingsLinkedToVault(manifest serverplugin.Manifest, vaultID string) bool {
