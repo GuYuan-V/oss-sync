@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN" data-template="shirone" data-wallpaper="banner" data-layout="list" data-texture-preset="starlight">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{if .IsHome}}{{.Description}}{{else}}{{.ArticlePost.Summary}}{{end}}">
+  <meta name="color-scheme" content="light dark">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css">
+  <link rel="stylesheet" href="{{.ThemeBaseURL}}/textures.css">
+  <script data-cfasync="false" defer src="{{.ThemeBaseURL}}/material-color.js"></script>
+  <script data-cfasync="false" defer src="{{.ThemeBaseURL}}/theme.js"></script>
+</head>
+{{ $blogName := .BlogName }}{{ if not $blogName }}{{ if .IsHome }}{{ $blogName = .Title }}{{ else }}{{ $blogName = "OSS Blog" }}{{ end }}{{ end }}
+<body id="top" data-theme-name="{{.ThemeName}}" data-blog-name-empty="{{if .BlogName}}false{{else}}true{{end}}" data-page="{{if .IsHome}}home{{else if .IsFolder}}folder{{else}}post{{end}}" data-vault-id="{{.VaultID}}" data-home-url="{{.BlogHomeURL}}">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <div id="m3e-texture-canvas" aria-hidden="true"></div>
+  <div id="reading-progress" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      {{if .BlogHomeURL}}<a class="brand" href="{{.BlogHomeURL}}">{{else}}<span class="brand">{{end}}
+        <span class="brand-mark" aria-hidden="true"></span><strong data-blog-name>{{$blogName}}</strong>
+      {{if .BlogHomeURL}}</a>{{else}}</span>{{end}}
+      <nav class="desktop-nav" aria-label="博客导航">
+        {{if .BlogHomeURL}}<a class="nav-link{{if .IsHome}} is-active{{end}}" href="{{.BlogHomeURL}}">{{template "icon-home"}}主页</a>{{end}}
+        {{range .Buttons}}<a class="nav-link" href="{{.URL}}">{{if .IconURL}}<img src="{{.IconURL}}" width="20" height="20" alt="">{{end}}{{.Label}}</a>{{end}}
+      </nav>
+      <div class="topbar-actions">
+        {{if .BlogHomeURL}}<button class="icon-button" data-action="open-search" aria-label="搜索文章" title="搜索文章">{{template "icon-search"}}</button>{{end}}
+        <button class="icon-button" data-action="open-settings" aria-label="显示设置" title="显示设置">{{template "icon-palette"}}</button>
+        <button class="icon-button" data-action="cycle-scheme" aria-label="切换明暗模式" title="切换明暗模式">{{template "icon-scheme"}}</button>
+        <button class="icon-button mobile-menu-button" data-action="open-menu" aria-label="打开导航">{{template "icon-menu"}}</button>
+      </div>
+    </div>
+  </header>
+  <section class="banner" aria-label="博客横幅">
+    <picture>
+      <source media="(max-width: 1023px)" srcset="{{if .MobileBannerURL}}{{.MobileBannerURL}}{{else if .BannerURL}}{{.BannerURL}}{{else}}{{.ThemeBaseURL}}/images/banner-mobile.webp{{end}}">
+      <img src="{{if .BannerURL}}{{.BannerURL}}{{else}}{{.ThemeBaseURL}}/images/banner-desktop.webp{{end}}" alt="" fetchpriority="high">
+    </picture>
+    <div class="banner-copy">
+      <h1{{if .IsHome}} data-blog-name{{end}}>{{if .IsHome}}{{$blogName}}{{else if .IsFolder}}{{.FolderTitle}}{{else}}{{.ArticleTitle}}{{end}}</h1>
+      {{if .IsHome}}<p data-blog-description{{if not .Description}} hidden{{end}}>{{.Description}}</p>{{else if .ArticlePost.Date}}<p><time datetime="{{.ArticlePost.Date}}">{{.ArticlePost.Date}}</time>{{if .ArticlePost.Category}} · {{.ArticlePost.Category}}{{end}}</p>{{end}}
+    </div>
+    <div class="banner-waves" aria-hidden="true"><svg viewBox="0 0 240 42" preserveAspectRatio="none"><defs><path id="wave-a" d="M -768 18 C -752 4 -720 4 -704 18 C -688 32 -656 32 -640 18 C -624 4 -592 4 -576 18 C -560 32 -528 32 -512 18 C -496 4 -464 4 -448 18 C -432 32 -400 32 -384 18 C -368 4 -336 4 -320 18 C -304 32 -272 32 -256 18 C -240 4 -208 4 -192 18 C -176 32 -144 32 -128 18 C -112 4 -80 4 -64 18 C -48 32 -16 32 0 18 C 16 4 48 4 64 18 C 80 32 112 32 128 18 C 144 4 176 4 192 18 C 208 32 240 32 256 18 C 272 4 304 4 320 18 C 336 32 368 32 384 18 C 400 4 432 4 448 18 C 464 32 496 32 512 18 C 528 4 560 4 576 18 C 592 32 624 32 640 18 C 656 4 688 4 704 18 C 720 32 752 32 768 18 C 784 4 816 4 832 18 C 848 32 880 32 896 18 C 912 4 944 4 960 18 C 976 32 1008 32 1024 18 V 60 H -768 Z"/><path id="wave-b" d="M -768 20 C -752 32 -720 32 -704 20 C -688 8 -656 8 -640 20 C -624 32 -592 32 -576 20 C -560 8 -528 8 -512 20 C -496 32 -464 32 -448 20 C -432 8 -400 8 -384 20 C -368 32 -336 32 -320 20 C -304 8 -272 8 -256 20 C -240 32 -208 32 -192 20 C -176 8 -144 8 -128 20 C -112 32 -80 32 -64 20 C -48 8 -16 8 0 20 C 16 32 48 32 64 20 C 80 8 112 8 128 20 C 144 32 176 32 192 20 C 208 8 240 8 256 20 C 272 32 304 32 320 20 C 336 8 368 8 384 20 C 400 32 432 32 448 20 C 464 8 496 8 512 20 C 528 32 560 32 576 20 C 592 8 624 8 640 20 C 656 32 688 32 704 20 C 720 8 752 8 768 20 C 784 32 816 32 832 20 C 848 8 880 8 896 20 C 912 32 944 32 960 20 C 976 8 1008 8 1024 20 V 60 H -768 Z"/></defs><g><use href="#wave-a" class="banner-waves__layer banner-waves__layer--haze"/><use href="#wave-b" class="banner-waves__layer banner-waves__layer--far"/><use href="#wave-a" class="banner-waves__layer banner-waves__layer--middle"/><use href="#wave-b" class="banner-waves__layer banner-waves__layer--near"/></g></svg></div>
+  </section>
+  <div class="page-shell">
+    <aside class="sidebar-primary" aria-label="博客资料">
+      <section class="card profile-card">
+        {{if .LogoURL}}<img class="profile-avatar{{if eq .LogoShape "circle"}} is-circle{{end}}" src="{{.LogoURL}}" alt="{{$blogName}}" width="256" height="256" {{if gt .LogoSize 0}}style="--profile-avatar-size: {{.LogoSize}}px"{{end}}>{{else}}<div class="profile-placeholder" aria-hidden="true">{{template "icon-book"}}</div>{{end}}
+        <p class="profile-name" data-blog-name>{{$blogName}}</p>
+        <p class="profile-bio" data-blog-description{{if not .Description}} hidden{{end}}>{{.Description}}</p>
+        {{if .Buttons}}<nav class="profile-links" aria-label="博客链接">{{range .Buttons}}<a class="chip" href="{{.URL}}">{{if .IconURL}}<img src="{{.IconURL}}" width="18" height="18" alt="">{{end}}{{.Label}}</a>{{end}}</nav>{{end}}
+      </section>
+      {{if .BlogHomeURL}}<div class="sidebar-sticky">
+        <section class="card widget" id="category-widget" data-post-index-widget{{if not .IsHome}} hidden{{end}}><h2 class="widget-title">分类</h2><div id="category-list" class="category-list"></div></section>
+        <section class="card widget" id="tag-widget" data-post-index-widget{{if not .IsHome}} hidden{{end}}><h2 class="widget-title">标签</h2><div id="tag-list" class="tag-list"></div></section>
+      </div>{{end}}
+    </aside>
+    <main id="main-content" class="main-column" tabindex="-1">
+      {{if .CustomHeader}}<section class="card custom-fragment" aria-label="自定义页眉">{{.CustomHeader}}</section>{{end}}
+      <nav class="category-bar" aria-label="文章分类">
+        {{if .BlogHomeURL}}<a class="chip{{if .IsHome}} is-active{{end}}" href="{{.BlogHomeURL}}" aria-label="博客首页">{{template "icon-home"}}</a>{{end}}
+        {{if .IsHome}}<span id="category-bar" class="category-bar-items"></span>{{else}}<span class="breadcrumb">{{if .IsFolder}}文件目录{{else}}阅读文章{{end}}</span>{{end}}
+      </nav>
+      {{if .IsHome}}
+      <div class="filter-bar"><p id="filter-status" role="status" aria-live="polite"></p><button id="clear-filter" class="chip" hidden>清除筛选</button></div>
+      <section id="post-list" class="post-list" aria-label="分享文章">
+        {{range .HomePosts}}<article class="card post-card" data-title="{{.Title}}" data-summary="{{.Summary}}" data-category="{{.Category}}" data-date="{{.Date}}" data-words="{{.WordCount}}">
+          <div class="post-body">
+            <h2 class="post-title"><a class="post-link" href="{{.URL}}">{{.Title}}</a></h2>
+            <div class="post-meta"><time datetime="{{.Date}}">{{template "icon-calendar"}}{{.Date}}</time>{{if .Category}}<button class="meta-category" data-category="{{.Category}}">{{template "icon-folder"}}{{.Category}}</button>{{end}}<span>{{template "icon-book"}}{{.WordCount}} 字</span></div>
+            {{if .Summary}}<p class="post-summary">{{.Summary}}</p>{{end}}
+            {{if .Tags}}<div class="post-tags">{{range .Tags}}<button class="chip" data-tag="{{.}}"># {{.}}</button>{{end}}</div>{{end}}
+          </div>
+          {{if .CoverURL}}<a class="post-cover-link" href="{{.URL}}" tabindex="-1" aria-hidden="true"><img class="post-cover" src="{{.CoverURL}}" alt="" loading="lazy"></a>{{else}}<a class="post-arrow" href="{{.URL}}" tabindex="-1" aria-hidden="true">{{template "icon-next"}}</a>{{end}}
+        </article>{{end}}
+      </section>
+      <div class="card empty-state" id="post-empty" {{if .HomePosts}}hidden{{end}}><h2>暂无文章</h2><p>这里还没有可访问的分享文章。</p></div>
+      <nav id="pagination" class="pagination" aria-label="文章分页"></nav>
+      {{else}}
+      <article class="card article-card">
+        <header class="article-header"><h1>{{if .IsFolder}}{{.FolderTitle}}{{else}}{{.ArticleTitle}}{{end}}</h1>
+          {{if not .IsFolder}}<div class="article-meta"><time datetime="{{.ArticlePost.Date}}">{{.ArticlePost.Date}}</time>{{if .ArticlePost.Category}}<button class="chip" data-category="{{.ArticlePost.Category}}">{{.ArticlePost.Category}}</button>{{end}}<span>{{.ArticlePost.WordCount}} 字 · 约 {{.ArticlePost.ReadingMinutes}} 分钟</span></div>{{if .ArticlePost.Tags}}<div class="post-tags">{{range .ArticlePost.Tags}}<button class="chip" data-tag="{{.}}"># {{.}}</button>{{end}}</div>{{end}}{{end}}
+        </header>
+        <div id="article-content" class="article-content oss-content" data-allow-copy="{{.AllowCopy}}">{{if and (not .IsFolder) .ArticlePost.CoverURL}}<img class="article-cover" src="{{.ArticlePost.CoverURL}}" alt="{{.ArticleTitle}}" loading="lazy">{{end}}{{.ContentHTML}}</div>
+        {{if not .IsFolder}}<footer class="article-actions">{{if .AllowCopy}}<button class="button" data-action="copy-article">{{template "icon-copy"}}复制正文</button>{{end}}<button class="button" data-action="copy-link">{{template "icon-link"}}复制链接</button>{{if .BlogHomeURL}}<a class="chip" href="{{.BlogHomeURL}}">返回首页 {{template "icon-next"}}</a>{{end}}</footer>{{end}}
+      </article>
+      {{if not .IsFolder}}<nav id="post-navigation" hidden class="post-navigation" aria-label="前后文章"></nav><section id="related-posts" hidden class="related-posts" aria-label="延伸阅读"></section>{{end}}
+      {{end}}
+      {{if .CustomFooter}}<section class="card custom-fragment" aria-label="自定义页脚">{{.CustomFooter}}</section>{{end}}
+      {{if .FooterNotice}}<aside class="card oss-notice">{{.FooterNotice}}</aside>{{end}}
+      <footer class="site-footer"><p data-blog-name>{{$blogName}}</p><p>Powered by <a href="https://github.com/helantianshen/oss-sync" target="_blank" rel="noopener noreferrer">OSS Sync</a> · <a href="{{.ThemeBaseURL}}/README.md">Shirone</a></p></footer>
+    </main>
+    <aside class="sidebar-secondary" aria-label="博客与阅读工具">
+      {{if not .IsHome}}<section class="card widget toc-card" id="toc-card" hidden><details open><summary class="widget-title">文章目录</summary><nav id="toc" aria-label="文章目录"></nav></details></section>{{end}}
+      {{if .BlogHomeURL}}<section class="card widget stats-card" data-post-index-widget{{if not .IsHome}} hidden{{end}}><h2 class="widget-title">统计</h2><dl class="stats-list"><div><dt>文章</dt><dd id="stat-posts">{{if .IsHome}}{{len .HomePosts}}{{else}}—{{end}}</dd></div><div><dt>分类</dt><dd id="stat-categories">—</dd></div><div><dt>标签</dt><dd id="stat-tags">—</dd></div><div><dt>总字数</dt><dd id="stat-words">—</dd></div></dl></section>
+      <section class="card widget calendar-card" data-post-index-widget{{if not .IsHome}} hidden{{end}}><h2 class="widget-title">日历</h2><div class="calendar-header"><button class="icon-button" data-action="calendar-prev" aria-label="上一月">{{template "icon-prev"}}</button><button id="calendar-label" class="chip" data-action="calendar-today" aria-label="回到本月"></button><button class="icon-button" data-action="calendar-next" aria-label="下一月">{{template "icon-next"}}</button></div><div class="calendar-week" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div id="calendar-grid" class="calendar-grid"></div></section>{{end}}
+    </aside>
+  </div>
+  <div class="floating-tools">{{if and (not .IsHome) (not .IsFolder)}}{{if .AllowCopy}}<button class="icon-button" data-action="copy-article" aria-label="复制正文">{{template "icon-copy"}}</button>{{end}}{{end}}<button class="icon-button" data-action="open-settings" aria-label="显示设置">{{template "icon-palette"}}</button><button class="icon-button" data-action="back-top" hidden aria-label="返回顶部">{{template "icon-up"}}</button></div>
+  <p id="copy-status" class="reading-status" role="status" aria-live="polite"></p>
+  <dialog id="settings-dialog" class="settings-panel" aria-labelledby="settings-title">
+    <header class="settings-header"><h2 id="settings-title">显示设置</h2><button class="icon-button" data-action="close-dialog" aria-label="关闭显示设置">{{template "icon-close"}}</button></header>
+    <section class="settings-section"><h3>明暗模式</h3><div class="setting-options"><label><input type="radio" name="scheme" data-setting="scheme" value="auto" checked>自动</label><label><input type="radio" name="scheme" data-setting="scheme" value="light">浅色</label><label><input type="radio" name="scheme" data-setting="scheme" value="dark">深色</label></div></section>
+    <section class="settings-section"><label class="setting-heading" for="theme-hue">主题色 <output id="hue-value" for="theme-hue">315</output></label><input id="theme-hue" type="range" min="0" max="360" value="315" data-setting="hue"></section>
+    <section class="settings-section"><h3>配色风格</h3><div class="color-styles setting-options">
+      <label><input type="radio" name="style" data-setting="style" value="tonalSpot" checked>Tonal Spot</label><label><input type="radio" name="style" data-setting="style" value="vibrant">Vibrant</label><label><input type="radio" name="style" data-setting="style" value="content">Content</label><label><input type="radio" name="style" data-setting="style" value="expressive">Expressive</label><label><input type="radio" name="style" data-setting="style" value="rainbow">Rainbow</label><label><input type="radio" name="style" data-setting="style" value="fruitSalad">Fruit Salad</label><label><input type="radio" name="style" data-setting="style" value="monochrome">Monochrome</label><label><input type="radio" name="style" data-setting="style" value="neutral">Neutral</label><label><input type="radio" name="style" data-setting="style" value="fidelity">Fidelity</label>
+    </div></section>
+    <section class="settings-section"><h3>配色规范</h3><div class="setting-options"><label><input type="radio" name="spec" data-setting="spec" value="2021">MD3 2021</label><label><input type="radio" name="spec" data-setting="spec" value="2025" checked>M3E 2025</label></div></section>
+    <section class="settings-section"><h3>页面背景</h3><div class="setting-options"><label><input type="radio" name="wallpaper" data-setting="wallpaper" value="none">纯色</label><label><input type="radio" name="wallpaper" data-setting="wallpaper" value="banner" checked>横幅</label></div></section>
+    <section class="settings-section"><h3>文章布局</h3><div class="setting-options"><label><input type="radio" name="layout" data-setting="layout" value="list" checked>列表</label><label><input type="radio" name="layout" data-setting="layout" value="grid">网格</label></div></section>
+    <section class="settings-section"><h3>背景纹理</h3><div class="texture-options setting-options"><label><input type="radio" name="texture" data-setting="texture" value="none">无纹理</label><label><input type="radio" name="texture" data-setting="texture" value="starlight" checked>星芒光斑</label><label><input type="radio" name="texture" data-setting="texture" value="cyber-dots">极客点阵</label><label><input type="radio" name="texture" data-setting="texture" value="topography">流光等高线</label><label><input type="radio" name="texture" data-setting="texture" value="geometric">几何晶体</label><label><input type="radio" name="texture" data-setting="texture" value="sakura">落樱微瓣</label></div></section>
+    <section class="settings-section"><label for="texture-opacity">纹理浓度</label><input id="texture-opacity" type="range" min="0.05" max="0.25" step="0.01" value="0.12" data-setting="textureOpacity"></section>
+    <section class="settings-section"><label class="motion-setting"><input type="checkbox" data-setting="reducedMotion">减少动态效果</label></section>
+    <button class="button" data-action="reset-settings">恢复默认设置</button>
+  </dialog>
+  <dialog id="search-dialog" class="search-dialog" aria-labelledby="search-title"><header class="settings-header"><h2 id="search-title">搜索文章</h2><button class="icon-button" data-action="close-dialog" aria-label="关闭搜索">{{template "icon-close"}}</button></header><label class="sr-only" for="search-input">搜索标题、摘要或标签</label><input id="search-input" type="search" placeholder="搜索标题、摘要或标签…" autocomplete="off"><div id="search-results" aria-live="polite"></div></dialog>
+  <dialog id="mobile-menu" class="mobile-nav" aria-labelledby="menu-title"><header class="settings-header"><h2 id="menu-title">导航</h2><button class="icon-button" data-action="close-dialog" aria-label="关闭导航">{{template "icon-close"}}</button></header>{{if .BlogHomeURL}}<a class="nav-link" href="{{.BlogHomeURL}}">{{template "icon-home"}}主页</a>{{end}}{{range .Buttons}}<a class="nav-link" href="{{.URL}}">{{.Label}}</a>{{end}}{{if .BlogHomeURL}}<button class="nav-link" data-action="open-search">{{template "icon-search"}}搜索文章</button>{{end}}</dialog>
+  <dialog id="image-dialog" class="image-dialog" aria-label="图片预览"><button class="icon-button" data-action="close-dialog" aria-label="关闭图片预览">{{template "icon-close"}}</button><img alt=""><p id="image-caption"></p></dialog>
+  <div id="post-index" hidden>{{range .HomePosts}}<a href="{{.URL}}" data-title="{{.Title}}" data-summary="{{.Summary}}" data-category="{{.Category}}" data-date="{{.Date}}" data-words="{{.WordCount}}">{{.Title}}{{range .Tags}}<span data-tag="{{.}}"></span>{{end}}</a>{{end}}</div>
+</body>
+</html>
+
+{{define "icon-home"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6 19h3v-5q0-.425.288-.712T10 13h4q.425 0 .713.288T15 14v5h3v-9l-6-4.5L6 10zm-2 0v-9q0-.475.213-.9t.587-.7l6-4.5q.525-.4 1.2-.4t1.2.4l6 4.5q.375.275.588.7T20 10v9q0 .825-.588 1.413T18 21h-4q-.425 0-.712-.288T13 20v-5h-2v5q0 .425-.288.713T10 21H6q-.825 0-1.412-.587T4 19m8-6.75"/></svg>{{end}}
+{{define "icon-search"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9.5 16q-2.725 0-4.612-1.888T3 9.5t1.888-4.612T9.5 3t4.613 1.888T16 9.5q0 1.1-.35 2.075T14.7 13.3l5.6 5.6q.275.275.275.7t-.275.7t-.7.275t-.7-.275l-5.6-5.6q-.75.6-1.725.95T9.5 16m0-2q1.875 0 3.188-1.312T14 9.5t-1.312-3.187T9.5 5T6.313 6.313T5 9.5t1.313 3.188T9.5 14"/></svg>{{end}}
+{{define "icon-palette"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 22q-2.05 0-3.875-.788t-3.187-2.15t-2.15-3.187T2 12q0-2.075.813-3.9t2.2-3.175T8.25 2.788T12.2 2q2 0 3.775.688t3.113 1.9t2.125 2.875T22 11.05q0 2.875-1.75 4.413T16 17h-1.85q-.225 0-.312.125t-.088.275q0 .3.375.863t.375 1.287q0 1.25-.687 1.85T12 22m-4.425-9.425Q8 12.15 8 11.5t-.425-1.075T6.5 10t-1.075.425T5 11.5t.425 1.075T6.5 13t1.075-.425m3-4Q11 8.15 11 7.5t-.425-1.075T9.5 6t-1.075.425T8 7.5t.425 1.075T9.5 9t1.075-.425m5 0Q16 8.15 16 7.5t-.425-1.075T14.5 6t-1.075.425T13 7.5t.425 1.075T14.5 9t1.075-.425m3 4Q19 12.15 19 11.5t-.425-1.075T17.5 10t-1.075.425T16 11.5t.425 1.075T17.5 13t1.075-.425M12 20q.225 0 .363-.125t.137-.325q0-.35-.375-.825T11.75 17.3q0-1.05.725-1.675T14.25 15H16q1.65 0 2.825-.962T20 11.05q0-3.025-2.312-5.038T12.2 4Q8.8 4 6.4 6.325T4 12q0 3.325 2.338 5.663T12 20"/></svg>{{end}}
+{{define "icon-menu"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M4 18q-.425 0-.712-.288T3 17t.288-.712T4 16h16q.425 0 .713.288T21 17t-.288.713T20 18zm0-5q-.425 0-.712-.288T3 12t.288-.712T4 11h16q.425 0 .713.288T21 12t-.288.713T20 13zm0-5q-.425 0-.712-.288T3 7t.288-.712T4 6h16q.425 0 .713.288T21 7t-.288.713T20 8z"/></svg>{{end}}
+{{define "icon-close"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 13.4l-4.9 4.9q-.275.275-.7.275t-.7-.275t-.275-.7t.275-.7l4.9-4.9l-4.9-4.9q-.275-.275-.275-.7t.275-.7t.7-.275t.7.275l4.9 4.9l4.9-4.9q.275-.275.7-.275t.7.275t.275.7t-.275.7L13.4 12l4.9 4.9q.275.275.275.7t-.275.7t-.7.275t-.7-.275z"/></svg>{{end}}
+{{define "icon-up"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="m11 7.825l-4.9 4.9q-.3.3-.7.288t-.7-.313q-.275-.3-.288-.7t.288-.7l6.6-6.6q.15-.15.325-.212T12 4.425t.375.063t.325.212l6.6 6.6q.275.275.275.688t-.275.712q-.3.3-.712.3t-.713-.3L13 7.825V19q0 .425-.288.713T12 20t-.712-.288T11 19z"/></svg>{{end}}
+{{define "icon-next"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12.6 12L8.7 8.1q-.275-.275-.275-.7t.275-.7t.7-.275t.7.275l4.6 4.6q.15.15.213.325t.062.375t-.062.375t-.213.325l-4.6 4.6q-.275.275-.7.275t-.7-.275t-.275-.7t.275-.7z"/></svg>{{end}}
+{{define "icon-prev"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="m10.8 12l3.9 3.9q.275.275.275.7t-.275.7t-.7.275t-.7-.275l-4.6-4.6q-.15-.15-.212-.325T8.425 12t.063-.375t.212-.325l4.6-4.6q.275-.275.7-.275t.7.275t.275.7t-.275.7z"/></svg>{{end}}
+{{define "icon-calendar"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 22q-.825 0-1.412-.587T3 20V6q0-.825.588-1.412T5 4h1V3q0-.425.288-.712T7 2t.713.288T8 3v1h8V3q0-.425.288-.712T17 2t.713.288T18 3v1h1q.825 0 1.413.588T21 6v14q0 .825-.587 1.413T19 22zm0-2h14V10H5zM5 8h14V6H5zm0 0V6zm7 6q-.425 0-.712-.288T11 13t.288-.712T12 12t.713.288T13 13t-.288.713T12 14m-4.712-.288Q7 13.426 7 13t.288-.712T8 12t.713.288T9 13t-.288.713T8 14t-.712-.288M16 14q-.425 0-.712-.288T15 13t.288-.712T16 12t.713.288T17 13t-.288.713T16 14m-4 4q-.425 0-.712-.288T11 17t.288-.712T12 16t.713.288T13 17t-.288.713T12 18m-4.712-.288Q7 17.426 7 17t.288-.712T8 16t.713.288T9 17t-.288.713T8 18t-.712-.288M16 18q-.425 0-.712-.288T15 17t.288-.712T16 16t.713.288T17 17t-.288.713T16 18"/></svg>{{end}}
+{{define "icon-folder"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M4 20q-.825 0-1.412-.587T2 18V6q0-.825.588-1.412T4 4h5.175q.4 0 .763.15t.637.425L12 6h8q.825 0 1.413.588T22 8v10q0 .825-.587 1.413T20 20zm0-2h16V8h-8.825l-2-2H4zm0 0V6z"/></svg>{{end}}
+{{define "icon-book"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 18h6q.425 0 .713-.288T16 17t-.288-.712T15 16H9q-.425 0-.712.288T8 17t.288.713T9 18m0-4h6q.425 0 .713-.288T16 13t-.288-.712T15 12H9q-.425 0-.712.288T8 13t.288.713T9 14m-3 8q-.825 0-1.412-.587T4 20V4q0-.825.588-1.412T6 2h7.175q.4 0 .763.15t.637.425l4.85 4.85q.275.275.425.638t.15.762V20q0 .825-.587 1.413T18 22zm7-14V4H6v16h12V9h-4q-.425 0-.712-.288T13 8M6 4v5zv16z"/></svg>{{end}}
+{{define "icon-copy"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 18q-.825 0-1.412-.587T7 16V4q0-.825.588-1.412T9 2h9q.825 0 1.413.588T20 4v12q0 .825-.587 1.413T18 18zm-4 4q-.825 0-1.412-.587T3 20V7q0-.425.288-.712T4 6t.713.288T5 7v13h10q.425 0 .713.288T16 21t-.288.713T15 22z"/></svg>{{end}}
+{{define "icon-link"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7 17q-2.075 0-3.537-1.463T2 12t1.463-3.537T7 7h3q.425 0 .713.288T11 8t-.288.713T10 9H7q-1.25 0-2.125.875T4 12t.875 2.125T7 15h3q.425 0 .713.288T11 16t-.288.713T10 17zm2-4q-.425 0-.712-.288T8 12t.288-.712T9 11h6q.425 0 .713.288T16 12t-.288.713T15 13zm5 4q-.425 0-.712-.288T13 16t.288-.712T14 15h3q1.25 0 2.125-.875T20 12t-.875-2.125T17 9h-3q-.425 0-.712-.288T13 8t.288-.712T14 7h3q2.075 0 3.538 1.463T22 12t-1.463 3.538T17 17z"/></svg>{{end}}
+{{define "icon-scheme"}}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 21q-3.775 0-6.387-2.613T3 12q0-3.45 2.25-5.988T11 3.05q.325-.05.575.088t.4.362t.163.525t-.188.575q-.425.65-.638 1.375T11.1 7.5q0 2.25 1.575 3.825T16.5 12.9q.775 0 1.538-.225t1.362-.625q.275-.175.563-.162t.512.137q.25.125.388.375t.087.6q-.35 3.45-2.937 5.725T12 21m0-2q2.2 0 3.95-1.213t2.55-3.162q-.5.125-1 .2t-1 .075q-3.075 0-5.238-2.163T9.1 7.5q0-.5.075-1t.2-1q-1.95.8-3.163 2.55T5 12q0 2.9 2.05 4.95T12 19m-.25-6.75"/></svg>{{end}}

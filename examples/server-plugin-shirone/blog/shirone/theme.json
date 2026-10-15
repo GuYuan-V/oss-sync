@@ -1,0 +1,13 @@
+{
+  "supports_public_blog": true,
+  "public_settings": [
+    "blog_name",
+    "description",
+    "logo_url",
+    "logo_size",
+    "logo_shape",
+    "banner_url",
+    "mobile_banner_url",
+    "buttons"
+  ]
+}

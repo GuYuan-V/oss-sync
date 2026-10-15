@@ -1,0 +1,93 @@
+{
+  "id": "shirone",
+  "name": "Shirone 博客模板",
+  "version": "1.0.2",
+  "description": "适配 OSS Sync 插件资源接口的 Shirone 博客模板",
+  "api_version": 1,
+  "runtime": "wasm",
+  "settings": [
+    {
+      "key": "blog_name",
+      "label": "博客名称",
+      "type": "text",
+      "max_length": 120
+    },
+    {
+      "key": "description",
+      "label": "博客介绍",
+      "type": "textarea",
+      "max_length": 500
+    },
+    {
+      "key": "logo_url",
+      "label": "头像 URL",
+      "type": "url",
+      "max_length": 512
+    },
+    {
+      "key": "logo_size",
+      "label": "头像大小（像素）",
+      "type": "text",
+      "max_length": 3,
+      "placeholder": "10-192（留空铺满卡片）"
+    },
+    {
+      "key": "logo_shape",
+      "label": "头像形状",
+      "type": "choice",
+      "choices": [
+        "circle",
+        "square"
+      ]
+    },
+    {
+      "key": "banner_url",
+      "label": "桌面横幅 URL",
+      "type": "url",
+      "max_length": 512,
+      "placeholder": "留空使用主题横幅"
+    },
+    {
+      "key": "mobile_banner_url",
+      "label": "移动横幅 URL",
+      "type": "url",
+      "max_length": 512,
+      "placeholder": "留空使用主题横幅"
+    },
+    {
+      "key": "buttons",
+      "label": "自定义链接",
+      "type": "group",
+      "max_items": 5,
+      "fields": [
+        {
+          "key": "label",
+          "label": "链接名称",
+          "type": "text",
+          "max_length": 40,
+          "required": true
+        },
+        {
+          "key": "url",
+          "label": "目标 URL",
+          "type": "url",
+          "max_length": 512,
+          "required": true
+        },
+        {
+          "key": "icon_url",
+          "label": "图标 URL",
+          "type": "url",
+          "max_length": 512
+        }
+      ]
+    }
+  ],
+  "blog_themes": [
+    {
+      "id": "blog",
+      "name": "Shirone",
+      "path": "blog/shirone"
+    }
+  ]
+}
