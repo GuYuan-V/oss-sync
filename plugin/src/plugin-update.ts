@@ -1,86 +1,7 @@
-// GitHub Release 在线更新支持
-//
-// 模块不依赖 Obsidian，便于在 Node 测试中注入伪造的 fetch 与文件系统
-// 更新流程：查询最新 Release -> 读取 manifest.json 得到远端版本 -> 下载三件套 ->
-// 由 plugin-update-apply.ts 原子替换并重载插件
+// 客户端只读取仓库清单中的版本，安装由 Obsidian 社区插件管理器完成
 
-/** 更新包下载渠道：official 直连 GitHub，proxy 走 gh-proxy.com，custom 走用户自建代理前缀*/
-export type UpdateDownloadSource = "official" | "proxy" | "custom";
-
-/** 把任意输入收敛为合法渠道；非法或缺失值一律回落为 proxy*/
-export function normalizeUpdateSource(value: unknown): UpdateDownloadSource {
-  const source = typeof value === "string" ? value.trim() : "";
-  return source === "official" || source === "custom" ? source : "proxy";
-}
-
-/** 自定义代理前缀不合法时抛出*/
-export class UpdateSourceError extends Error {}
-
-/**
- * 按渠道拼装下载地址
- * custom 渠道要求前缀为不含用户信息与查询片段的 https URL，长度不超过 1024
- * 前缀中的空白与控制字符、以及 \ ? # 等会破坏路径拼接的字符均视为非法
- */
-export function resolveUpdateURL(rawURL: string, source: UpdateDownloadSource, customProxy: string): string {
-  if (source === "official") return rawURL;
-  if (source === "proxy") return "https://gh-proxy.com/" + rawURL;
-  const prefix = customProxy.trim();
-  if (!prefix || prefix.length > 1024 || /[\s\x00-\x1f\x7f\\?#]/.test(prefix)) {
-    throw new UpdateSourceError("invalid update proxy prefix");
-  }
-  let url: URL;
-  try {
-    url = new URL(prefix);
-  } catch {
-    throw new UpdateSourceError("invalid update proxy prefix");
-  }
-  if (!/^https:\/\/[^/]/i.test(prefix) || /^https:\/\/[^/]*@/i.test(prefix) || url.protocol !== "https:" || !url.hostname || url.username || url.password) {
-    throw new UpdateSourceError("invalid update proxy prefix");
-  }
-  return prefix.replace(/\/+$/, "") + "/" + rawURL;
-}
-
-/** 一次 HTTP 请求的结果快照；arrayBuffer 为二进制响应体*/
-export interface HttpResult {
-  status: number;
-  json: unknown;
-  text: string;
-  arrayBuffer: ArrayBuffer;
-  headers: Record<string, string>;
-}
-
-/** 注入用的 HTTP 请求函数，便于在测试中替换为伪造实现*/
-export type HttpFetch = (options: {
-  url: string;
-  method: string;
-  headers?: Record<string, string>;
-}) => Promise<HttpResult>;
-
-/** GitHub Release 中的单个资产*/
-export interface GitHubReleaseAsset {
-  name: string;
-  browser_download_url: string;
-  size?: number;
-  digest?: string | null;
-}
-
-/** GitHub latest release 接口返回的裁剪结果*/
-export interface GitHubRelease {
-  tag_name: string;
-  html_url: string;
-  assets: GitHubReleaseAsset[];
-}
-
-/** 待写入插件目录的单个更新文件*/
-export interface UpdateFile {
-  name: string;
-  content: ArrayBuffer;
-}
-
-export const UPDATE_FILE_NAMES = ["main.js", "manifest.json", "styles.css"] as const;
-const MAX_UPDATE_FILE_BYTES = 20 * 1024 * 1024;
-
-// 版本比较
+export const PLUGIN_MANIFEST_URL = "https://raw.githubusercontent.com/helantianshen/oss-sync/HEAD/manifest.json";
+export const PLUGIN_VERSION_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
 interface ParsedVersion {
   core: readonly number[];
@@ -142,167 +63,18 @@ export function isNewerVersion(current: string, remote: string): boolean {
   return compareVersions(remote, current) > 0;
 }
 
-/** 去掉 Release 标签前缀的 v/V*/
-export function parseVersionTag(tag: string): string {
-  return tag.trim().replace(/^[vV]/, "");
-}
-
-/** 从 Release 内的 manifest.json 文本解析版本；解析失败返回 null*/
-export function manifestVersionFromText(text: string | null): string | null {
-  if (!text) return null;
-  try {
-    const parsed = JSON.parse(text) as { version?: unknown };
-    return typeof parsed.version === "string" && parsed.version ? parsed.version : null;
-  } catch {
-    return null;
-  }
-}
-
-// GitHub Release 查询与下载
-
-/**
- * GitHub Release 数据源
- * 构造时立即校验代理配置，配置非法则抛 UpdateSourceError
- */
-export class GitHubReleaseSource {
-  constructor(
-    private readonly fetchImpl: HttpFetch,
-    private readonly source: UpdateDownloadSource = "official",
-    private readonly customProxy = "",
-  ) {
-    resolveUpdateURL("https://api.github.com", source, customProxy);
-  }
-
-  /** 拉取仓库最新 Release；repo 需形如 owner/name，404 视为仓库无 Release*/
-  async latestRelease(repo: string): Promise<GitHubRelease> {
-    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-      throw new Error(`invalid GitHub repository "${repo}"`);
-    }
-    const result = await this.fetchImpl({
-      url: resolveUpdateURL(`https://api.github.com/repos/${repo}/releases/latest`, this.source, this.customProxy),
-      method: "GET",
-      headers: {
-        Accept: "application/vnd.github+json",
-        "User-Agent": "oss-sync-obsidian-plugin",
-      },
-    });
-    if (result.status === 404) {
-      throw new Error(`no GitHub releases found for ${repo}`);
-    }
-    if (result.status >= 400) {
-      throw new Error(`GitHub API error: HTTP ${result.status}`);
-    }
-    const body = result.json as Partial<GitHubRelease> & { assets?: unknown };
-    if (typeof body.tag_name !== "string" || !body.tag_name) {
-      throw new Error("GitHub release response is missing tag_name");
-    }
-    const assets = Array.isArray(body.assets) ? body.assets.filter(isReleaseAsset) : [];
-    return {
-      tag_name: body.tag_name,
-      html_url: typeof body.html_url === "string" ? body.html_url : "",
-      assets,
-    };
-  }
-
-  /** 读取 Release 中指定资产的文本；资产缺失或下载失败返回 null*/
-  async downloadAssetText(release: GitHubRelease, name: string): Promise<string | null> {
-    if (!release.assets.some((item) => item.name === name)) return null;
-    try {
-      return new TextDecoder().decode(await this.downloadAsset(release, name));
-    } catch {
-      return null;
-    }
-  }
-
-  /** 下载指定资产；资产缺失或 HTTP 错误时抛错*/
-  async downloadAsset(release: GitHubRelease, name: string): Promise<ArrayBuffer> {
-    const matches = release.assets.filter((item) => item.name === name);
-    if (matches.length === 0) {
-      throw new Error(`release asset "${name}" not found`);
-    }
-    if (matches.length !== 1) throw new Error(`release asset "${name}" is duplicated`);
-    const asset = matches[0];
-    if (!Number.isSafeInteger(asset.size) || asset.size! < 0 || asset.size! > MAX_UPDATE_FILE_BYTES) {
-      throw new Error(`release asset "${name}" has invalid size`);
-    }
-    const expectedDigest = asset.digest?.toLowerCase() ?? "";
-    if (!/^sha256:[0-9a-f]{64}$/.test(expectedDigest)) {
-      throw new Error(`release asset "${name}" has no valid SHA-256 digest`);
-    }
-    let assetURL: URL;
-    try {
-      assetURL = new URL(asset.browser_download_url);
-    } catch {
-      throw new Error(`release asset "${name}" has invalid download URL`);
-    }
-    if (assetURL.protocol !== "https:" || assetURL.hostname.toLowerCase() !== "github.com") {
-      throw new Error(`release asset "${name}" has invalid download URL`);
-    }
-    const result = await this.fetchImpl({ url: resolveUpdateURL(assetURL.toString(), this.source, this.customProxy), method: "GET" });
-    if (result.status >= 400) {
-      throw new Error(`failed to download "${name}": HTTP ${result.status}`);
-    }
-    if (result.arrayBuffer.byteLength !== asset.size) {
-      throw new Error(`release asset "${name}" size mismatch`);
-    }
-    const actualDigest = await sha256(result.arrayBuffer);
-    if (actualDigest !== expectedDigest) {
-      throw new Error(`release asset "${name}" SHA-256 mismatch`);
-    }
-    return result.arrayBuffer;
-  }
-}
-
-function isReleaseAsset(value: unknown): value is GitHubReleaseAsset {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.name === "string" &&
-    typeof record.browser_download_url === "string" &&
-    (record.size === undefined || typeof record.size === "number") &&
-    (record.digest === undefined || record.digest === null || typeof record.digest === "string")
-  );
-}
-
-async function sha256(content: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", content);
-  return "sha256:" + Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-// 更新检查与资源下载
-
-/** 更新检查结果；remoteVersion 优先取自 Release 内 manifest.json，缺失时回落到 tag*/
-export interface UpdateCheckResult {
-  readonly currentVersion: string;
-  readonly remoteVersion: string;
-  readonly release: GitHubRelease;
-}
-
-/** 远端版本是否比当前版本更新*/
-export function isUpdateAvailable(result: UpdateCheckResult): boolean {
-  return isNewerVersion(result.currentVersion, result.remoteVersion);
-}
-
-/** 查询最新 Release 并解析远端版本；manifest.json 缺失或不可解析时回落到 Release 标签*/
-export async function checkForUpdates(
-  repo: string,
+/** 清单只接受本插件的正式版本，预发布版本不触发市场更新提示 */
+export async function checkPluginVersion(
   currentVersion: string,
-  source: GitHubReleaseSource
-): Promise<UpdateCheckResult> {
-  const release = await source.latestRelease(repo);
-  const manifestText = await source.downloadAssetText(release, "manifest.json");
-  const remoteVersion = manifestVersionFromText(manifestText) ?? parseVersionTag(release.tag_name);
-  return { currentVersion, remoteVersion, release };
-}
-
-/** 按 UPDATE_FILE_NAMES 顺序下载三件套；任一资产校验失败都会抛错*/
-export async function downloadUpdateAssets(
-  source: GitHubReleaseSource,
-  release: GitHubRelease
-): Promise<UpdateFile[]> {
-  const files: UpdateFile[] = [];
-  for (const name of UPDATE_FILE_NAMES) {
-    files.push({ name, content: await source.downloadAsset(release, name) });
+  fetchManifest: (url: string) => Promise<{ status: number; json: unknown }>,
+): Promise<string | null> {
+  const response = await fetchManifest(PLUGIN_MANIFEST_URL);
+  if (response.status !== 200) throw new Error(`Plugin manifest HTTP ${response.status}`);
+  const manifest = response.json;
+  if (!manifest || typeof manifest !== "object") throw new Error("Invalid plugin manifest");
+  const { id, version } = manifest as { id?: unknown; version?: unknown };
+  if (id !== "oss-sync" || typeof version !== "string" || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+    throw new Error("Invalid plugin manifest version or id");
   }
-  return files;
+  return isNewerVersion(currentVersion, version) ? version : null;
 }

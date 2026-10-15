@@ -146,34 +146,29 @@ test("synchronous collab start throw is caught by Notice path with no validation
   } finally { await plugin.onunload(); await cleanup(); restore(); }
 });
 
-test("plugin update failure restarts paused sync and collaboration", async () => {
+test("checks on startup without login, repeats every thirty minutes and clears the timer on unload", async () => {
   const restore = installWindow();
   const captured = { cb: null };
   const { plugin, cleanup } = await createPlugin(captured);
   try {
-    plugin.app.plugins = {
-      plugins: { "oss-sync": plugin },
-      async disablePlugin() {},
-      async enablePlugin() {},
-    };
-    plugin.app.vault.adapter = {
-      async read() { return "old"; },
-      async write() { throw new Error("write failed"); },
-      async rename() {},
-      async remove() {},
-    };
-    const calls = [];
-    plugin.syncEngine.stop = () => calls.push("sync-stop");
-    plugin.syncEngine.start = () => calls.push("sync-start");
-    plugin.collabManager.isRunning = () => true;
-    plugin.collabManager.stop = () => calls.push("collab-stop");
-    plugin.collabManager.start = () => calls.push("collab-start");
-
-    await assert.rejects(
-      plugin.applyPluginUpdateFiles([{ name: "main.js", content: new ArrayBuffer(0) }]),
-      /write failed/,
-    );
-    assert.deepEqual(calls, ["sync-stop", "collab-stop", "sync-start", "collab-start"]);
+    plugin.token = undefined;
+    const scheduled = [];
+    const cleared = [];
+    let intervalCallback;
+    window.setInterval = (callback, delay) => { intervalCallback = callback; scheduled.push(["interval", delay]); return 2001; };
+    let checks = 0;
+    plugin.autoCheckPluginVersion = async () => { checks++; };
+    window.clearTimeout = (id) => cleared.push(id);
+    window.clearInterval = (id) => cleared.push(id);
+    captured.cb();
+    assert.deepEqual(scheduled, [["interval", 1_800_000]]);
+    assert.equal(checks, 1);
+    intervalCallback();
+    assert.equal(checks, 2);
+    assert.equal(typeof plugin.updatePluginFromRelease, "undefined");
+    assert.equal(typeof plugin.applyPluginUpdateFiles, "undefined");
+    await plugin.onunload();
+    assert.ok(cleared.includes(2001));
   } finally { await plugin.onunload(); await cleanup(); restore(); }
 });
 

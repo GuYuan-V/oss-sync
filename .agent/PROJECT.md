@@ -98,7 +98,7 @@
 - [text-merge.ts](../plugin/src/text-merge.ts) 使用 diff3 做受大小和扩展名限制的三方文本合并；二进制或不可合并内容走保留双方；[conflict-modal.ts](../plugin/src/conflict-modal.ts) 提供人工处理。
 - 协作文件位于本地 `协作oss/<owner>/<path>`；`collaboration-file-sync` 处理本地写入，`collaboration-remote-sync` 处理远端变化，`collaboration-cas-resolver` 处理 revision CAS，`collaboration-sync-coordinator` 串行化状态变更。
 - [collaboration-transport.ts](../plugin/src/collaboration-transport.ts) 管理账户级 SSE 与长轮询；协作 baseline 与普通 Vault baseline 共用状态文件但采用独立数据结构。
-- `history-*`、`recycle-manager-modal.ts`、`share-*`、`sidebar-view.ts` 是 Obsidian UI；`plugin-update*` 更新插件自身，`server-update.ts` 只负责轮询后端更新状态。
+- `history-*`、`recycle-manager-modal.ts`、`share-*`、`sidebar-view.ts` 是 Obsidian UI；`plugin-update.ts` 每次启动和运行期间每隔 30 分钟读取官方仓库根目录清单并提示通过社区插件市场更新，不下载或替换插件文件，`server-update.ts` 只负责轮询后端更新状态。
 - [esbuild.config.mjs](../plugin/esbuild.config.mjs) 从 `src/main.ts` 构建 CommonJS `main.js`；`main.js` 是忽略的构建产物，源码修改只落在 `plugin/src/`。
 
 ## 服务端扩展系统

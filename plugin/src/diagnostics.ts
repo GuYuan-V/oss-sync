@@ -1,5 +1,12 @@
 export type DiagnosticEvent =
   | {
+      readonly kind: "plugin_version_check";
+      readonly at: number;
+      readonly result: "update_available" | "up_to_date" | "failed";
+      readonly currentVersion: string;
+      readonly remoteVersion?: string;
+    }
+  | {
       readonly kind: "sse_state";
       readonly at: number;
       readonly state: "connecting" | "open" | "closed" | "failed";
@@ -126,6 +133,13 @@ export class Diagnostics {
 /** 按事件类型逐项校验并脱敏，返回 null 表示该事件应丢弃 */
 function sanitizeEvent(event: DiagnosticEvent): DiagnosticEvent | null {
   switch (event.kind) {
+    case "plugin_version_check":
+      if (!["update_available", "up_to_date", "failed"].includes(event.result) || typeof event.currentVersion !== "string") return null;
+      return {
+        kind: "plugin_version_check", at: finiteNumber(event.at), result: event.result,
+        currentVersion: event.currentVersion.slice(0, 64),
+        ...(typeof event.remoteVersion === "string" ? { remoteVersion: event.remoteVersion.slice(0, 64) } : {}),
+      };
     case "sse_state":
       if (!isSSEState(event.state)) return null;
       return event.reason === "forced" || event.reason === "fallback"

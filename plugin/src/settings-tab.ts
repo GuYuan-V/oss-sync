@@ -3,7 +3,6 @@ import type { ButtonComponent } from "obsidian";
 import type OSSPlugin from "./main";
 import type { OSSSettings } from "./settings";
 import { validateLoginCredentials, validateServerURL } from "./login-state";
-import { normalizeUpdateSource, resolveUpdateURL, isUpdateAvailable } from "./plugin-update";
 
 /** 插件设置页：按语言、服务端、仓库、设备、同步与更新分组渲染表单，并维护仓库下拉的定时刷新 */
 export class OSSSettingTab extends PluginSettingTab {
@@ -432,10 +431,7 @@ export class OSSSettingTab extends PluginSettingTab {
         })
       );
 
-    // 插件更新对所有登录用户可见，服务端更新仅管理员
-    if (this.plugin.isLoggedIn()) {
-      this.renderUpdateSection(containerEl);
-    }
+    this.renderUpdateSection(containerEl);
     if (this.plugin.isAdmin()) {
       this.renderServerUpdateSection(containerEl);
     }
@@ -508,132 +504,11 @@ export class OSSSettingTab extends PluginSettingTab {
       }));
   }
 
-  /** 插件自更新分区：来源与代理参数变化即废弃旧检查结果，安装期间禁用全部控件 */
   private renderUpdateSection(containerEl: HTMLElement): void {
     new Setting(containerEl).setName(this.plugin.t("settings.update.title")).setHeading();
-    const controls: { setDisabled(value: boolean): unknown }[] = [];
-    let checking = false;
-    let applyButton: ButtonComponent | null = null;
-    const configKey = () => this.plugin.pluginUpdateConfigKey();
-    const busy = () => this.plugin.pluginUpdateInProgress;
-    const invalidate = async () => {
-      this.plugin.pluginUpdateSettingsRevision++;
-      applyButton?.buttonEl.remove();
-      applyButton = null;
-      status.setDesc(this.plugin.t("settings.update.recheck"));
-      await this.plugin.saveSettings();
-    };
     new Setting(containerEl)
-      .setName(this.plugin.t("settings.update.repo"))
-      .setDesc(this.plugin.t("settings.update.repoDesc"))
-      .addText((text) => {
-        controls.push(text);
-        text.setValue(this.plugin.settings.updateRepo).setDisabled(busy()).onChange(async (value) => {
-          if (busy()) return;
-          this.plugin.settings.updateRepo = value.trim();
-          await invalidate();
-        });
-      });
-    new Setting(containerEl)
-      .setName(this.plugin.t("settings.update.source"))
-      .setDesc(this.plugin.t("settings.update.sourceDesc"))
-      .addDropdown((dropdown) => {
-        controls.push(dropdown);
-        for (const source of ["proxy", "official", "custom"] as const) {
-          dropdown.addOption(source, this.plugin.t(`settings.update.${source}`));
-        }
-        dropdown.setValue(this.plugin.settings.updateDownloadSource).setDisabled(busy()).onChange(async (value) => {
-          if (busy()) return;
-          this.plugin.settings.updateDownloadSource = normalizeUpdateSource(value);
-          proxy.settingEl.hidden = value !== "custom";
-          proxy.setDesc(this.plugin.t("settings.update.proxyDesc"));
-          await invalidate();
-        });
-      });
-    const validate = () => {
-      try {
-        resolveUpdateURL("https://api.github.com", this.plugin.settings.updateDownloadSource, this.plugin.settings.updateDownloadProxy);
-        proxy.setDesc(this.plugin.t("settings.update.proxyDesc"));
-        return true;
-      } catch (error) {
-        proxy.setDesc(this.plugin.pluginUpdateError(error));
-        return false;
-      }
-    };
-    const proxy = new Setting(containerEl)
-      .setName(this.plugin.t("settings.update.proxyPrefix"))
-      .setDesc(this.plugin.t("settings.update.proxyDesc"))
-      .addText((text) => {
-        controls.push(text);
-        text.setPlaceholder("https://mirror.example.com/").setValue(this.plugin.settings.updateDownloadProxy)
-          .setDisabled(busy()).onChange(async (value) => {
-            if (busy()) return;
-            this.plugin.settings.updateDownloadProxy = value.trim();
-            await invalidate();
-          });
-        text.inputEl.addEventListener("blur", validate);
-      });
-    proxy.settingEl.hidden = this.plugin.settings.updateDownloadSource !== "custom";
-    const status = new Setting(containerEl)
-      .setName(this.plugin.t("settings.update.status"))
-      .setDesc(this.plugin.t(busy() ? "settings.update.installing" : "settings.update.currentVersion", {
-        version: this.plugin.manifest.version,
-      }));
-    status.addButton((button) => {
-      const setBusy = (value: boolean) => {
-        controls.forEach((control) => control.setDisabled(value));
-        button.setDisabled(value || checking);
-        applyButton?.setDisabled(value);
-      };
-      const sourceLabel = () => this.plugin.t(`settings.update.${this.plugin.settings.updateDownloadSource}`);
-      button.setButtonText(this.plugin.t("settings.update.check")).setDisabled(busy()).onClick(async () => {
-        if (busy() || checking || !validate()) return;
-        const key = configKey();
-        const source = sourceLabel();
-        checking = true;
-        button.setDisabled(true);
-        applyButton?.buttonEl.remove();
-        applyButton = null;
-        status.setDesc(this.plugin.t("settings.update.checking"));
-        try {
-          const result = await this.plugin.checkPluginUpdate();
-          if (key !== configKey()) return;
-          if (isUpdateAvailable(result)) {
-            status.setDesc(this.plugin.t("settings.update.available", { from: result.currentVersion, to: result.remoteVersion }));
-            status.addButton((updateButton) => {
-              applyButton = updateButton;
-              updateButton.setButtonText(this.plugin.t("settings.update.apply")).setCta().onClick(async () => {
-                if (busy() || key !== configKey() || !validate()) return;
-                setBusy(true);
-                status.setDesc(this.plugin.t("settings.update.installing"));
-                try {
-                  await this.plugin.updatePluginFromRelease();
-                  new Notice(this.plugin.t("notice.updateCompleted"));
-                } catch (error) {
-                  const message = this.plugin.t("notice.updateFailed", {
-                    error: `${source}: ${this.plugin.pluginUpdateError(error)}`,
-                  });
-                  status.setDesc(message);
-                  new Notice(message);
-                } finally {
-                  // 重开设置页后需要从当前实例状态恢复控件
-                  this.display();
-                }
-              });
-            });
-          } else {
-            status.setDesc(this.plugin.t("settings.update.latest", { version: result.remoteVersion }));
-          }
-        } catch (error) {
-          if (key === configKey()) status.setDesc(this.plugin.t("settings.update.checkFailed", {
-            error: `${source}: ${this.plugin.pluginUpdateError(error)}`,
-          }));
-        } finally {
-          checking = false;
-          button.setDisabled(busy());
-        }
-      });
-    });
+      .setName(this.plugin.t("settings.update.currentVersion", { version: this.plugin.manifest.version }))
+      .setDesc(this.plugin.t("settings.update.marketplace"));
   }
 
   /** 服务端更新分区：状态检查与触发更新串行执行，更新期间禁用检查与触发按钮 */

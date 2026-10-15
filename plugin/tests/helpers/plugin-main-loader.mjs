@@ -79,7 +79,7 @@ const OBSIDIAN_STUB = `
   export function getLanguage() { return "en"; }
   export async function requestUrl() {
     globalThis.__ossRequests?.push(arguments);
-    return { status: 200, json: {}, text: "", arrayBuffer: new ArrayBuffer(0), headers: {} };
+    return globalThis.__ossRequestUrlResponse ?? { status: 200, json: {}, text: "", arrayBuffer: new ArrayBuffer(0), headers: {} };
   }
   export function setIcon() {}
 `;

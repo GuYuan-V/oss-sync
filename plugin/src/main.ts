@@ -23,20 +23,9 @@ import type {
 } from "./api";
 import type { AuthResponse } from "./api";
 import {
-  normalizeUpdateSource,
-  UpdateSourceError,
-  checkForUpdates,
-  downloadUpdateAssets,
-  GitHubReleaseSource,
-  isUpdateAvailable,
-  type UpdateFile,
-  type UpdateCheckResult,
+  checkPluginVersion,
+  PLUGIN_VERSION_CHECK_INTERVAL_MS,
 } from "./plugin-update";
-import {
-  applyPluginUpdate,
-  type PluginFileAdapter,
-  type ReloadController,
-} from "./plugin-update-apply";
 import { ServerUpdatePoller, type ServerUpdatePollerOptions } from "./server-update";
 import { BaselineStore } from "./baseline";
 import { ConflictModal, ConflictResolution } from "./conflict-modal";
@@ -105,6 +94,8 @@ export default class OSSPlugin extends Plugin {
   availableVaults: VaultOut[] = [];
   private serverUpdatePoller: ServerUpdatePoller | null = null;
   private loaded = false;
+  private pluginVersionCheckTimer: number | null = null;
+  private pluginVersionCheckInProgress = false;
   /** 同一路径冲突编辑告警的上次提示时间，用于 3 秒去重 */
   private readonly conflictWarningLast = new Map<string, number>();
   private readonly conflictOpenings = new ConflictOpeningGuard();
@@ -259,6 +250,11 @@ export default class OSSPlugin extends Plugin {
     this.addSettingTab(new OSSSettingTab(this.app, this));
 
     this.app.workspace.onLayoutReady(() => {
+      if (!this.loaded) return;
+      void this.autoCheckPluginVersion();
+      this.pluginVersionCheckTimer = window.setInterval(
+        () => void this.autoCheckPluginVersion(), PLUGIN_VERSION_CHECK_INTERVAL_MS,
+      );
       if (!this.token) return;
       void (async () => {
         await Promise.resolve();
@@ -288,7 +284,7 @@ export default class OSSPlugin extends Plugin {
         }
         // 管理员自动检查更新，有新版本时用 Notice 提示
         if (this.isAdmin()) {
-          void this.autoCheckUpdates();
+          void this.autoCheckServerUpdates();
         }
       })().catch((error: unknown) => {
         if (this.isDeviceIdentityError(error)) {
@@ -306,6 +302,8 @@ export default class OSSPlugin extends Plugin {
   /** 插件卸载：落盘待办队列并停止同步、协作与服务端更新轮询，卸载期间的 saveData 可能被丢弃 */
   async onunload(): Promise<void> {
     this.loaded = false;
+    if (this.pluginVersionCheckTimer !== null) window.clearInterval(this.pluginVersionCheckTimer);
+    this.pluginVersionCheckTimer = null;
     setNonJsonSink(null);
     await this.syncEngine?.flushPendingQueue();
     this.syncEngine?.stop();
@@ -393,9 +391,6 @@ export default class OSSPlugin extends Plugin {
     } else {
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
     }
-    this.settings.updateDownloadSource = normalizeUpdateSource(this.settings.updateDownloadSource);
-    this.settings.updateDownloadProxy = typeof this.settings.updateDownloadProxy === "string"
-      ? this.settings.updateDownloadProxy.trim() : "";
     // 密码不持久化，加载时始终置空
     this.settings.password = "";
     if (!this.settings.clientId) {
@@ -574,48 +569,6 @@ export default class OSSPlugin extends Plugin {
     return this.settings.role === "admin";
   }
 
-  /** 插件自更新是否正在进行中，设置页据此禁用控件 */
-  pluginUpdateInProgress = false;
-
-  /** 更新来源相关设置的修订号，参数变化后使已检出的更新结果失效 */
-  pluginUpdateSettingsRevision = 0;
-
-  /** 生成更新配置指纹，检查或应用更新时比对，配置变化则废弃旧结果 */
-  pluginUpdateConfigKey(): string {
-    return JSON.stringify([this.settings.updateRepo, this.settings.updateDownloadSource,
-      this.settings.updateDownloadProxy, this.pluginUpdateSettingsRevision]);
-  }
-
-  /** 更新源的配置错误单独给文案，其余按通用本地化处理 */
-  pluginUpdateError(error: unknown): string {
-    return error instanceof UpdateSourceError
-      ? this.t("settings.update.invalidProxy") : this.localizedError(error);
-  }
-
-  /** 按当前仓库与版本检查插件更新 */
-  async checkPluginUpdate(): Promise<UpdateCheckResult> {
-    return checkForUpdates(this.settings.updateRepo, this.manifest.version, this.githubReleaseSource());
-  }
-
-  /** 下载并应用最新 release，安装期间置进行中标志，结束后无论成败都清除 */
-  async updatePluginFromRelease(): Promise<void> {
-    if (this.pluginUpdateInProgress) throw new Error(this.t("settings.update.installing"));
-    this.pluginUpdateInProgress = true;
-    try {
-      const repo = this.settings.updateRepo;
-      const source = this.githubReleaseSource();
-      const check = await checkForUpdates(repo, this.manifest.version, source);
-      if (!isUpdateAvailable(check)) {
-        new Notice(this.t("notice.updateNoUpdate"));
-        return;
-      }
-      const files = await downloadUpdateAssets(source, check.release);
-      await this.applyPluginUpdateFiles(files);
-    } finally {
-      this.pluginUpdateInProgress = false;
-    }
-  }
-
   /** 服务端更新相关接口的薄封装，供设置页与轮询器调用 */
 
   /** 读取服务端当前版本信息 */
@@ -659,53 +612,6 @@ export default class OSSPlugin extends Plugin {
     this.serverUpdatePoller = null;
   }
 
-  /** 写文件并重载插件；替换失败且实例仍存活时恢复此前暂停的同步与协作 */
-  private async applyPluginUpdateFiles(files: UpdateFile[]): Promise<void> {
-    // 重载前停止同步与协作引擎，避免旧实例在替换文件后继续轮询
-    const reload = getPluginReloadController(this.app);
-    const restartCollaboration = this.collabManager.isRunning();
-    this.syncEngine.stop();
-    this.collabManager.stop();
-    const dir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
-    try {
-      await applyPluginUpdate({
-        adapter: this.app.vault.adapter as PluginFileAdapter,
-        reload,
-        dir,
-        pluginID: this.manifest.id,
-        files,
-      });
-    } catch (error) {
-      // 替换前失败时当前实例仍存活，恢复被暂停的后台任务
-      if (this.loaded) {
-        this.syncEngine.start();
-        if (restartCollaboration) this.collabManager.start();
-      }
-      throw error;
-    }
-  }
-
-  /** 构造 GitHub release 数据源，请求经插件自身传输层以复用代理与来源配置 */
-  private githubReleaseSource(): GitHubReleaseSource {
-    return new GitHubReleaseSource(async (options) => {
-      const method = options.method === "GET" || options.method === "POST" || options.method === "PATCH" || options.method === "DELETE"
-        ? options.method
-        : "GET";
-      const response = await httpRequest({
-        url: options.url,
-        method,
-        headers: options.headers ?? {},
-      });
-      return {
-        status: response.status,
-        json: response.json,
-        text: response.text,
-        arrayBuffer: response.arrayBuffer,
-        headers: response.headers,
-      };
-    }, this.settings.updateDownloadSource, this.settings.updateDownloadProxy);
-  }
-
   /** 判断是否为设备身份类错误，此类错误要求重新登录而非重试 */
   private isDeviceIdentityError(error: unknown): boolean {
     const code =
@@ -741,18 +647,38 @@ export default class OSSPlugin extends Plugin {
     new Notice(this.t("auth.tokenExpired"));
   }
 
-  /** 启动后延迟检查更新，检查失败静默忽略，不打断正常使用 */
-  private async autoCheckUpdates(): Promise<void> {
-    await new Promise((r) => setTimeout(r, 5000));
-    if (!this.loaded || !this.isLoggedIn()) return;
+  /** 启动与定时检查共用入口，请求进行中或插件卸载后跳过 */
+  private async autoCheckPluginVersion(): Promise<void> {
+    if (!this.loaded || this.pluginVersionCheckInProgress) return;
+    this.pluginVersionCheckInProgress = true;
     try {
-      const configKey = this.pluginUpdateConfigKey();
-      const result = await this.checkPluginUpdate();
-      if (configKey === this.pluginUpdateConfigKey() && isUpdateAvailable(result)) {
-        new Notice(`插件有新版本 ${result.remoteVersion}（当前 ${result.currentVersion}），请到设置 → 插件更新中一键更新`, 10000);
+      const version = await checkPluginVersion(this.manifest.version, (url) => httpRequest({
+        url, method: "GET", headers: {},
+      }));
+      if (!this.loaded) return;
+      this.diagnostics.record({
+        kind: "plugin_version_check", at: Date.now(),
+        result: version ? "update_available" : "up_to_date",
+        currentVersion: this.manifest.version,
+        ...(version ? { remoteVersion: version } : {}),
+      });
+      if (version) {
+        new Notice(this.t("notice.pluginVersionAvailable", { version, current: this.manifest.version }), 10000);
       }
-    } catch {}
-    if (!this.isAdmin()) return;
+    } catch {
+      if (this.loaded) {
+        this.diagnostics.record({ kind: "plugin_version_check", at: Date.now(),
+          result: "failed", currentVersion: this.manifest.version });
+      }
+    } finally {
+      this.pluginVersionCheckInProgress = false;
+    }
+  }
+
+  /** 管理员启动后延迟检查服务端版本，失败时保持静默 */
+  private async autoCheckServerUpdates(): Promise<void> {
+    await new Promise((r) => setTimeout(r, 5000));
+    if (!this.loaded || !this.isLoggedIn() || !this.isAdmin()) return;
     try {
       const check = await this.checkServerUpdate();
       if (check.update_available) {
@@ -1105,33 +1031,4 @@ function isSettingsController(value: unknown): value is SettingsController {
   const open = Reflect.get(value, "open");
   const openTabById = Reflect.get(value, "openTabById");
   return typeof open === "function" && typeof openTabById === "function";
-}
-
-/** app.plugins 中与本插件重载相关的部分，均为未公开 API 故按最小面声明 */
-interface PluginManagerController {
-  plugins: Record<string, unknown>;
-  disablePlugin(id: string): Promise<void>;
-  enablePlugin(id: string): Promise<void>;
-}
-
-/** 包装未公开的 app.plugins，实现 disablePlugin/enablePlugin 无感重载 */
-function getPluginReloadController(app: App): ReloadController {
-  const manager = Reflect.get(app, "plugins") as Partial<PluginManagerController> | null | undefined;
-  if (
-    !manager ||
-    typeof manager.disablePlugin !== "function" ||
-    typeof manager.enablePlugin !== "function"
-  ) {
-    throw new Error("app.plugins is unavailable");
-  }
-  const plugins = manager.plugins ?? {};
-  return {
-    disablePlugin: (id) => manager.disablePlugin!(id),
-    enablePlugin: (id) => manager.enablePlugin!(id),
-    isLoaded: (id, expectedVersion) => {
-      const instance = plugins[id] as { manifest?: { version?: string } } | undefined;
-      if (!instance) return false;
-      return expectedVersion == null || instance.manifest?.version === expectedVersion;
-    },
-  };
 }
