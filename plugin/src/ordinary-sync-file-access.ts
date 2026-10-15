@@ -129,6 +129,7 @@ export class OrdinarySyncFileAccess {
       return { kind: "stale", actual };
     }
     if (actual === null) {
+      await this.removeEmptyParentFolders(key);
       return { kind: "deleted" };
     }
     const file = this.vault.getAbstractFileByPath(key);
@@ -137,6 +138,7 @@ export class OrdinarySyncFileAccess {
     }
     this.suppress(key);
     await this.vault.delete(file);
+    await this.removeEmptyParentFolders(key);
     return { kind: "deleted" };
   }
 
@@ -209,6 +211,27 @@ export class OrdinarySyncFileAccess {
       size = created.stat.size;
     }
     return { bytes: snapshotBytes, hash: snapshotHash, mtime, size };
+  }
+
+  /** 仅清理当前路径的空父目录，非递归删除可保护检查后新增的本地内容 */
+  private async removeEmptyParentFolders(path: string): Promise<void> {
+    const parts = normalizePath(path).split("/");
+    if (parts.some((part) => !part || part === "." || part === ".." || part.includes(":"))) return;
+    parts.pop();
+    // 空路径对应 Vault 根目录，不参与列举或删除
+    while (parts.length > 0) {
+      const parent = parts.join("/");
+      try {
+        const entries = await this.vault.adapter.list(parent);
+        if (entries.files.length > 0 || entries.folders.length > 0) return;
+        this.suppress(parent);
+        await this.vault.adapter.rmdir(parent, false);
+      } catch {
+        // 目录非空、已消失或不可访问时停止清理，文件删除结果仍然有效
+        return;
+      }
+      parts.pop();
+    }
   }
 
   private async ensureParentFolders(path: string): Promise<void> {
