@@ -33,6 +33,8 @@ export interface PendingOperation {
   path: string;
   oldPath?: string;
   createdAt: number;
+  source?: "scan";
+  waitForPaths?: string[];
 }
 
 /** 未解决冲突记录；remoteType 决定是否可做文本处理 */
@@ -200,12 +202,22 @@ export class BaselineStore {
   putPending(operation: PendingOperation): void {
     const path = normalizePath(operation.path);
     const oldPath = operation.oldPath ? normalizePath(operation.oldPath) : undefined;
+    const protectedDelete = this.data.pending.find((item) => item.path === path && item.kind === "delete" && item.source === "scan");
+    if (operation.kind === "delete" && protectedDelete) {
+      operation = { ...operation, source: "scan", waitForPaths: protectedDelete.waitForPaths };
+    }
     if (operation.kind === "upsert") {
       // 已有 rename 等待时忽略后续 upsert，rename 会带上最新内容
       const rename = this.data.pending.find((item) => item.kind === "rename" && item.path === path);
       if (rename) return;
     }
     if (operation.kind === "delete") {
+      if (operation.source !== "scan") {
+        // 明确删除目标的事件同时结束该目标的扫描上传依赖
+        for (const item of this.data.pending) {
+          if (item.waitForPaths) item.waitForPaths = item.waitForPaths.filter((dependency) => dependency !== path);
+        }
+      }
       // 删除已排在 rename 之后时改写为删除来源路径，保留净效果
       const rename = this.data.pending.find((item) => item.kind === "rename" && item.path === path);
       if (rename?.oldPath) {
@@ -215,6 +227,11 @@ export class BaselineStore {
       }
     }
     if (operation.kind === "rename" && oldPath) {
+      for (const item of this.data.pending) {
+        if (item.waitForPaths) item.waitForPaths = item.waitForPaths.map((dependency) => dependency === oldPath ? path : dependency);
+      }
+      const duplicate = this.data.pending.find((item) => item.kind === "rename" && item.path === path);
+      if (duplicate) return;
       // 连续 rename 折叠为一次，来源取最早的一条
       const previousRename = this.data.pending.find(
         (item) => item.kind === "rename" && item.path === oldPath
@@ -223,6 +240,7 @@ export class BaselineStore {
         this.data.pending = this.data.pending.filter((item) => item.id !== previousRename.id);
         operation = { ...operation, oldPath: previousRename.oldPath };
       }
+      if (operation.oldPath === path) operation = { ...operation, kind: "upsert", oldPath: undefined };
     }
     this.data.pending = this.data.pending.filter((item) => {
       // rename 会同时占用来源与目标路径，需清掉两条路径上的旧操作

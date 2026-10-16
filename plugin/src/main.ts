@@ -195,18 +195,23 @@ export default class OSSPlugin extends Plugin {
     );
     this.registerEvent(
       this.app.vault.on("rename", (f: TAbstractFile, oldPath: string) => {
-        if (isCollabPath(f.path) || isCollabPath(oldPath)) return;
-        if (f instanceof TFile && !this.syncEngine.isSuppressed(f.path)) {
+        if (isCollabPath(f.path) || isCollabPath(oldPath)) {
+          this.syncEngine.enqueueRenames([{ oldPath, path: f.path }]);
+          return;
+        }
+        if (f instanceof TFile) {
           this.syncEngine.enqueueRename(normalizeRel(oldPath), normalizeRel(f.path));
         } else if (f instanceof TFolder) {
           const newRoot = normalizeRel(f.path);
           const oldRoot = normalizeRel(oldPath);
+          const moves: { oldPath: string; path: string }[] = [];
           Vault.recurseChildren(f, (child) => {
-            if (!(child instanceof TFile) || this.syncEngine.isSuppressed(child.path)) return;
+            if (!(child instanceof TFile)) return;
             const suffix = normalizeRel(child.path).slice(newRoot.length).replace(/^\/+/, "");
             const previousPath = suffix ? `${oldRoot}/${suffix}` : oldRoot;
-            this.syncEngine.enqueueRename(previousPath, normalizeRel(child.path));
+            moves.push({ oldPath: previousPath, path: normalizeRel(child.path) });
           });
+          this.syncEngine.enqueueRenames(moves);
         }
       })
     );
@@ -251,6 +256,7 @@ export default class OSSPlugin extends Plugin {
 
     this.app.workspace.onLayoutReady(() => {
       if (!this.loaded) return;
+      this.syncEngine.enableLocalDiscovery();
       void this.autoCheckPluginVersion();
       this.pluginVersionCheckTimer = window.setInterval(
         () => void this.autoCheckPluginVersion(), PLUGIN_VERSION_CHECK_INTERVAL_MS,

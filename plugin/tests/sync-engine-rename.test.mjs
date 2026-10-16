@@ -13,6 +13,7 @@ test("successful rename replaces the stale manifest view for the same run", asyn
   const { SyncEngine, cleanup } = await loadSyncEngine();
   try {
     const content = new TextEncoder().encode("renamed").buffer;
+    const contentHash = await shaHex(new Uint8Array(content));
     const file = {
       __tfile: true,
       path: "Notes/B.md",
@@ -30,9 +31,9 @@ test("successful rename replaces the stale manifest view for the same run", asyn
     };
     const oldBaseline = {
       serverRevision: 1,
-      serverHash: "old-hash",
+      serverHash: contentHash,
       serverDeleted: false,
-      localHash: "old-hash",
+      localHash: contentHash,
       localMTime: 1,
       localSize: 7,
     };
@@ -54,7 +55,7 @@ test("successful rename replaces the stale manifest view for the same run", asyn
       old: {
         path: "Notes/A.md",
         type: "markdown",
-        hash: "old-hash",
+        hash: contentHash,
         size: 7,
         mtime: 10,
         revision: 2,
@@ -63,7 +64,7 @@ test("successful rename replaces the stale manifest view for the same run", asyn
       new: {
         path: "Notes/B.md",
         type: "markdown",
-        hash: "old-hash",
+        hash: contentHash,
         size: 7,
         mtime: 10,
         revision: 3,
@@ -89,7 +90,7 @@ test("successful rename replaces the stale manifest view for the same run", asyn
         {
           path: "Notes/A.md",
           type: "markdown",
-          hash: "old-hash",
+          hash: contentHash,
           size: 7,
           mtime: 1,
           revision: 1,

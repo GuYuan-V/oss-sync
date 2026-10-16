@@ -70,6 +70,10 @@ export class SyncEngine {
   private enqueueChain: Promise<void> = Promise.resolve();
   private debounceFn: (() => void) & { cancel: () => void };
   private pollTimer: number | null = null;
+  private localCheckTimer: number | null = null;
+  private localDiscoveryReady = false;
+  private lastContentCheck = 0;
+  private started = false;
   private stopped = false;
   private effectiveMode: "short_poll" | "long_poll" = "short_poll";
   private longPollGen = 0;
@@ -103,12 +107,20 @@ export class SyncEngine {
   /** 恢复同步：清除停止标记并按当前策略重建轮询 */
   start(): void {
     this.stopped = false;
+    this.started = true;
+    this.lastContentCheck = 0;
     this.resetPolling();
+  }
+
+  /** Vault 索引就绪后允许本地对账，避免启动期间将尚未加载的文件判作删除 */
+  enableLocalDiscovery(): void {
+    this.localDiscoveryReady = true;
   }
 
   /** 停止同步：取消待触发防抖与进行中的长轮询，不影响已入队未落盘的 pending */
   stop(): void {
     this.stopped = true;
+    this.started = false;
     this.debounceFn.cancel();
     this.stopCurrentPolling();
   }
@@ -128,6 +140,9 @@ export class SyncEngine {
   resetPolling(): void {
     this.stopCurrentPolling();
     if (this.stopped || !this.plugin.settings.vaultId || !this.api.hasToken()) return;
+    this.localCheckTimer = window.setInterval(() => {
+      if (!this.stopped) void this.runOnce({ forceFull: false });
+    }, 60_000);
     if (this.effectiveMode === "long_poll") return this.startLongPoll();
     const seconds = Math.max(3, this.plugin.settings.remotePollIntervalSec);
     this.pollTimer = window.setInterval(() => {
@@ -144,6 +159,10 @@ export class SyncEngine {
 
   /** 清理短轮询定时器与长轮询，两者互斥，stopCurrentPolling 保证不会并存 */
   private stopCurrentPolling(): void {
+    if (this.localCheckTimer !== null) {
+      window.clearInterval(this.localCheckTimer);
+      this.localCheckTimer = null;
+    }
     if (this.pollTimer !== null) {
       window.clearInterval(this.pollTimer);
       this.pollTimer = null;
@@ -285,7 +304,35 @@ export class SyncEngine {
 
   /** 记录一次文件重命名，oldPath 为原路径，path 为新路径 */
   enqueueRename(oldPath: string, newPath: string): void {
-    this.enqueue({ id: operationID(), kind: "rename", path: newPath, oldPath, createdAt: Date.now() });
+    this.enqueueRenames([{ oldPath, path: newPath }]);
+  }
+
+  /** 同一次目录移动的子文件共享入队链与一次状态保存 */
+  enqueueRenames(moves: readonly { oldPath: string; path: string }[]): void {
+    const operations: PendingOperation[] = [];
+    for (const move of moves) {
+      const oldPath = normalizePath(move.oldPath);
+      const path = normalizePath(move.path);
+      if ([oldPath, path].some((value) => value === "协作oss" || value.startsWith("协作oss/"))) {
+        this.recordDiscovery("collaboration_boundary", 1);
+        continue;
+      }
+      const from = shouldSync(oldPath, this.plugin.settings.syncPoisonObsidianFiles);
+      const to = shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles);
+      if (!from && !to) continue;
+      operations.push({ id: operationID(), kind: from && to ? "rename" : from ? "delete" : "upsert", path: to ? path : oldPath, oldPath: from && to ? oldPath : undefined, createdAt: Date.now() });
+    }
+    if (operations.length === 0) return;
+    this.enqueueChain = this.enqueueChain.then(async () => {
+      await this.baseline.load();
+      for (const operation of operations) this.baseline.putPending(operation);
+      await this.baseline.save();
+      this.recordDiscovery("event_batch", operations.length, operations[0].id);
+      this.diagnostics?.record({ kind: "sync_queue", at: Date.now(), phase: "persisted", operation: operations[0].kind, pendingCount: this.baseline.pending().length });
+      this.debounceFn();
+    }).catch((error: unknown) => {
+      new Notice(this.plugin.t("sync.saveQueueFailed", { error: errorMessage(error, this.plugin.t("common.unknownError")) }));
+    });
   }
 
   /**
@@ -293,9 +340,15 @@ export class SyncEngine {
    * 入队失败仅提示，不让后续本地事件因一次持久化失败而丢失
    */
   private enqueue(operation: PendingOperation): void {
-    if (!shouldSync(operation.path, this.plugin.settings.syncPoisonObsidianFiles)) return;
+    if (!shouldSync(operation.path, this.plugin.settings.syncPoisonObsidianFiles)) {
+      this.recordDiscovery("event_filtered", 1, operation.id);
+      return;
+    }
     if (operation.oldPath && !shouldSync(operation.oldPath, this.plugin.settings.syncPoisonObsidianFiles)) return;
-    if (this.isSuppressed(operation.path) || (operation.oldPath !== undefined && this.isSuppressed(operation.oldPath))) return;
+    if (this.isSuppressed(operation.path) || (operation.oldPath !== undefined && this.isSuppressed(operation.oldPath))) {
+      this.recordDiscovery("event_suppressed", 1, operation.id);
+      return;
+    }
     this.enqueueChain = this.enqueueChain.then(async () => {
       await this.baseline.load();
       this.baseline.putPending({
@@ -368,6 +421,7 @@ export class SyncEngine {
         full = true;
         await this.baseline.save();
       }
+      await this.discoverLocalChanges(forceFull || Date.now() - this.lastContentCheck >= 600_000);
       // 待办删除但基线无对应条目，说明该文件从未同步过，只有全量快照能判断远端是否已不存在
       if (this.needsFullSnapshotForDeletes(this.baseline.pending())) full = true;
       const remote = await this.fetchRemote(vaultID, full);
@@ -387,13 +441,23 @@ export class SyncEngine {
         pending = this.baseline.pending();
       }
       await this.processRenames(vaultID, pending, remote.files);
+      pending = this.baseline.pending();
       const plan = await this.planOrdinaryActions(full || remote.recoverySnapshot, remote.files, pending, remote.recoverySnapshot);
       await this.applyPlanEffects(plan);
-      const results = await new TaskPool({
+      const pool = new TaskPool({
         maxConcurrency: this.plugin.settings.maxConcurrency,
         maxRetries: 2,
         baseDelayMs: 500,
-      }).run([...plan.actions], (action) => this.applyAction(vaultID, action));
+      });
+      const first = plan.actions.filter((action) => !(action.kind === "delete_remote" && action.operation?.source === "scan"));
+      const deferred = plan.actions.filter((action) => action.kind === "delete_remote" && action.operation?.source === "scan");
+      const firstResults = await pool.run(first, (action) => this.applyAction(vaultID, action));
+      await this.baseline.save();
+      const deleteResults = await pool.run(deferred, (action) => this.applyAction(vaultID, action));
+      const ordered = [...first, ...deferred];
+      const outcomes = [...firstResults, ...deleteResults];
+      const resultsByAction = new Map(ordered.map((action, index) => [action, outcomes[index]!]));
+      const results = plan.actions.map((action) => resultsByAction.get(action)!);
       this.reportTransferNotifications(plan.actions, results);
       if (hasUnresolvedAction(results)) {
         await this.baseline.save();
@@ -419,6 +483,7 @@ export class SyncEngine {
         kind: "sync_run",
         at: Date.now(),
         phase: "complete",
+        pendingCount: this.baseline.pending().length,
         forceFull: full,
         cursor: this.baseline.getCursor(),
         nextCursor: remote.nextCursor,
@@ -431,6 +496,8 @@ export class SyncEngine {
       }
       this.errorNotices.reset();
       this.plugin.setSyncState("idle");
+      if (this.started && this.baseline.pending().some((operation) => !this.baseline.getConflict(operation.path)
+        && (!operation.oldPath || !this.baseline.getConflict(operation.oldPath)))) this.debounceFn();
       return true;
     } catch (error: unknown) {
       this.diagnostics?.record({
@@ -568,6 +635,7 @@ export class SyncEngine {
       const target = await this.ordinaryFileAccess.readExact(operation.path);
       const local = localMeta(operation.path, target);
       if (!oldBaseline || !local || !target) {
+        this.recordDiscovery("rename_fallback", 1, operation.id);
         this.baseline.removePending(operation.id);
         if (local) this.baseline.putPending({ ...operation, kind: "upsert", oldPath: undefined });
         continue;
@@ -575,10 +643,12 @@ export class SyncEngine {
       const sourceRemote = remote.get(operation.oldPath);
       const targetRemote = remote.get(operation.path);
       if (sourceRemote && sourceRemote.revision !== oldBaseline.serverRevision) {
+        this.recordDiscovery("rename_conflict", 1, operation.id);
         await this.preserveBothAfterRenameSourceConflict(vaultID, operation, sourceRemote, remote);
         continue;
       }
       if (targetRemote && targetRemote.revision !== (newBaseline?.serverRevision ?? 0)) {
+        this.recordDiscovery("rename_conflict", 1, operation.id);
         await this.recordConflict(operation.path, target, targetRemote);
         continue;
       }
@@ -592,6 +662,7 @@ export class SyncEngine {
           mtime: local.mtime,
         });
         remote.set(operation.oldPath, result.old);
+        this.recordDiscovery("rename_applied", 1, operation.id);
         remote.set(operation.path, result.new);
         const current = await this.ordinaryFileAccess.readExact(operation.path);
         this.baseline.set(operation.oldPath, this.deletedAcknowledgement(result.old, null));
@@ -604,8 +675,12 @@ export class SyncEngine {
         }));
         this.baseline.removePending(operation.id);
         this.queueCurrentLocalChange(operation.path, target, current);
+        if (current && current.hash !== result.new.hash) {
+          this.baseline.putPending({ id: operationID(), kind: "upsert", path: operation.path, createdAt: Date.now() });
+        }
       } catch (error: unknown) {
         if (!isOrdinarySyncConflict409(error)) throw error;
+        this.recordDiscovery("rename_conflict", 1, operation.id);
         const path = normalizePath(error.current.path || operation.path);
         if (path === operation.oldPath) {
           await this.preserveBothAfterRenameSourceConflict(vaultID, operation, error.current, remote);
@@ -680,6 +755,118 @@ export class SyncEngine {
       .map((file) => normalizePath(file.path));
   }
 
+  /** 只记录事件类别与数量，诊断不包含用户路径或正文 */
+  private recordDiscovery(reason: "event_batch" | "collaboration_boundary" | "paths" | "content" | "incomplete" | "delete_deferred" | "event_suppressed" | "event_filtered" | "rename_applied" | "rename_fallback" | "rename_conflict", count: number, operationID?: string, durationMs?: number): void {
+    this.diagnostics?.record({ kind: "local_discovery", at: Date.now(), reason, count, operationID, durationMs });
+  }
+
+  /** 对照磁盘与 Vault 索引检查可见文件，索引尚未收敛时禁止推导删除 */
+  private async indexedLocalPaths(): Promise<Set<string>> {
+    const indexed = new Set(this.vault.getFiles().map((file) => normalizePath(file.path))
+      .filter((path) => shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles)));
+    const disk = new Set<string>();
+    const folders = [""];
+    while (folders.length > 0) {
+      const folder = folders.pop()!;
+      const entries = await this.vault.adapter.list(folder);
+      for (const path of entries.files.map(normalizePath)) {
+        if (path.split("/").some((part) => part.startsWith("."))) continue;
+        if (shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles)) disk.add(path);
+      }
+      for (const path of entries.folders.map(normalizePath)) {
+        if (path.split("/").some((part) => part.startsWith("."))) continue;
+        if (shouldSync(`${path}/`, this.plugin.settings.syncPoisonObsidianFiles)) folders.push(path);
+      }
+      if (folders.length > 0) await sleep(0);
+    }
+    const visible = [...indexed].filter((path) => !path.split("/").some((part) => part.startsWith(".")));
+    if (visible.some((path) => !disk.has(path)) || [...disk].some((path) => !indexed.has(path))) {
+      throw new Error("Vault index is not ready for local reconciliation");
+    }
+    return indexed;
+  }
+
+  /** 本地枚举与远端游标相互独立，新增及缺失路径始终检查，正文按周期分批读取 */
+  private async discoverLocalChanges(content: boolean): Promise<void> {
+    if (!this.localDiscoveryReady) return;
+    const startedAt = Date.now();
+    try {
+      const paths = await this.indexedLocalPaths();
+      const pending = this.baseline.pending();
+      const pendingByPath = new Map(pending.map((operation) => [operation.path, operation]));
+      const occupied = new Set(pending.flatMap((operation) => operation.oldPath ? [operation.path, operation.oldPath] : [operation.path]));
+      const missing = this.baseline.paths().filter((path) => {
+        const base = this.baseline.get(path);
+        const operation = pendingByPath.get(path);
+        return base && !base.serverDeleted && base.localHash && !paths.has(path) && !this.baseline.getConflict(path)
+          && !path.split("/").some((part) => part.startsWith("."))
+          && shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles)
+          && (!occupied.has(path) || operation?.kind === "delete" && operation.source === "scan");
+      });
+      // 缺失源可能覆盖已有目标，必须检查正文后才能安全规划源删除
+      content ||= missing.length > 0;
+      const dependencies = new Set([...paths].filter((path) => {
+        const base = this.baseline.get(path);
+        const operation = pendingByPath.get(path);
+        return !base || base.serverDeleted || this.baseline.getConflict(path) || operation && operation.kind !== "delete";
+      }));
+      const operations: PendingOperation[] = [];
+      let checked = 0;
+      for (const path of paths) {
+        if (occupied.has(path) || this.baseline.getConflict(path)) continue;
+        const base = this.baseline.get(path);
+        if (!base || base.serverDeleted || content) {
+          const local = await this.readLocalMeta(path);
+          if (!local) throw new Error("Local file changed during reconciliation");
+          if (!base || base.serverDeleted || local.hash !== base.serverHash) {
+            dependencies.add(path);
+            operations.push({ id: operationID(), kind: "upsert", path, source: "scan", createdAt: Date.now() });
+          }
+          if (++checked % 32 === 0) await sleep(0);
+        }
+      }
+      for (const path of missing) {
+        if (await this.vault.adapter.exists(path)) throw new Error("Missing local path is still present on disk");
+        const previous = pendingByPath.get(path);
+        operations.push({ id: previous?.id ?? operationID(), kind: "delete", path, source: "scan", waitForPaths: [...dependencies], createdAt: previous?.createdAt ?? Date.now() });
+      }
+      // 读取期间捕获的新事件优先，扫描结果不覆盖已经更新的待办
+      const currentPending = this.baseline.pending();
+      const currentByPath = new Map(currentPending.map((operation) => [operation.path, operation]));
+      const current = new Set(currentPending.flatMap((operation) => operation.oldPath ? [operation.path, operation.oldPath] : [operation.path]));
+      for (const operation of operations) {
+        const existing = currentByPath.get(operation.path);
+        if (!current.has(operation.path)) this.baseline.putPending(operation);
+        else if (operation.kind === "delete" && existing?.id === operation.id && existing.source === "scan") {
+          existing.waitForPaths = operation.waitForPaths;
+        }
+      }
+      await this.baseline.save();
+      if (content) this.lastContentCheck = Date.now();
+      this.recordDiscovery(content ? "content" : "paths", paths.size, undefined, Date.now() - startedAt);
+    } catch (error) {
+      this.recordDiscovery("incomplete", 0);
+      throw error;
+    }
+  }
+
+  /** 扫描删除依赖已确认的目标正文；源重新出现或目标未收敛时保留原路径 */
+  private async canApplyScannedDelete(operation: PendingOperation): Promise<boolean> {
+    try {
+      if (!Array.isArray(operation.waitForPaths) || operation.waitForPaths.some((path) => typeof path !== "string")) return false;
+      if (await this.ordinaryFileAccess.readExact(operation.path) || await this.vault.adapter.exists(operation.path)) return false;
+      for (const path of operation.waitForPaths) {
+        const base = this.baseline.get(path);
+        if (!base || base.serverDeleted || this.baseline.getConflict(path) || this.baseline.pending().some((item) => item.path === path || item.oldPath === path)) return false;
+        const local = await this.readLocalMeta(path);
+        if (!local || local.hash !== base.serverHash) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** 落盘计划副作用：清理过期待办与被移除的基线条目，保证动作执行前基线已反映计划 */
   private async applyPlanEffects(plan: OrdinarySyncPlanResult): Promise<void> {
     for (const id of plan.obsoletePendingIds) this.baseline.removePending(id);
@@ -751,6 +938,10 @@ export class SyncEngine {
 
   /** 请求服务端删除；删除后本地又出现同名文件时补一条 upsert 待办，下一轮重新上传 */
   private async applyRemoteDeleteRequest(vaultID: string, action: Extract<OrdinarySyncAction, { readonly kind: "delete_remote" }>): Promise<OrdinarySyncActionOutcome> {
+    if (action.operation?.source === "scan" && !(await this.canApplyScannedDelete(action.operation))) {
+      this.recordDiscovery("delete_deferred", 1);
+      return { kind: "deferred_retry", reason: "stale_local" };
+    }
     const server = await this.api.deleteV2(vaultID, {
       path: action.path,
       baseRevision: action.baseRevision,

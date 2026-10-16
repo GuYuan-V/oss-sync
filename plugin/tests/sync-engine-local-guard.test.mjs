@@ -622,7 +622,7 @@ test("runOnce retains a local file created while a remote delete request is pend
   }
 });
 
-test("runOnce re-reads a renamed target and queues its post-request edit", async () => {
+test("runOnce re-reads a renamed target and uploads its post-request edit in the same run", async () => {
   const oldPath = "Notes/Before.md";
   const targetPath = "Notes/After.md";
   const sourceBytes = enc("source before rename");
@@ -635,10 +635,17 @@ test("runOnce re-reads a renamed target and queues its post-request edit", async
   };
   const started = deferred();
   const response = deferred();
+  const uploadStarted = deferred();
+  const uploadResponse = deferred();
+  const uploaded = await live(targetPath, laterBytes, 12);
   const fixture = await createRunOnceFixture({
     initialFiles: [[targetPath, targetBytes]],
     initialEntries: [[oldPath, await liveBaseline(sourceBytes, 4)]],
     initialPending: [{ id: "rename-before-after", kind: "rename", oldPath, path: targetPath, createdAt: 1 }],
+    upload: async (_vaultID, input) => {
+      uploadStarted.resolve(input);
+      return uploadResponse.promise;
+    },
     rename: async (_vaultID, input) => {
       started.resolve(input);
       return response.promise;
@@ -656,7 +663,11 @@ test("runOnce re-reads a renamed target and queues its post-request edit", async
     fixture.state.vault.set(targetPath, laterBytes);
     response.resolve(renameResult);
 
-    assert.equal(await run, true);
+    const uploadInput = await uploadStarted.promise;
+    assert.equal(uploadInput.path, targetPath);
+    assert.equal(uploadInput.baseRevision, renameResult.new.revision);
+    assert.equal(uploadInput.hash, await shaHex(laterBytes));
+    assert.deepEqual(new Uint8Array(uploadInput.content), laterBytes);
     assert.deepEqual(fixture.state.vault.bytes(targetPath), laterBytes);
     assert.deepEqual(fixture.state.entries.get(oldPath), {
       serverRevision: renameResult.old.revision,
@@ -677,6 +688,20 @@ test("runOnce re-reads a renamed target and queues its post-request edit", async
       baseText: decoder.decode(targetBytes),
     });
     assert.deepEqual(pendingKindsAndPaths(fixture.state.pending()), [{ kind: "upsert", oldPath: null, path: targetPath }]);
+    uploadResponse.resolve(uploaded);
+    assert.equal(await run, true);
+    assert.deepEqual(fixture.state.vault.bytes(targetPath), laterBytes);
+    assert.deepEqual(fixture.state.entries.get(targetPath), {
+      serverRevision: uploaded.revision,
+      serverHash: uploaded.hash,
+      serverDeleted: false,
+      localHash: uploaded.hash,
+      localMTime: 40,
+      localSize: laterBytes.byteLength,
+      baseText: decoder.decode(laterBytes),
+    });
+    assert.deepEqual(fixture.state.pending(), []);
+    assert.deepEqual(fixture.state.calls.upload.map(([vaultID]) => vaultID), ["v1"]);
     assert.deepEqual(fixture.state.calls.rename.map(([vaultID]) => vaultID), ["v1"]);
     assertConflictAcknowledged(fixture.state);
   } finally {
@@ -722,7 +747,8 @@ test("runOnce never derives renamed target baseText from post-request bytes", as
       localSize: laterBytes.byteLength,
     });
     assert.equal("baseText" in fixture.state.entries.get(targetPath), false);
-    assert.deepEqual(pendingKindsAndPaths(fixture.state.pending()), [{ kind: "upsert", oldPath: null, path: targetPath }]);
+    assert.deepEqual(fixture.state.pending(), []);
+    assert.deepEqual(fixture.state.calls.upload, []);
     assert.deepEqual(fixture.state.entries.get(oldPath), {
       serverRevision: renameResult.old.revision,
       serverHash: renameResult.old.hash,

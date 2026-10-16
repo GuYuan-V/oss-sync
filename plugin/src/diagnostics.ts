@@ -82,6 +82,14 @@ export type DiagnosticEvent =
       readonly operationIDLength: number;
     }
   | {
+      readonly kind: "local_discovery";
+      readonly at: number;
+      readonly reason: "event_batch" | "collaboration_boundary" | "paths" | "content" | "incomplete" | "delete_deferred" | "event_suppressed" | "event_filtered" | "rename_applied" | "rename_fallback" | "rename_conflict";
+      readonly count: number;
+      readonly operationID?: string;
+      readonly durationMs?: number;
+    }
+  | {
       readonly kind: "sync_queue";
       readonly at: number;
       readonly phase: "persisted" | "resumed";
@@ -133,6 +141,11 @@ export class Diagnostics {
 /** 按事件类型逐项校验并脱敏，返回 null 表示该事件应丢弃 */
 function sanitizeEvent(event: DiagnosticEvent): DiagnosticEvent | null {
   switch (event.kind) {
+    case "local_discovery":
+      if (!["event_batch", "collaboration_boundary", "paths", "content", "incomplete", "delete_deferred", "event_suppressed", "event_filtered", "rename_applied", "rename_fallback", "rename_conflict"].includes(event.reason)) return null;
+      return { kind: "local_discovery", at: finiteNumber(event.at), reason: event.reason, count: finiteNumber(event.count),
+        ...(typeof event.operationID === "string" ? { operationID: event.operationID.slice(0, 128) } : {}),
+        ...(typeof event.durationMs === "number" ? { durationMs: finiteNumber(event.durationMs) } : {}) };
     case "plugin_version_check":
       if (!["update_available", "up_to_date", "failed"].includes(event.result) || typeof event.currentVersion !== "string") return null;
       return {
