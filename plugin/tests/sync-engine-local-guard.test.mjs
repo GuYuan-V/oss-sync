@@ -764,3 +764,24 @@ test("runOnce never derives renamed target baseText from post-request bytes", as
     await fixture.cleanup();
   }
 });
+
+test("retired local-state uploads, deletes and renames do not replay or modify local files", async () => {
+  const path = ".obsidian/workspace.json";
+  const bytes = enc("my local workspace");
+  const fixture = await createRunOnceFixture({
+    initialFiles: [[path, bytes]],
+    initialEntries: [[path, await liveBaseline(bytes)]],
+    initialPending: [
+      { id: "old-upload", kind: "upsert", path, createdAt: 1 },
+      { id: "old-delete", kind: "delete", path: ".obsidian/plugins/test/data.json", createdAt: 2 },
+      { id: "old-rename", kind: "rename", oldPath: ".obsidian/cache/a", path: "notes/a.md", createdAt: 3 },
+    ],
+    remoteFiles: [tombstone(path)],
+  });
+  try {
+    assert.equal(await fixture.runOnce(), true);
+    assert.deepEqual(fixture.state.pending(), []);
+    assert.deepEqual(fixture.state.vault.bytes(path), bytes);
+    for (const method of ["upload", "download", "delete", "rename"]) assert.deepEqual(fixture.state.calls[method], []);
+  } finally { await fixture.cleanup(); }
+});

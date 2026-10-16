@@ -389,8 +389,10 @@ export default class OSSPlugin extends Plugin {
   /** 从磁盘加载设置，与默认值合并，过期令牌不恢复，密码始终置空 */
   async loadSettings(): Promise<void> {
     const data = (await this.loadData()) as PluginData | null;
+    let hadLegacyLocalState = false;
     if (data) {
-      const { token, ...settings } = data;
+      const { token, syncPoisonObsidianFiles, ...settings } = data as PluginData & { syncPoisonObsidianFiles?: boolean };
+      hadLegacyLocalState = syncPoisonObsidianFiles !== undefined;
       this.settings = Object.assign({}, DEFAULT_SETTINGS, settings);
       // 过期令牌不恢复：否则 isLoggedIn 为真但请求全部 401，设置页又不渲染登录表单
       this.token = token && !isTokenExpired(token) ? token : undefined;
@@ -403,6 +405,7 @@ export default class OSSPlugin extends Plugin {
       this.settings.clientId = createClientID();
       await this.saveSettings();
     }
+    if (hadLegacyLocalState) await this.saveSettings();
     if (this.settings.remotePollIntervalSec === 30) {
       this.settings.remotePollIntervalSec = 3;
       await this.saveSettings();

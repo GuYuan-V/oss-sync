@@ -192,7 +192,9 @@ func (h *Handler) v2ListChanges(c *gin.Context, manifest bool) {
 	files := make([]V2FileMeta, 0, len(rows))
 	nextCursor := after
 	for _, row := range rows {
-		files = append(files, v2Meta(row))
+		if !isDeviceLocalObsidianPath(row.Path) {
+			files = append(files, v2Meta(row))
+		}
 		if row.Revision > nextCursor {
 			nextCursor = row.Revision
 		}

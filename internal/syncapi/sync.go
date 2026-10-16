@@ -273,7 +273,7 @@ func classifyFile(path string) string {
 	return "attachment"
 }
 
-// isSafeRelativePath 防止路径逃逸：禁绝对路径、禁 .. 上一级
+// isSafeRelativePath 禁止路径逃逸和设备本地状态文件进入同步接口
 func isSafeRelativePath(p string) bool {
 	_, ok := normalizeRelativePath(p)
 	return ok
@@ -288,10 +288,19 @@ func normalizeRelativePath(p string) (string, bool) {
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
 		return "", false
 	}
-	if clean == "" {
+	if clean == "" || isDeviceLocalObsidianPath(clean) {
 		return "", false
 	}
 	return clean, true
+}
+
+// isDeviceLocalObsidianPath 排除工作区、缓存与插件本地设置，其他 Obsidian 配置仍可同步
+func isDeviceLocalObsidianPath(p string) bool {
+	if p == ".obsidian/workspace.json" || p == ".obsidian/workspace-mobile.json" || p == ".obsidian/cache" || strings.HasPrefix(p, ".obsidian/cache/") {
+		return true
+	}
+	parts := strings.Split(p, "/")
+	return len(parts) == 4 && parts[0] == ".obsidian" && parts[1] == "plugins" && parts[3] == "data.json"
 }
 
 // Download 处理 GET /api/sync/download?path=xxx

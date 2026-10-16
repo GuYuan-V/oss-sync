@@ -339,18 +339,6 @@ export class OSSSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName(this.plugin.t("settings.sync.localConfig"))
-      .setDesc(this.plugin.t("settings.sync.localConfigDesc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.syncPoisonObsidianFiles)
-          .onChange(async (value) => {
-            this.plugin.settings.syncPoisonObsidianFiles = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
       .setName(this.plugin.t("settings.sync.incremental"))
       .setDesc(this.plugin.t("settings.sync.incrementalDesc"))
       .addToggle((toggle) =>

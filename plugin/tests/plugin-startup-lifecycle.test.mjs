@@ -323,3 +323,19 @@ test("loadSettings keeps a valid persisted token and wires it to the api client"
     assert.equal(plugin.isLoggedIn(), true);
   } finally { await plugin.onunload(); await cleanup(); restore(); }
 });
+
+test("loadSettings removes the retired local-state toggle without changing other settings", async () => {
+  const { module, cleanup } = await loadMain();
+  const plugin = new module.default(makeApp({}), { id: "oss-sync", version: "0.2.13" });
+  plugin.loadData = async () => seedPluginData({ syncPoisonObsidianFiles: true, remotePollIntervalSec: 3 });
+  const writes = [];
+  plugin.saveData = async data => writes.push(data);
+  try {
+    await plugin.loadSettings();
+    assert.equal("syncPoisonObsidianFiles" in plugin.settings, false);
+    assert.equal(plugin.settings.username, "tester");
+    assert.equal(plugin.settings.vaultId, "vault-1");
+    assert.ok(writes.length > 0);
+    assert.equal("syncPoisonObsidianFiles" in writes.at(-1), false);
+  } finally { await cleanup(); }
+});

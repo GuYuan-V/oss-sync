@@ -271,7 +271,7 @@ export class SyncEngine {
    */
   enqueueDeleteTree(folderPath: string): void {
     const root = normalizePath(folderPath).replace(/\/+$/, "");
-    if (!root || !shouldSync(root, this.plugin.settings.syncPoisonObsidianFiles)) return;
+    if (!root || !shouldSync(root)) return;
     const prefix = `${root}/`;
     this.enqueueChain = this.enqueueChain.then(async () => {
       await this.baseline.load();
@@ -282,7 +282,7 @@ export class SyncEngine {
         if (operation.oldPath?.startsWith(prefix)) paths.add(operation.oldPath);
       }
       for (const path of paths) {
-        if (shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles)) {
+        if (shouldSync(path)) {
           this.baseline.putPending({ id: operationID(), kind: "delete", path, createdAt: Date.now() });
         }
       }
@@ -317,8 +317,8 @@ export class SyncEngine {
         this.recordDiscovery("collaboration_boundary", 1);
         continue;
       }
-      const from = shouldSync(oldPath, this.plugin.settings.syncPoisonObsidianFiles);
-      const to = shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles);
+      const from = shouldSync(oldPath);
+      const to = shouldSync(path);
       if (!from && !to) continue;
       operations.push({ id: operationID(), kind: from && to ? "rename" : from ? "delete" : "upsert", path: to ? path : oldPath, oldPath: from && to ? oldPath : undefined, createdAt: Date.now() });
     }
@@ -340,11 +340,11 @@ export class SyncEngine {
    * 入队失败仅提示，不让后续本地事件因一次持久化失败而丢失
    */
   private enqueue(operation: PendingOperation): void {
-    if (!shouldSync(operation.path, this.plugin.settings.syncPoisonObsidianFiles)) {
+    if (!shouldSync(operation.path)) {
       this.recordDiscovery("event_filtered", 1, operation.id);
       return;
     }
-    if (operation.oldPath && !shouldSync(operation.oldPath, this.plugin.settings.syncPoisonObsidianFiles)) return;
+    if (operation.oldPath && !shouldSync(operation.oldPath)) return;
     if (this.isSuppressed(operation.path) || (operation.oldPath !== undefined && this.isSuppressed(operation.oldPath))) {
       this.recordDiscovery("event_suppressed", 1, operation.id);
       return;
@@ -397,6 +397,11 @@ export class SyncEngine {
     try {
       await this.applyStrategy();
       await this.baseline.load();
+      for (const operation of this.baseline.pending()) {
+        if (!shouldSync(operation.path) || operation.oldPath && !shouldSync(operation.oldPath)) {
+          this.baseline.removePending(operation.id);
+        }
+      }
       const pendingAtStart = this.baseline.pending();
       this.diagnostics?.record({
         kind: "sync_run",
@@ -599,7 +604,9 @@ export class SyncEngine {
         }
         throw error;
       }
-      for (const file of page.files) files.set(normalizePath(file.path), file);
+      for (const file of page.files) {
+        if (shouldSync(file.path)) files.set(normalizePath(file.path), file);
+      }
       recoverySnapshot = recoverySnapshot || page.recovery_snapshot;
       cursor = page.next_cursor;
       if (!page.has_more) return { files, nextCursor: cursor, recoverySnapshot };
@@ -742,7 +749,7 @@ export class SyncEngine {
     const entries = new Map<string, BaselineEntry>();
     for (const path of this.baseline.paths()) {
       const entry = this.baseline.get(path);
-      if (entry) entries.set(path, entry);
+      if (entry && shouldSync(path)) entries.set(path, entry);
     }
     return entries;
   }
@@ -751,7 +758,7 @@ export class SyncEngine {
   private vaultPaths(forceFull: boolean): readonly string[] {
     if (!forceFull) return [];
     return this.vault.getFiles()
-      .filter((file) => shouldSync(file.path, this.plugin.settings.syncPoisonObsidianFiles))
+      .filter((file) => shouldSync(file.path))
       .map((file) => normalizePath(file.path));
   }
 
@@ -763,7 +770,7 @@ export class SyncEngine {
   /** 对照磁盘与 Vault 索引检查可见文件，索引尚未收敛时禁止推导删除 */
   private async indexedLocalPaths(): Promise<Set<string>> {
     const indexed = new Set(this.vault.getFiles().map((file) => normalizePath(file.path))
-      .filter((path) => shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles)));
+      .filter((path) => shouldSync(path)));
     const disk = new Set<string>();
     const folders = [""];
     while (folders.length > 0) {
@@ -771,11 +778,11 @@ export class SyncEngine {
       const entries = await this.vault.adapter.list(folder);
       for (const path of entries.files.map(normalizePath)) {
         if (path.split("/").some((part) => part.startsWith("."))) continue;
-        if (shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles)) disk.add(path);
+        if (shouldSync(path)) disk.add(path);
       }
       for (const path of entries.folders.map(normalizePath)) {
         if (path.split("/").some((part) => part.startsWith("."))) continue;
-        if (shouldSync(`${path}/`, this.plugin.settings.syncPoisonObsidianFiles)) folders.push(path);
+        if (shouldSync(`${path}/`)) folders.push(path);
       }
       if (folders.length > 0) await sleep(0);
     }
@@ -800,7 +807,7 @@ export class SyncEngine {
         const operation = pendingByPath.get(path);
         return base && !base.serverDeleted && base.localHash && !paths.has(path) && !this.baseline.getConflict(path)
           && !path.split("/").some((part) => part.startsWith("."))
-          && shouldSync(path, this.plugin.settings.syncPoisonObsidianFiles)
+          && shouldSync(path)
           && (!occupied.has(path) || operation?.kind === "delete" && operation.source === "scan");
       });
       // 缺失源可能覆盖已有目标，必须检查正文后才能安全规划源删除
@@ -1148,6 +1155,7 @@ export class SyncEngine {
    * 附件在两侧内容一致时走解决器的保留双方路径；有序合并仅适用于文本
    */
   async resolveConflict(path: string, resolution: ConflictResolution): Promise<void> {
+    if (!shouldSync(path)) throw new Error(this.plugin.t("sync.conflictNotFound"));
     const vaultID = this.plugin.settings.vaultId;
     const conflict = this.baseline.getConflict(path);
     if (!vaultID || !conflict) throw new Error(this.plugin.t("sync.conflictNotFound"));

@@ -378,6 +378,11 @@ func (h *Handler) writeFileFromBytes(
 	actor history.Actor,
 	action, prevPath string,
 ) (V2FileMeta, error) {
+	var valid bool
+	path, valid = normalizeRelativePath(path)
+	if !valid {
+		return V2FileMeta{}, errors.New("path contains illegal segments")
+	}
 	vaultLock := h.vaultLock(vault.ID)
 	vaultLock.Lock()
 	defer vaultLock.Unlock()

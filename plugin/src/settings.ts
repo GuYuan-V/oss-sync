@@ -11,8 +11,6 @@ export interface OSSSettings {
   syncIntervalSec: number;
   /** 同时执行的上传和下载任务数*/
   maxConcurrency: number;
-  /** 是否同步 .obsidian 下容易产生设备冲突的本地状态文件*/
-  syncPoisonObsidianFiles: boolean;
   /** 是否优先使用增量同步*/
   incrementalCheck: boolean;
   /** 博客分享时是否保留目录结构*/
@@ -48,7 +46,6 @@ export const DEFAULT_SETTINGS: OSSSettings = {
   password: "",
   syncIntervalSec: 3,
   maxConcurrency: 6,
-  syncPoisonObsidianFiles: false,
   incrementalCheck: true,
   keepDirectoryTree: true,
   vaultId: "",

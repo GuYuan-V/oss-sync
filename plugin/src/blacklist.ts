@@ -1,7 +1,6 @@
 // 不应进入同步队列的本地文件
 //
-// 基线、版本控制目录和系统临时文件始终忽略；.obsidian 下的本地状态
-// 默认忽略，但用户可以在设置中开启
+// 基线、版本控制目录、系统临时文件和 Obsidian 设备本地状态始终忽略
 const ABSOLUTE_BLACKLIST: BlacklistEntry[] = [
   { kind: "exact", value: ".oss-sync-state.json" },
   { kind: "exact", value: ".DS_Store" },
@@ -15,6 +14,7 @@ const ABSOLUTE_BLACKLIST: BlacklistEntry[] = [
 const DEVICE_LOCAL_OBSIDIAN: BlacklistEntry[] = [
   { kind: "exact", value: ".obsidian/workspace.json" },
   { kind: "exact", value: ".obsidian/workspace-mobile.json" },
+  { kind: "exact", value: ".obsidian/cache" },
   { kind: "prefix", value: ".obsidian/cache/" },
   { kind: "glob", value: ".obsidian/plugins/*/data.json" },
 ];
@@ -25,18 +25,16 @@ interface BlacklistEntry {
   value: string;
 }
 
-/** 判断相对路径是否应同步；allowDeviceLocalObsidian 控制 .obsidian 下本地状态是否放行 */
-export function shouldSync(relativePath: string, allowDeviceLocalObsidian: boolean): boolean {
+/** 判断相对路径是否应同步，设备本地状态始终排除 */
+export function shouldSync(relativePath: string): boolean {
   const p = normalize(relativePath);
   if (p === "") return false;
 
   for (const entry of ABSOLUTE_BLACKLIST) {
     if (matches(entry, p)) return false;
   }
-  if (!allowDeviceLocalObsidian) {
-    for (const entry of DEVICE_LOCAL_OBSIDIAN) {
-      if (matches(entry, p)) return false;
-    }
+  for (const entry of DEVICE_LOCAL_OBSIDIAN) {
+    if (matches(entry, p)) return false;
   }
   return true;
 }
@@ -60,7 +58,7 @@ function matches(entry: BlacklistEntry, path: string): boolean {
 function globMatch(pattern: string, path: string): boolean {
   const regexStr = pattern
     .split("/")
-    .map((seg) => seg.replace(/\*/g, "[^/]*"))
+    .map((seg) => seg.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*"))
     .join("/");
   return new RegExp("^" + regexStr + "$").test(path);
 }
