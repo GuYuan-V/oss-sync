@@ -8,6 +8,7 @@
 - 修改同步写路径时必须同时检查 Vault 隔离、设备授权、单调 revision、`operation_id` 幂等、`synclock` 并发约束，以及数据库、正文、历史快照和失败恢复的一致性。
 - 修改模型时同步检查 [database.go](../internal/database/database.go) 的迁移与回填，并兼容 SQLite 和 PostgreSQL。
 - 插件源码只修改 [plugin/src](../plugin/src/)；`plugin/main.js` 是忽略的构建产物，不提交。
+- 提交涉及 Obsidian 插件实际更新的修改时，必须按 [插件版本与更新发布规则](rules/plugin-versioning.md) 同步提升并核对插件版本元数据；Release 资源核验后更新根目录清单公告，确保社区市场能发现并下载对应版本。
 - [Dockerfile](../Dockerfile) 只构建后端镜像；[docker-compose.yml](../docker-compose.yml) 使用 SQLite 命名卷。容器升级通过替换镜像完成。
 - 不提交 `data/`、数据库、日志、构建产物或密钥。新增配置字段时同步检查开发/生产 YAML、环境变量覆盖和校验逻辑。
 - 优先复用现有 Handler、策略、路径校验和锁；修改保持在需求范围内，避免无关重构和新增依赖。
