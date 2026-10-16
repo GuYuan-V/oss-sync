@@ -116,14 +116,45 @@ export class CollaborationFileVault {
     return hashBytes(bytes);
   }
 
-  /** 删除本地协作文件；目标不存在时返回 false */
-  async deleteLocal(path: string): Promise<boolean> {
+  /** 仅删除基线内容未变化的协作文件，并非递归清理空父目录 */
+  async deleteLocal(path: string, expectedHash: string): Promise<boolean> {
     const key = normalizePath(path);
+    const parts = key.split("/");
+    if (parts.length < 3 || parts[0] !== COLLAB_DIR ||
+        parts.some((part) => !part || part === "." || part === ".." || part.includes(":"))) {
+      throw new Error("Invalid collaboration cleanup path");
+    }
     const file = this.deps.app.vault.getAbstractFileByPath(key);
-    if (!(file instanceof TFile)) return false;
-    this.suppress(key);
-    await this.deps.app.vault.delete(file, false);
-    return true;
+    if (file) {
+      if (!(file instanceof TFile)) throw new Error("Collaboration path is no longer a file");
+      const current = await this.readExact(key);
+      if (!current || current.hash !== expectedHash) {
+        throw new Error("Local collaboration content has changed; file preserved");
+      }
+      this.suppress(key);
+      await this.deps.app.vault.delete(file, false);
+    }
+    parts.pop();
+    while (parts.length > 0) {
+      const parent = parts.join("/");
+      if (await this.deps.app.vault.adapter.exists(parent)) {
+        const entries = await this.deps.app.vault.adapter.list(parent);
+        if (entries.files.length > 0 || entries.folders.length > 0) break;
+        this.suppress(parent);
+        try {
+          await this.deps.app.vault.adapter.rmdir(parent, false);
+        } catch (error) {
+          // 检查后新增的内容由非递归删除保护，其他失败留待下一次清理
+          if (await this.deps.app.vault.adapter.exists(parent)) {
+            const remaining = await this.deps.app.vault.adapter.list(parent);
+            if (remaining.files.length > 0 || remaining.folders.length > 0) break;
+            throw error;
+          }
+        }
+      }
+      parts.pop();
+    }
+    return file !== null;
   }
 
   private async ensureParentFolders(path: string): Promise<void> {

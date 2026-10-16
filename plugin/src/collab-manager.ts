@@ -133,43 +133,45 @@ export class CollabManager {
       return;
     }
     try {
-      const [vaultResult, inboxResult] = await Promise.all([
-        this.api.collabList(vaultID),
-        this.api.collabInbox(),
-      ]);
-      // 去重：同 vault:file:collaborator 仅保留最新一条，优先 accepted > pending > revoked
-      const deduped = new Map<string, CollabEntry>();
-      const rank = (s: string) => (s === "accepted" ? 2 : s === "pending" ? 1 : 0);
-      const consider = (e: CollabEntry) => {
-        const collabId = String((e as any).collaborator_id ?? e.collaborator_username ?? "");
-        const key = `${e.vault_id}:${e.file_id}:${collabId}`;
-        const prev = deduped.get(key);
-        if (!prev) {
-          deduped.set(key, e);
-          return;
-        }
-        const rPrev = rank(prev.status);
-        const rCur = rank(e.status);
-        if (rCur > rPrev) {
-          deduped.set(key, e);
-          return;
-        }
-        if (rCur === rPrev && e.created_at > prev.created_at) {
-          deduped.set(key, e);
-        }
-      };
-      for (const entry of vaultResult.collaborations) consider(entry);
-      for (const entry of inboxResult.collaborations) consider(entry);
-      this.collabs = [...deduped.values()];
-      // 清理本地已 revoked/非协作文件的残留 baseline
-      this.pruneStaleCollaborationBaselines();
-      this.diagnostics?.record({
-        kind: "collab_activity",
-        at: Date.now(),
-        entries: this.collabs.length,
-        newestCreatedAt: newestCreatedAt(this.collabs),
+      await this.coordinator.run(async () => {
+        const [vaultResult, inboxResult] = await Promise.all([
+          this.api.collabList(vaultID),
+          this.api.collabInbox(),
+        ]);
+        // 去重：同 vault:file:collaborator 仅保留最新一条，优先 accepted > pending > revoked
+        const deduped = new Map<string, CollabEntry>();
+        const rank = (s: string) => (s === "accepted" ? 2 : s === "pending" ? 1 : 0);
+        const consider = (e: CollabEntry) => {
+          const collabId = String((e as any).collaborator_id ?? e.collaborator_username ?? "");
+          const key = `${e.vault_id}:${e.file_id}:${collabId}`;
+          const prev = deduped.get(key);
+          if (!prev) {
+            deduped.set(key, e);
+            return;
+          }
+          const rPrev = rank(prev.status);
+          const rCur = rank(e.status);
+          if (rCur > rPrev) {
+            deduped.set(key, e);
+            return;
+          }
+          if (rCur === rPrev && e.created_at > prev.created_at) {
+            deduped.set(key, e);
+          }
+        };
+        for (const entry of vaultResult.collaborations) consider(entry);
+        for (const entry of inboxResult.collaborations) consider(entry);
+        this.collabs = [...deduped.values()];
+        // 清理本地已 revoked/非协作文件的残留 baseline
+        await this.pruneStaleCollaborationBaselines();
+        this.diagnostics?.record({
+          kind: "collab_activity",
+          at: Date.now(),
+          entries: this.collabs.length,
+          newestCreatedAt: newestCreatedAt(this.collabs),
+        });
+        this.onChange();
       });
-      this.onChange();
       await this.remoteSync.refresh();
     } catch (error) {
       // 协作列表刷新由长轮询周期性驱动，失败提示走冷却抑制，状态栏与侧边栏持续展示
@@ -179,25 +181,52 @@ export class CollabManager {
     }
   }
 
-  /** 清理已失效协作的本地文件与基线，避免残留条目继续展示 */
-  private pruneStaleCollaborationBaselines(): void {
-    const baseline: any = this.plugin.baseline as any;
+  /** 清理与上传下载串行执行，失败时保留基线供后续刷新重试 */
+  private async pruneStaleCollaborationBaselines(): Promise<void> {
+    const baseline = this.plugin.baseline;
     if (typeof baseline.collaborationEntries !== "function" || typeof baseline.removeCollaboration !== "function") return;
-    const activeKeys = new Set(
-      this.collabs
-        .filter((e) => e.status === "accepted" || e.status === "pending")
-        .map((e) => `${e.vault_id}:${e.file_id}`),
-    );
-    let changed = false;
     for (const entry of baseline.collaborationEntries()) {
-      const key = `${entry.vaultId}:${entry.fileId}`;
-      if (!activeKeys.has(key)) {
-        if (baseline.removeCollaboration(entry.vaultId, entry.fileId)) changed = true;
-        // 同步删除已不在协作中的本地文件
-        void this.vaultAccess.deleteLocal(entry.localPath).catch(() => {});
+      if (this.hasActiveCollaboration(entry.vaultId, entry.fileId)) continue;
+      try {
+        await this.cleanupCollaboration(entry.vaultId, entry.fileId);
+      } catch (error) {
+        this.showCleanupFailure(entry.vaultId, entry.fileId, error);
       }
     }
-    if (changed) void baseline.save();
+  }
+
+  private hasActiveCollaboration(vaultId: string, fileId: number): boolean {
+    return this.collabs.some((entry) =>
+      entry.vault_id === vaultId && entry.file_id === fileId &&
+      entry.collaborator_username === this.plugin.settings.username &&
+      (entry.status === "accepted" || entry.status === "pending"));
+  }
+
+  /** 无基线的路径不归清理流程所有，同路径的有效协作仍需保留正文 */
+  private async cleanupCollaboration(vaultId: string, fileId: number): Promise<void> {
+    const baseline = this.plugin.baseline;
+    const entry = baseline.getCollaboration(vaultId, fileId);
+    if (!entry || this.hasActiveCollaboration(vaultId, fileId)) return;
+    const sharedPath = this.collabs.some((active) =>
+      active.collaborator_username === this.plugin.settings.username &&
+      (active.status === "accepted" || active.status === "pending") &&
+      normalizePath(collabLocalPath(active.owner_username, active.file_path)) === normalizePath(entry.localPath));
+    if (!sharedPath) await this.vaultAccess.deleteLocal(entry.localPath, entry.serverHash);
+    baseline.removeCollaboration(vaultId, fileId);
+    try {
+      await baseline.save();
+    } catch (error) {
+      baseline.setCollaboration(vaultId, fileId, entry);
+      throw error;
+    }
+    this.loadNotices.reset(`cleanup:${vaultId}:${fileId}`);
+  }
+
+  private showCleanupFailure(vaultId: string, fileId: number, error: unknown, manual = false): void {
+    const shouldShow = this.loadNotices.shouldShow(`cleanup:${vaultId}:${fileId}`);
+    if (manual || shouldShow) {
+      new Notice(this.plugin.t("collab.cleanupFailed", { error: errorMessage(error, this.plugin) }));
+    }
   }
 
   /** 本地协作文件被编辑，转交文件同步防抖上传 */
@@ -218,33 +247,35 @@ export class CollabManager {
 
   /** 撤回邀请或解除协作，同时清理本地文件与基线 */
   async revoke(entry: CollabEntry): Promise<void> {
-    try {
-      await this.api.collabRevoke(entry.vault_id, entry.id);
-      // 立即清理本地协作文件与 baseline，避免 revoked 仍展示
-      this.plugin.baseline.removeCollaboration(entry.vault_id, entry.file_id);
-      await this.plugin.baseline.save();
-      const localPath = collabLocalPath(entry.owner_username, entry.file_path);
-      await this.vaultAccess.deleteLocal(localPath).catch(() => {});
-      new Notice(this.plugin.t("collab.revoked"));
-      await this.refresh();
-    } catch (error) {
-      new Notice(this.plugin.t("collab.revokeFailed", { error: errorMessage(error, this.plugin) }));
-    }
+    await this.endCollaboration(entry, "revoke");
   }
 
   /** 主动退出协作，同时清理本地文件与基线 */
   async leave(entry: CollabEntry): Promise<void> {
+    await this.endCollaboration(entry, "leave");
+  }
+
+  private async endCollaboration(entry: CollabEntry, action: "leave" | "revoke"): Promise<void> {
     try {
-      await this.api.collabLeave(entry.vault_id, entry.id);
-      this.plugin.baseline.removeCollaboration(entry.vault_id, entry.file_id);
-      await this.plugin.baseline.save();
-      const localPath = collabLocalPath(entry.owner_username, entry.file_path);
-      await this.vaultAccess.deleteLocal(localPath).catch(() => {});
-      new Notice(this.plugin.t("collab.left"));
-      await this.refresh();
+      await this.coordinator.run(async () => {
+        if (action === "leave") await this.api.collabLeave(entry.vault_id, entry.id);
+        else await this.api.collabRevoke(entry.vault_id, entry.id);
+        this.collabs = this.collabs.map((current) =>
+          current.vault_id === entry.vault_id && current.id === entry.id ? { ...current, status: "revoked" } : current);
+        try {
+          await this.cleanupCollaboration(entry.vault_id, entry.file_id);
+          new Notice(this.plugin.t(action === "leave" ? "collab.left" : "collab.revoked"));
+        } catch (error) {
+          this.showCleanupFailure(entry.vault_id, entry.file_id, error, true);
+        }
+      });
     } catch (error) {
-      new Notice(this.plugin.t("collab.leaveFailed", { error: errorMessage(error, this.plugin) }));
+      new Notice(this.plugin.t(action === "leave" ? "collab.leaveFailed" : "collab.revokeFailed", {
+        error: errorMessage(error, this.plugin),
+      }));
+      return;
     }
+    await this.refresh();
   }
 
   /** 当前用户已接受的协作文件列表 */
