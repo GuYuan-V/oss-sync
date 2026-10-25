@@ -101,6 +101,7 @@ func init() {
 		"admin.all_console_themes":               {"全部服务器主题", "All server themes"},
 		"admin.delete_console_theme_confirm":     {"删除服务器主题 %s？", "Delete server theme %s?"},
 		"admin.console_theme_guide_title":        {"服务器主题指南", "Server theme guide"},
+		"admin.public_home_theme":                {"公开首页主题（对所有访客生效）", "Public homepage theme (all visitors)"},
 		"admin.allow_public_registration":        {"允许公开注册", "Allow public registration"},
 		"admin.custom_fragments":                 {"启用自定义页眉/页脚", "Enable custom fragments"},
 		"admin.custom_fragments_help":            {"开启后仓库设置页将显示自定义页眉/页脚编辑区；关闭时不清空历史值。", "Enable custom fragment editor in vault settings; disabling does not clear already saved values."},

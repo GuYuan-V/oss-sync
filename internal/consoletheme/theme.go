@@ -20,6 +20,32 @@ const (
 	maxEntries     = 512
 )
 
+// BuiltinNames 内置控制台主题清单；default 为零覆盖的基础皮肤
+var BuiltinNames = []string{
+	BuiltinDefault,
+	"sakura",
+	"starry",
+	"glass",
+	"ink",
+}
+
+// BuiltinDisplayNames 内置主题的中文显示名
+var BuiltinDisplayNames = map[string]string{
+	BuiltinDefault: "经典",
+	"sakura":       "樱坂",
+	"starry":       "星夜",
+	"glass":        "琉璃",
+	"ink":          "墨痕",
+}
+
+// BuiltinDisplayName 返回主题的中文显示名，未登记时回退原名
+func BuiltinDisplayName(name string) string {
+	if n, ok := BuiltinDisplayNames[name]; ok {
+		return n
+	}
+	return name
+}
+
 var (
 	ErrExists   = errors.New("服务器主题已存在")
 	ErrReadOnly = errors.New("内置服务器主题只读")
@@ -63,7 +89,12 @@ func validName(name string) bool {
 
 // IsBuiltin 判断主题是否属于内置资源
 func IsBuiltin(name string) bool {
-	return name == BuiltinDefault
+	for _, b := range BuiltinNames {
+		if name == b {
+			return true
+		}
+	}
+	return false
 }
 
 // Exists 判断主题是否包含有效的 theme.css
@@ -81,8 +112,11 @@ func Exists(dataDir, name string) bool {
 
 // List 列出内置与磁盘上的控制台主题
 func List(dataDir string) ([]Info, error) {
-	count, size := builtinStats()
-	themes := []Info{{Name: BuiltinDefault, Source: "builtin", FileCount: count, Size: size}}
+	themes := make([]Info, 0, len(BuiltinNames)+4)
+	for _, name := range BuiltinNames {
+		count, size := builtinStats(name)
+		themes = append(themes, Info{Name: name, DisplayName: BuiltinDisplayName(name), Source: "builtin", FileCount: count, Size: size})
+	}
 	root := filepath.Join(dataDir, "console-themes")
 	entries, err := os.ReadDir(root)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -155,7 +189,7 @@ func Scaffold(dataDir, base, newName string) (string, error) {
 		}
 	}()
 	if IsBuiltin(base) {
-		err = copyBuiltin(target)
+		err = copyBuiltin(target, base)
 	} else {
 		var source string
 		source, err = themeDir(dataDir, base)
@@ -213,15 +247,15 @@ func createThemeDir(dataDir, name string) (string, error) {
 	return dir, nil
 }
 
-func copyBuiltin(target string) error {
-	return fs.WalkDir(builtinAssets, "assets/default", func(path string, entry fs.DirEntry, walkErr error) error {
+func copyBuiltin(target, name string) error {
+	return fs.WalkDir(builtinAssets, "assets/"+name, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if entry.IsDir() {
 			return nil
 		}
-		rel := strings.TrimPrefix(path, "assets/default/")
+		rel := strings.TrimPrefix(path, "assets/"+name+"/")
 		content, err := builtinAssets.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("读取内置服务器主题: %w", err)
@@ -260,10 +294,10 @@ func copyTree(source, target string) error {
 	})
 }
 
-func builtinStats() (int, int64) {
+func builtinStats(name string) (int, int64) {
 	count := 0
 	var size int64
-	_ = fs.WalkDir(builtinAssets, "assets/default", func(path string, entry fs.DirEntry, err error) error {
+	_ = fs.WalkDir(builtinAssets, "assets/"+name, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
 		}

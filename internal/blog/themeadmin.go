@@ -18,7 +18,14 @@ import (
 )
 
 // BuiltinThemeNames 内置只读模板
-var BuiltinThemeNames = []string{"default", "papertrail"}
+// default 无独立布局模板（走 base.html），其余主题目录必须包含 template.html
+var BuiltinThemeNames = []string{
+	"default",
+	"papertrail",
+	"sakura",
+	"glass",
+	"starry-night",
+}
 
 // IsBuiltinTheme 判断主题是否为内置只读模板
 func IsBuiltinTheme(name string) bool {

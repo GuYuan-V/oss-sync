@@ -22,6 +22,14 @@
               <span class="switch-control__track" aria-hidden="true"></span>
               <span>{{.Layout.T "admin.allow_public_registration"}}</span>
             </label>
+            <label class="stack-form__field">
+              <span>{{.Layout.T "admin.public_home_theme"}}</span>
+              <select name="public_home_theme">
+                {{range .Data.ConsoleThemes}}
+                <option value="{{.Name}}" {{if eq .Name $.Data.PublicHomeTheme}}selected{{end}}>{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Name}}{{end}}</option>
+                {{end}}
+              </select>
+            </label>
             <label class="switch-control">
               <input type="checkbox" name="custom_fragments_enabled" {{if .Data.CustomFragmentsEnabled}}checked{{end}}>
               <span class="switch-control__track" aria-hidden="true"></span>

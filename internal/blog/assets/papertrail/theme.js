@@ -314,7 +314,7 @@
   };
 
   const initLogoSizing = () => {
-    const logo = document.querySelector(".pt-brand__logo, .pt-hero__logo");
+    const logo = document.querySelector("[data-theme-logo]");
     if (!logo) return;
     const value = Number(logo.getAttribute("width"));
     if (!Number.isFinite(value)) return;
@@ -322,6 +322,34 @@
     logo.style.width = `${size}px`;
     logo.style.height = `${size}px`;
     logo.classList.add("is-sized");
+  };
+
+  const initThemePicker = () => {
+    const select = document.querySelector("[data-theme-preview]");
+    if (!select) return;
+    select.addEventListener("change", () => {
+      const url = new URL(window.location.href);
+      url.searchParams.set("theme", select.value);
+      window.location.href = url.toString();
+    });
+  };
+
+  const initReveal = () => {
+    const items = document.querySelectorAll("[data-reveal]");
+    if (items.length === 0) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion || !("IntersectionObserver" in window)) {
+      items.forEach((item) => item.setAttribute("data-reveal-ready", ""));
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.setAttribute("data-reveal-ready", "");
+        observer.unobserve(entry.target);
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+    items.forEach((item) => observer.observe(item));
   };
 
   const disableMissingThemeScript = () => {
@@ -339,5 +367,7 @@
     initCodeCopy();
     initBackToTop();
     initLogoSizing();
+    initThemePicker();
+    initReveal();
   });
 })();

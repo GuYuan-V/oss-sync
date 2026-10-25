@@ -40,6 +40,7 @@ jobs:
       - run: npm ci
       - run: npm exec tsc -- --noEmit
       - run: npm test
+      - run: node ../scripts/test-blog-reading.mjs
       - run: npm run build
 
   container:

@@ -17,7 +17,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-//go:embed assets/default/* assets/development-template/* assets/papertrail/* assets/scaffold/*
+//go:embed assets/default/* assets/development-template/* assets/scaffold/* assets/papertrail/* assets/sakura/* assets/glass/* assets/starry-night/*
 var themeAssetsFS embed.FS
 
 type blogAssetResolver struct {
@@ -171,10 +171,19 @@ func (h *Handler) resolveAssetFile(userID uint, vaultID, markdownPath, reference
 }
 
 func (h *Handler) serveDefaultTheme(c *gin.Context, filename string) bool {
+	return h.serveBuiltinTheme(c, "default", filename)
+}
+
+// serveBuiltinTheme 提供内置主题（default / papertrail / …）的静态资源；
+// default 没有 template.html，读取失败按 404 处理
+func (h *Handler) serveBuiltinTheme(c *gin.Context, theme, filename string) bool {
+	if !IsBuiltinTheme(theme) {
+		return false
+	}
 	if filename != "style.css" && filename != "theme.js" && filename != "template.html" {
 		return false
 	}
-	content, err := themeAssetsFS.ReadFile("assets/default/" + filename)
+	content, err := themeAssetsFS.ReadFile("assets/" + theme + "/" + filename)
 	if err != nil {
 		return false
 	}
@@ -187,32 +196,6 @@ func (h *Handler) serveDefaultTheme(c *gin.Context, filename string) bool {
 	}
 	c.Data(http.StatusOK, contentType, content)
 	return true
-}
-
-// serveBuiltinTheme 提供内置主题（default / papertrail）的静态资源
-func (h *Handler) serveBuiltinTheme(c *gin.Context, theme, filename string) bool {
-	switch theme {
-	case "default":
-		return h.serveDefaultTheme(c, filename)
-	case "papertrail":
-		if filename != "style.css" && filename != "theme.js" && filename != "template.html" {
-			return false
-		}
-		content, err := themeAssetsFS.ReadFile("assets/papertrail/" + filename)
-		if err != nil {
-			return false
-		}
-		contentType := "application/javascript; charset=utf-8"
-		if filename == "style.css" {
-			contentType = "text/css; charset=utf-8"
-		}
-		if filename == "template.html" {
-			contentType = "text/html; charset=utf-8"
-		}
-		c.Data(http.StatusOK, contentType, content)
-		return true
-	}
-	return false
 }
 
 func isRemoteReference(reference string) bool {

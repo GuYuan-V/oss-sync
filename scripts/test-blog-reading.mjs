@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-for (const theme of ['default', 'papertrail']) {
+for (const theme of ['default', 'papertrail', 'sakura', 'glass', 'starry-night']) {
   for (const reducedMotion of [false, true]) {
     const attributes = new Map();
     const listeners = new Map();
@@ -18,6 +18,7 @@ for (const theme of ['default', 'papertrail']) {
       document: {
         documentElement: { classList: { add() {}, remove() {} } },
         getElementById: () => null,
+        querySelectorAll: () => [],
         querySelector: (selector) => selector === '[data-back-to-top]' ? button : null,
         addEventListener: (event, handler) => { if (event === 'DOMContentLoaded') ready = handler; },
       },
@@ -38,4 +39,4 @@ for (const theme of ['default', 'papertrail']) {
     assert.equal(scrolls[0].behavior, reducedMotion ? 'auto' : 'smooth');
   }
 }
-console.log('Both blog themes: visible, accessible, and back-to-top scrolling passed.');
+console.log('All five blog themes: visible, accessible, and back-to-top scrolling passed.');

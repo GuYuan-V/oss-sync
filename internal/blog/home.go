@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/helantianshen/oss-sync/internal/consoletheme"
 	"github.com/helantianshen/oss-sync/internal/filestore"
 	"github.com/helantianshen/oss-sync/internal/models"
 	"github.com/helantianshen/oss-sync/internal/settingspolicy"
@@ -133,6 +134,8 @@ type PublicBlog struct {
 
 type publicHomeData struct {
 	Blogs []PublicBlog
+	// ThemeName 是公开首页应用的内置控制台主题；由管理员设置
+	ThemeName string
 }
 
 // handleHome 列出显式开启公开博客的全部 Vault
@@ -162,7 +165,20 @@ func (h *Handler) handleHome(c *gin.Context) {
 			URL:         "/b/" + vault.ID,
 		})
 	}
-	h.renderPublicHome(c, publicHomeData{Blogs: blogs})
+	// 公开首页主题：管理员在系统设置中指定的内置控制台主题
+	h.renderPublicHome(c, publicHomeData{Blogs: blogs, ThemeName: h.publicHomeTheme()})
+}
+
+// publicHomeTheme 读取管理员为公开首页设置的内置控制台主题，未设置或失效时回退 default
+func (h *Handler) publicHomeTheme() string {
+	var setting models.SystemSetting
+	if err := h.DB.Where("id = 1").First(&setting).Error; err != nil {
+		return consoletheme.BuiltinDefault
+	}
+	if setting.PublicHomeTheme != "" && consoletheme.IsBuiltin(setting.PublicHomeTheme) {
+		return setting.PublicHomeTheme
+	}
+	return consoletheme.BuiltinDefault
 }
 
 func blogTitle(cfg BlogThemeConfig, fallback string) string {
@@ -259,11 +275,12 @@ func (h *Handler) handleVaultBlog(c *gin.Context) {
 	config := h.publicThemeConfig(vs.VaultID, vs.ThemeName, vs.ThemeConfig)
 	cfg := ParseBlogThemeConfig(config)
 	customEnabled := settingspolicy.CustomFragmentsEnabled(h.DB)
+	homeThemeName := vs.ThemeName
 	params := renderParams{
 		VaultID:         vaultID,
 		Title:           blogTitle(cfg, vault.Name),
-		ThemeName:       vs.ThemeName,
-		ThemeBaseURL:    themeBaseURL(vs.ThemeName),
+		ThemeName:       homeThemeName,
+		ThemeBaseURL:    themeBaseURL(homeThemeName),
 		ThemeConfigJS:   template.JS(mustJSON(config)),
 		CustomHeader:    renderSafeCustomFragmentEnabled(vs.CustomHeader, customEnabled),
 		CustomFooter:    renderSafeCustomFragmentEnabled(vs.CustomFooter, customEnabled),

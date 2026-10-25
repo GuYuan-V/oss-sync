@@ -440,15 +440,17 @@ func (h *Handler) loadPluginSettings(pluginID, vaultID string) (serverplugin.Man
 	return h.loadPluginSettingValues(manifest, vaultID)
 }
 
-// builtinPapertrailTheme 是内置 papertrail-settings 插件唯一服务的博客模板
-const builtinPapertrailTheme = "papertrail"
+// builtinPluginThemes 内置设置插件绑定的博客模板
+var builtinPluginThemes = map[string]string{
+	"papertrail-settings":   "papertrail",
+	"sakura-settings":       "sakura",
+	"glass-settings":        "glass",
+	"starry-night-settings": "starry-night",
+}
 
 // builtinThemeForBuiltinPlugin 返回内置插件绑定的博客模板；未知内置插件返回空字符串
 func builtinThemeForBuiltinPlugin(pluginID string) string {
-	if pluginID == "papertrail-settings" {
-		return builtinPapertrailTheme
-	}
-	return ""
+	return builtinPluginThemes[pluginID]
 }
 
 // isBuiltinThemeSettingsPlugin 判断是否为内置主题的设置插件
@@ -488,7 +490,7 @@ func (h *Handler) loadPluginSettingValues(manifest serverplugin.Manifest, vaultI
 	var setting models.VaultPluginSetting
 	err := h.DB.Where("vault_id = ? AND plugin_id = ?", vaultID, manifest.ID).First(&setting).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		if manifest.ID == "papertrail-settings" {
+		if isBuiltinThemeSettingsPlugin(manifest.ID) {
 			var themeSetting models.VaultSetting
 			if themeErr := h.DB.Where("vault_id = ?", vaultID).First(&themeSetting).Error; themeErr == nil && themeSetting.ThemeConfig != nil {
 				return manifest, themeSetting.ThemeConfig, nil

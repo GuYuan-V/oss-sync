@@ -21,6 +21,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/helantianshen/oss-sync/internal/blog"
+	"github.com/helantianshen/oss-sync/internal/consoletheme"
 	"github.com/helantianshen/oss-sync/internal/models"
 	"github.com/helantianshen/oss-sync/internal/version"
 )
@@ -510,9 +511,37 @@ func (m *Manager) Install(ctx context.Context, reader io.ReaderAt, size int64) (
 
 // EnabledThemeOptions 返回内置主题与已启用插件提供的主题选项
 // 分别对应博客主题与控制台主题，manifest 解析失败的插件跳过
+// builtinBlogThemeLabels 内置博客主题的中文显示名
+var builtinBlogThemeLabels = map[string]string{
+	"default":      "经典",
+	"papertrail":   "纸迹",
+	"sakura":       "樱坂",
+	"glass":        "琉璃",
+	"starry-night": "星夜",
+}
+
+func blogThemeLabel(name string) string {
+	if n, ok := builtinBlogThemeLabels[name]; ok {
+		return n
+	}
+	return name
+}
+
 func (m *Manager) EnabledThemeOptions() ([]ThemeOption, []ThemeOption) {
-	blogThemes := []ThemeOption{{Name: "default", Label: "default", Builtin: true}, {Name: "papertrail", Label: "papertrail", Builtin: true, SupportsPublicBlog: true}}
-	consoleThemes := []ThemeOption{{Name: "default", Label: "default", Builtin: true}}
+	blogThemes := []ThemeOption{{Name: "default", Label: blogThemeLabel("default"), Builtin: true}}
+	for _, name := range blog.BuiltinThemeNames {
+		if name == "default" {
+			continue
+		}
+		blogThemes = append(blogThemes, ThemeOption{Name: name, Label: blogThemeLabel(name), Builtin: true, SupportsPublicBlog: true})
+	}
+	consoleThemes := []ThemeOption{{Name: "default", Label: consoletheme.BuiltinDisplayName("default"), Builtin: true}}
+	for _, name := range consoletheme.BuiltinNames {
+		if name == "default" {
+			continue
+		}
+		consoleThemes = append(consoleThemes, ThemeOption{Name: name, Label: consoletheme.BuiltinDisplayName(name), Builtin: true})
+	}
 	var records []models.ServerPlugin
 	if err := m.db.Where("enabled = ?", true).Order("id asc").Find(&records).Error; err != nil {
 		return blogThemes, consoleThemes

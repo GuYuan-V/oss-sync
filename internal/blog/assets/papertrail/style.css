@@ -386,3 +386,6 @@ button { font: inherit; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition: none !important; }
 }
+
+/* ---------- 前台主题预览选择器 ---------- */
+.theme-picker{display:inline-flex;align-items:center;gap:6px}.theme-picker select{max-width:9em;padding:6px 8px;color:var(--pt-ink);font:inherit;font-size:12.5px;background:var(--pt-surface);border:1px solid var(--pt-line)}.theme-picker select:focus-visible{outline:2px solid var(--pt-accent);outline-offset:2px}
