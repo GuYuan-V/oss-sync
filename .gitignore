@@ -52,7 +52,7 @@ coverage.out
 /plugin-install-backup-*/
 
 # Local agent task state
-/.agent/tasks/
+/.agent/
 
 # Temp
 *.tmp
@@ -62,3 +62,7 @@ coverage.out
 
 # Private docs (not for public repo)
 项目技术需求说明书.md
+
+# 本地工具与调试产物
+.mimosa/
+.sysvals

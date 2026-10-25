@@ -76,17 +76,24 @@ func (h *Handler) saveConsoleTheme(c *gin.Context) {
 }
 
 // consoleThemeAsset 提供服务器主题的静态资源：GET /ui/themes/:theme/*filepath
-// 路径必须解析到该主题目录内，越界或主题不存在时返回 404
+// 内置主题从嵌入资源输出，自定义主题解析到数据目录；越界或不存在时返回 404
 // CSS 文件显式声明 Content-Type，并始终禁止 MIME 嗅探
 func (h *Handler) consoleThemeAsset(c *gin.Context) {
 	name := c.Param("theme")
 	rel := strings.TrimPrefix(c.Param("filepath"), "/")
+	c.Header("X-Content-Type-Options", "nosniff")
+	if content, ok := consoletheme.ReadBuiltinAsset(name, rel); ok {
+		if strings.EqualFold(filepath.Ext(rel), ".css") {
+			c.Header("Content-Type", "text/css; charset=utf-8")
+		}
+		c.Data(http.StatusOK, "application/octet-stream", content)
+		return
+	}
 	path, err := consoletheme.AssetPath(h.Cfg.Storage.DataDir, name, rel)
 	if err != nil {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	c.Header("X-Content-Type-Options", "nosniff")
 	if strings.EqualFold(filepath.Ext(path), ".css") {
 		c.Header("Content-Type", "text/css; charset=utf-8")
 	}

@@ -68,6 +68,8 @@ type SystemSetting struct {
 	JWTSecret string `gorm:"type:text"`
 	// PublicHomeVaultID 仅为无损读取旧数据保留，根路由忽略该字段
 	PublicHomeVaultID string `gorm:"size:36"`
+	// PublicHomeTheme 管理员为公开首页 `/` 指定的内置控制台主题
+	PublicHomeTheme string `gorm:"size:64;not null;default:'default'"`
 	// DefaultRecycleBinDays 为系统默认保留天数
 	DefaultRecycleBinDays int    `gorm:"not null;default:30"`
 	SyncMode              string `gorm:"size:32;not null;default:'user_choice'"`

@@ -243,7 +243,7 @@ type renderParams struct {
 	FilePath string
 }
 
-func (h *Handler) shareRenderParams(share models.Share, setting *models.VaultSetting) renderParams {
+func (h *Handler) shareRenderParams(c *gin.Context, share models.Share, setting *models.VaultSetting) renderParams {
 	config := h.publicThemeConfig(setting.VaultID, setting.ThemeName, setting.ThemeConfig)
 	cfg := ParseBlogThemeConfig(config)
 	blogHomeURL := ""
@@ -255,10 +255,11 @@ func (h *Handler) shareRenderParams(share models.Share, setting *models.VaultSet
 		customHeader = renderSafeCustomFragment(setting.CustomHeader)
 		customFooter = renderSafeCustomFragment(setting.CustomFooter)
 	}
+	themeName := setting.ThemeName
 	return renderParams{
-		ThemeName:       setting.ThemeName,
+		ThemeName:       themeName,
 		VaultID:         share.VaultID,
-		ThemeBaseURL:    themeBaseURL(setting.ThemeName),
+		ThemeBaseURL:    themeBaseURL(themeName),
 		ThemeConfigJS:   template.JS(mustJSON(config)),
 		CustomHeader:    customHeader,
 		CustomFooter:    customFooter,
@@ -334,8 +335,8 @@ func (h *Handler) renderTemplate(c *gin.Context, p renderParams) {
 		}
 	}
 	if IsBuiltinTheme(p.ThemeName) {
-		if p.ThemeName == "papertrail" {
-			h.renderBuiltinTheme(c, p, "papertrail")
+		if p.ThemeName != "default" {
+			h.renderBuiltinTheme(c, p, p.ThemeName)
 			return
 		}
 		p.ThemeName = "default"
@@ -573,7 +574,7 @@ func (h *Handler) handleSingle(c *gin.Context) {
 		return
 	}
 
-	params := h.shareRenderParams(share, us)
+	params := h.shareRenderParams(c, share, us)
 	params.ArticleTitle, params.ArticlePost = buildArticleMeta(fm, body, f.Path, f.UpdatedAt, assetResolver.ResolveAsset)
 	params.FilePath = f.Path
 	params.Title = params.ArticleTitle + " · OSS"
@@ -643,7 +644,7 @@ func (h *Handler) renderFolderTree(c *gin.Context, share models.Share, files []m
 	b.WriteString("</ul>")
 
 	us, _ := h.loadVaultSettings(share.UserID, share.VaultID)
-	params := h.shareRenderParams(share, us)
+	params := h.shareRenderParams(c, share, us)
 	params.Title = "Folder · " + share.TargetPath
 	params.IsFolder = true
 	params.FolderTitle = share.TargetPath
@@ -673,7 +674,7 @@ func (h *Handler) renderFolderFile(c *gin.Context, share models.Share, f models.
 		return
 	}
 
-	params := h.shareRenderParams(share, us)
+	params := h.shareRenderParams(c, share, us)
 	params.ArticleTitle, params.ArticlePost = buildArticleMeta(fm, body, f.Path, f.UpdatedAt, assetResolver.ResolveAsset)
 	params.FilePath = f.Path
 	params.Title = params.ArticleTitle + " · " + share.TargetPath

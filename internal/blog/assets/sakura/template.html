@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN" data-theme-key="oss-blog-theme">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{.Description}}">
+  <title>{{.Title}}</title>
+  <script data-cfasync="false">(function(){try{var k=document.documentElement.getAttribute("data-theme-key")||"oss-blog-theme",p=localStorage.getItem(k);if(p!=="light"&&p!=="dark"&&p!=="auto")p="auto";var d=p==="dark"||(p==="auto"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");document.documentElement.setAttribute("data-theme-pref",p)}catch(e){}})();</script>
+  <style>html{background:#fff7f9;color:#4a3f44;color-scheme:light}html[data-theme="dark"]{background:#241a20;color:#f2dfe7;color-scheme:dark}body{margin:0;min-height:100vh;background:#fff7f9;color:#4a3f44}html[data-theme="dark"] body{background:#241a20;color:#f2dfe7}</style>
+  <script data-cfasync="false" src="/ui/assets/theme.js?v=2"></script>
+  <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css?v=4">
+  <script defer src="{{.ThemeBaseURL}}/theme.js?v=2"></script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <!-- 飘落花瓣层 -->
+  <div class="sk-petals" aria-hidden="true">
+    <i class="sk-petal"></i><i class="sk-petal"></i><i class="sk-petal"></i><i class="sk-petal"></i><i class="sk-petal"></i><i class="sk-petal"></i><i class="sk-petal"></i><i class="sk-petal"></i>
+  </div>
+
+  <header class="sk-topbar">
+    <div class="sk-topbar__inner">
+      {{if .BlogHomeURL}}<a class="sk-brand" href="{{.BlogHomeURL}}" aria-label="返回 {{.BlogName}} 博客首页">{{else}}<span class="sk-brand">{{end}}
+        {{if .LogoURL}}<img class="sk-brand__logo{{if eq .LogoShape "circle"}} is-circle{{end}}" data-theme-logo src="{{.LogoURL}}" alt="" width="36" height="36">{{end}}
+        <strong>{{if .BlogName}}{{.BlogName}}{{else}}桜坂{{end}}</strong>
+      {{if .BlogHomeURL}}</a>{{else}}</span>{{end}}
+      <nav class="sk-actions" aria-label="博客与阅读工具">
+        {{if and .BlogHomeURL (not .IsHome)}}<a class="sk-action" href="{{.BlogHomeURL}}">回首页</a>{{end}}
+        <div id="theme-switcher" class="theme-switcher" role="group" aria-label="主题模式">
+          <button type="button" class="sk-action theme-switcher__btn" data-theme-pref="auto" aria-pressed="false">自动</button>
+          <button type="button" class="sk-action theme-switcher__btn" data-theme-pref="light" aria-pressed="false">昼</button>
+          <button type="button" class="sk-action theme-switcher__btn" data-theme-pref="dark" aria-pressed="false">夜</button>
+        </div>
+        {{if .AllowCopy}}<button type="button" class="sk-action" data-copy-article><span data-copy-label>收藏全文</span></button>{{end}}
+        <button type="button" class="sk-action" data-back-to-top>回到顶部</button>
+      </nav>
+    </div>
+  </header>
+
+  {{if .CustomHeader}}
+  <section class="sk-custom-fragment sk-custom-fragment--header" aria-label="自定义页眉">
+    <div class="sk-custom-fragment__content">{{.CustomHeader}}</div>
+  </section>
+  {{end}}
+
+  <main id="main-content" class="sk-main">
+    {{if .IsHome}}
+    <section class="sk-home" aria-labelledby="blog-title">
+      <header class="sk-hero">
+        {{if .LogoURL}}<span class="sk-hero__ring"><img class="sk-hero__logo{{if eq .LogoShape "circle"}} is-circle{{end}}" data-theme-logo src="{{.LogoURL}}" alt="{{.BlogName}} Logo" style="--sk-hero-logo-size: {{if gt .LogoSize 0}}{{.LogoSize}}{{else}}112{{end}}px" width="{{if gt .LogoSize 0}}{{.LogoSize}}{{else}}112{{end}}" height="{{if gt .LogoSize 0}}{{.LogoSize}}{{else}}112{{end}}"></span>{{end}}
+        <p class="sk-kicker">桜 咲 く 頃</p>
+        {{if .BlogName}}<h1 id="blog-title">{{.BlogName}}</h1>{{else}}<h1 id="blog-title">桜坂</h1>{{end}}
+        {{if .Description}}<p class="sk-hero__desc">{{.Description}}</p>{{end}}
+        {{if .Buttons}}<nav class="sk-hero__links" aria-label="博客链接">{{range .Buttons}}<a class="sk-action" href="{{.URL}}">{{if .IconURL}}<img src="{{.IconURL}}" alt="" width="16" height="16">{{end}}{{.Label}}</a>{{end}}</nav>{{end}}
+      </header>
+
+      <!-- 花瓣卡片网格 -->
+      <section class="sk-post-grid" aria-label="分享文章">
+        {{range .HomePosts}}
+        <article class="sk-card" data-reveal>
+          <div class="sk-card__petal" aria-hidden="true">❀</div>
+          <time class="sk-card__date">{{.Date}}</time>
+          <h2 class="sk-card__title"><a href="{{.URL}}">{{.Title}}</a></h2>
+          {{if .Summary}}<p class="sk-card__summary">{{.Summary}}</p>{{end}}
+          <span class="sk-card__more">读下去 →</span>
+        </article>
+        {{else}}
+        <p class="sk-empty">还没有可访问的分享文章。</p>
+        {{end}}
+      </section>
+    </section>
+    {{else}}
+    <nav class="reading-toc" aria-label="文章目录" data-reading-toc hidden>
+      <button class="reading-toc__open" type="button" data-toc-open aria-label="展开目录">目录</button>
+      <div class="reading-toc__backdrop" data-toc-backdrop hidden></div>
+      <div class="reading-toc__panel" data-toc-panel>
+        <div class="reading-toc__panel-header">
+          <strong class="reading-toc__panel-title">文章目录</strong>
+          <button class="reading-toc__close" type="button" data-toc-close aria-label="关闭目录">关闭</button>
+        </div>
+        <details class="reading-toc__disclosure" open>
+          <summary>目录</summary>
+          <ol data-toc-list></ol>
+        </details>
+      </div>
+    </nav>
+    <article class="sk-article oss-content" data-reading-content {{if .AllowCopy}}data-allow-copy{{end}} tabindex="-1">
+      {{if .IsFolder}}<h1>{{.FolderTitle}}</h1><nav class="sk-file-directory" aria-label="文件目录">{{.ContentHTML}}</nav>{{else}}{{if .ArticleTitle}}<h1 class="sk-article-title" data-article-title>{{.ArticleTitle}}</h1>{{end}}{{.ContentHTML}}{{end}}
+    </article>
+    {{end}}
+  </main>
+
+  {{if .CustomFooter}}
+  <section class="sk-custom-fragment sk-custom-fragment--footer" aria-label="自定义页脚">
+    <div class="sk-custom-fragment__content">{{.CustomFooter}}</div>
+  </section>
+  {{end}}
+  {{if .FooterNotice}}<aside class="oss-notice">{{.FooterNotice}}</aside>{{end}}
+  <p class="oss-repository-link">Powered by <a href="https://github.com/helantianshen/oss-sync" target="_blank" rel="noopener noreferrer">OSS Sync</a> ❀</p>
+  <p class="reading-status" data-copy-status role="status" aria-live="polite"></p>
+</body>
+</html>

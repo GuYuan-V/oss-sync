@@ -12,6 +12,7 @@ import (
 
 	"github.com/helantianshen/oss-sync/internal/auth"
 	"github.com/helantianshen/oss-sync/internal/config"
+	"github.com/helantianshen/oss-sync/internal/consoletheme"
 	"github.com/helantianshen/oss-sync/internal/models"
 	"github.com/helantianshen/oss-sync/internal/settingspolicy"
 )
@@ -52,6 +53,8 @@ type adminSystemData struct {
 	RecentDevices          []recentDeviceRow
 	DatabaseDriver         string
 	DatabaseDSN            string
+	PublicHomeTheme        string
+	ConsoleThemes          []consoletheme.Info
 	Error                  string
 	Saved                  bool
 	Update                 adminUpdateStatus
@@ -98,6 +101,13 @@ func (h *Handler) adminSystemPage(c *gin.Context) {
 		if mode, parseErr := settingspolicy.ParseSyncMode(setting.SyncMode); parseErr == nil {
 			data.SyncMode = mode
 		}
+	}
+	data.PublicHomeTheme = consoletheme.BuiltinDefault
+	if setting.PublicHomeTheme != "" && consoletheme.IsBuiltin(setting.PublicHomeTheme) {
+		data.PublicHomeTheme = setting.PublicHomeTheme
+	}
+	if themes, err := consoletheme.List(h.Cfg.Storage.DataDir); err == nil {
+		data.ConsoleThemes = themes
 	}
 	if !data.CustomFragmentsEnabled {
 		data.CustomFragmentsEnabled = settingspolicy.CustomFragmentsEnabled(h.DB)
@@ -189,6 +199,10 @@ func (h *Handler) adminSaveSystem(c *gin.Context) {
 		return
 	}
 	enabled := c.PostForm("registration_enabled") == "on"
+	publicHomeTheme := strings.TrimSpace(c.PostForm("public_home_theme"))
+	if publicHomeTheme == "" || !consoletheme.IsBuiltin(publicHomeTheme) {
+		publicHomeTheme = consoletheme.BuiltinDefault
+	}
 	err = h.DB.Transaction(func(tx *gorm.DB) error {
 		var setting models.SystemSetting
 		findErr := tx.Where("id = 1").First(&setting).Error
@@ -211,6 +225,7 @@ func (h *Handler) adminSaveSystem(c *gin.Context) {
 			"history_retention_days":   input.HistoryRetentionDays,
 			"max_vault_storage_bytes":  input.MaxVaultStorageBytes,
 			"max_upload_size_bytes":    input.MaxUploadSizeBytes,
+			"public_home_theme":        publicHomeTheme,
 		}).Error
 	})
 	if err != nil {

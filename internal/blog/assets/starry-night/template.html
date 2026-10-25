@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN" data-theme-key="oss-blog-theme">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{.Description}}">
+  <title>{{.Title}}</title>
+  <script data-cfasync="false">(function(){try{var k=document.documentElement.getAttribute("data-theme-key")||"oss-blog-theme",p=localStorage.getItem(k);if(p!=="light"&&p!=="dark"&&p!=="auto")p="auto";var d=p==="dark"||(p==="auto"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.setAttribute("data-theme",d?"dark":"light");document.documentElement.setAttribute("data-theme-pref",p)}catch(e){}})();</script>
+  <style>html{background:#eef1fb;color:#2a2f55;color-scheme:light}html[data-theme="dark"]{background:#0c1030;color:#cfd6ff;color-scheme:dark}body{margin:0;min-height:100vh;background:#eef1fb;color:#2a2f55}html[data-theme="dark"] body{background:#0c1030;color:#cfd6ff}</style>
+  <script data-cfasync="false" src="/ui/assets/theme.js?v=2"></script>
+  <link rel="stylesheet" href="{{.ThemeBaseURL}}/style.css?v=4">
+  <script defer src="{{.ThemeBaseURL}}/theme.js?v=2"></script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+  {{if .IsHome}}
+  <!-- 全屏沉浸星空 -->
+  <section class="sn-sky" aria-labelledby="blog-title">
+    <div class="sn-meteors" aria-hidden="true">
+      <i class="sn-meteor"></i><i class="sn-meteor sn-meteor--2"></i>
+    </div>
+    <div class="sn-sky__inner">
+      <header class="sn-sky__head">
+        {{if .BlogHomeURL}}<a class="sn-brand" href="{{.BlogHomeURL}}" aria-label="返回 {{.BlogName}} 博客首页">{{else}}<span class="sn-brand">{{end}}
+          {{if .LogoURL}}<img class="sn-brand__logo{{if eq .LogoShape "circle"}} is-circle{{end}}" data-theme-logo src="{{.LogoURL}}" alt="" width="38" height="38">{{end}}
+          <strong>{{if .BlogName}}{{.BlogName}}{{else}}星夜{{end}}</strong>
+        {{if .BlogHomeURL}}</a>{{else}}</span>{{end}}
+        <nav class="sn-actions" aria-label="博客与阅读工具">
+          <div id="theme-switcher" class="theme-switcher" role="group" aria-label="主题模式">
+            <button type="button" class="sn-action theme-switcher__btn" data-theme-pref="auto" aria-pressed="false">自动</button>
+            <button type="button" class="sn-action theme-switcher__btn" data-theme-pref="light" aria-pressed="false">晨光</button>
+            <button type="button" class="sn-action theme-switcher__btn" data-theme-pref="dark" aria-pressed="false">星夜</button>
+          </div>
+          {{if .AllowCopy}}<button type="button" class="sn-action" data-copy-article><span data-copy-label>摘星</span></button>{{end}}
+          <button type="button" class="sn-action" data-back-to-top>回到星空</button>
+        </nav>
+      </header>
+      <div class="sn-sky__core">
+        {{if .LogoURL}}<img class="sn-sky__logo{{if eq .LogoShape "circle"}} is-circle{{end}}" data-theme-logo src="{{.LogoURL}}" alt="{{.BlogName}} Logo" style="--sn-hero-logo-size: {{if gt .LogoSize 0}}{{.LogoSize}}{{else}}104{{end}}px" width="{{if gt .LogoSize 0}}{{.LogoSize}}{{else}}104{{end}}" height="{{if gt .LogoSize 0}}{{.LogoSize}}{{else}}104{{end}}">{{end}}
+        <p class="sn-kicker">✦ STAR · NIGHT ✦</p>
+        {{if .BlogName}}<h1 id="blog-title">{{.BlogName}}</h1>{{else}}<h1 id="blog-title">星夜</h1>{{end}}
+        {{if .Description}}<p class="sn-sky__desc">{{.Description}}</p>{{end}}
+        {{if .Buttons}}<nav class="sn-sky__links" aria-label="博客链接">{{range .Buttons}}<a class="sn-action" href="{{.URL}}">{{.Label}}</a>{{end}}</nav>{{end}}
+      </div>
+      <a class="sn-sky__down" href="#star-posts" aria-label="向下滚动查看文章"><span></span>下入凡尘</a>
+    </div>
+  </section>
+  {{else}}
+  <header class="sn-topbar">
+    <div class="sn-topbar__inner">
+      {{if .BlogHomeURL}}<a class="sn-brand" href="{{.BlogHomeURL}}" aria-label="返回 {{.BlogName}} 博客首页">{{else}}<span class="sn-brand">{{end}}
+        {{if .LogoURL}}<img class="sn-brand__logo{{if eq .LogoShape "circle"}} is-circle{{end}}" data-theme-logo src="{{.LogoURL}}" alt="" width="38" height="38">{{end}}
+        <strong>{{if .BlogName}}{{.BlogName}}{{else}}星夜{{end}}</strong>
+      {{if .BlogHomeURL}}</a>{{else}}</span>{{end}}
+      <nav class="sn-actions" aria-label="博客与阅读工具">
+        {{if and .BlogHomeURL (not .IsHome)}}<a class="sn-action" href="{{.BlogHomeURL}}">返回星空</a>{{end}}
+        <div id="theme-switcher" class="theme-switcher" role="group" aria-label="主题模式">
+          <button type="button" class="sn-action theme-switcher__btn" data-theme-pref="auto" aria-pressed="false">自动</button>
+          <button type="button" class="sn-action theme-switcher__btn" data-theme-pref="light" aria-pressed="false">晨光</button>
+          <button type="button" class="sn-action theme-switcher__btn" data-theme-pref="dark" aria-pressed="false">星夜</button>
+        </div>
+        {{if .AllowCopy}}<button type="button" class="sn-action" data-copy-article><span data-copy-label>摘星</span></button>{{end}}
+        <button type="button" class="sn-action" data-back-to-top>回到顶部</button>
+      </nav>
+    </div>
+  </header>
+  {{end}}
+
+  {{if .CustomHeader}}
+  <section class="sn-custom-fragment sn-custom-fragment--header" aria-label="自定义页眉">
+    <div class="sn-custom-fragment__content">{{.CustomHeader}}</div>
+  </section>
+  {{end}}
+
+  <main id="main-content" class="sn-main">
+    {{if .IsHome}}
+    <section class="sn-post-list" id="star-posts" aria-label="分享文章">
+      <h2 class="sn-post-list__title">✧ 星尘文章</h2>
+      {{range .HomePosts}}
+      <article class="sn-post" data-reveal>
+        <div class="sn-post__glow" aria-hidden="true"></div>
+        <time class="sn-post-date">{{.Date}}</time>
+        <h3 class="sn-post-title"><a href="{{.URL}}">{{.Title}}</a></h3>
+        {{if .Summary}}<p class="sn-post-summary">{{.Summary}}</p>{{end}}
+      </article>
+      {{else}}
+      <p class="sn-empty">今夜星空中暂无可见的文章。</p>
+      {{end}}
+    </section>
+    {{else}}
+    <nav class="reading-toc" aria-label="文章目录" data-reading-toc hidden>
+      <button class="reading-toc__open" type="button" data-toc-open aria-label="展开目录">目录</button>
+      <div class="reading-toc__backdrop" data-toc-backdrop hidden></div>
+      <div class="reading-toc__panel" data-toc-panel>
+        <div class="reading-toc__panel-header">
+          <strong class="reading-toc__panel-title">文章目录</strong>
+          <button class="reading-toc__close" type="button" data-toc-close aria-label="关闭目录">关闭</button>
+        </div>
+        <details class="reading-toc__disclosure" open>
+          <summary>星图目录</summary>
+          <ol data-toc-list></ol>
+        </details>
+      </div>
+    </nav>
+    <article class="sn-article oss-content" data-reading-content {{if .AllowCopy}}data-allow-copy{{end}} tabindex="-1">
+      {{if .IsFolder}}<h1>{{.FolderTitle}}</h1><nav class="sn-file-directory" aria-label="文件目录">{{.ContentHTML}}</nav>{{else}}{{if .ArticleTitle}}<h1 class="sn-article-title" data-article-title>{{.ArticleTitle}}</h1>{{end}}{{.ContentHTML}}{{end}}
+    </article>
+    {{end}}
+  </main>
+
+  {{if .CustomFooter}}
+  <section class="sn-custom-fragment sn-custom-fragment--footer" aria-label="自定义页脚">
+    <div class="sn-custom-fragment__content">{{.CustomFooter}}</div>
+  </section>
+  {{end}}
+  {{if .FooterNotice}}<aside class="oss-notice">{{.FooterNotice}}</aside>{{end}}
+  <p class="oss-repository-link">Powered by <a href="https://github.com/helantianshen/oss-sync" target="_blank" rel="noopener noreferrer">OSS Sync</a> ✦</p>
+  <p class="reading-status" data-copy-status role="status" aria-live="polite"></p>
+</body>
+</html>

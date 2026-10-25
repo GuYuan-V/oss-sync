@@ -23,7 +23,8 @@ type themeMetadata struct {
 // SupportsPublicBlog 判断主题是否显式支持公开博客渲染
 func SupportsPublicBlog(dataDir, themeName string) bool {
 	if IsBuiltinTheme(themeName) {
-		return themeName == "papertrail"
+		// default 无独立首页布局；其余内置主题均带完整首页模板
+		return themeName != "default"
 	}
 	dir, err := themeDirectory(dataDir, themeName)
 	if err != nil {
