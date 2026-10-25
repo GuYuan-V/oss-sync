@@ -106,8 +106,8 @@ func (h *Handler) adminSystemPage(c *gin.Context) {
 	if setting.PublicHomeTheme != "" && consoletheme.IsBuiltin(setting.PublicHomeTheme) {
 		data.PublicHomeTheme = setting.PublicHomeTheme
 	}
-	if themes, err := consoletheme.List(h.Cfg.Storage.DataDir); err == nil {
-		data.ConsoleThemes = themes
+	for _, name := range consoletheme.BuiltinNames {
+		data.ConsoleThemes = append(data.ConsoleThemes, consoletheme.Info{Name: name, DisplayName: consoletheme.BuiltinDisplayName(name), Source: "builtin"})
 	}
 	if !data.CustomFragmentsEnabled {
 		data.CustomFragmentsEnabled = settingspolicy.CustomFragmentsEnabled(h.DB)

@@ -52,7 +52,7 @@ coverage.out
 /plugin-install-backup-*/
 
 # Local agent task state
-/.agent/
+/.agent/tasks/
 
 # Temp
 *.tmp

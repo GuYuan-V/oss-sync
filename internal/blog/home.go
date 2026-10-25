@@ -134,7 +134,7 @@ type PublicBlog struct {
 
 type publicHomeData struct {
 	Blogs []PublicBlog
-	// ThemeName 是公开首页应用的内置控制台主题；默认取管理员设置，?theme= 可预览
+	// ThemeName 是公开首页应用的内置控制台主题；由管理员设置
 	ThemeName string
 }
 

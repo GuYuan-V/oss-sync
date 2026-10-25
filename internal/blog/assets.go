@@ -17,7 +17,7 @@ import (
 	"github.com/helantianshen/oss-sync/internal/models"
 )
 
-//go:embed assets/default/* assets/papertrail/* assets/sakura/* assets/glass/* assets/starry-night/*
+//go:embed assets/default/* assets/development-template/* assets/scaffold/* assets/papertrail/* assets/sakura/* assets/glass/* assets/starry-night/*
 var themeAssetsFS embed.FS
 
 type blogAssetResolver struct {

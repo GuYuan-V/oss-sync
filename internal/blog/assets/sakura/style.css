@@ -5,7 +5,7 @@
   --sk-bg: #fff7f9;
   --sk-surface: #ffffff;
   --sk-ink: #4a3f44;
-  --sk-muted: #94828a;
+  --sk-muted: #75646c;
   --sk-line: #f3d3dd;
   --sk-soft: #fdf0f4;
   --sk-accent: #d6336c;
@@ -27,6 +27,7 @@ html[data-theme="dark"] {
   --sk-petal: #4d2f3d;
   --sk-shadow: 0 6px 22px rgba(0, 0, 0, .35);
 }
+*, *::before, *::after { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
   margin: 0;
@@ -52,6 +53,7 @@ body {
   opacity: 0;
   animation: sk-fall linear infinite;
 }
+.sk-petal::before { content: ""; display: block; width: .65em; height: 1em; background: currentColor; border-radius: 80% 0 80% 20%; }
 .sk-petal:nth-child(1) { left: 6%; font-size: 18px; animation-duration: 13s; animation-delay: 0s; }
 .sk-petal:nth-child(2) { left: 18%; font-size: 12px; animation-duration: 17s; animation-delay: 2.5s; }
 .sk-petal:nth-child(3) { left: 31%; font-size: 16px; animation-duration: 11s; animation-delay: 5s; }
@@ -69,7 +71,7 @@ body {
 }
 body > *:not(.sk-petals) { position: relative; z-index: 1; }
 
-.skip-link { position: absolute; left: 12px; z-index: 100; padding: 8px 16px; color: #fff; background: var(--sk-accent); border-radius: 999px; text-decoration: none; transform: translateY(-56px); }
+body > .skip-link { position: absolute; left: 12px; z-index: 100; padding: 8px 16px; color: #fff; background: var(--sk-accent); border-radius: 999px; text-decoration: none; transform: translateY(-56px); }
 .skip-link:focus { transform: translateY(0); }
 
 /* ---------- 顶栏 ---------- */
@@ -178,13 +180,14 @@ body > *:not(.sk-petals) { position: relative; z-index: 1; }
 .sk-empty { grid-column: 1 / -1; margin: 0; color: var(--sk-muted); text-align: center; }
 
 @keyframes sk-fade-up { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
-[data-reveal] { opacity: 0; }
+.oss-theme-ready [data-reveal]:not([data-reveal-ready]) { opacity: 0; }
 [data-reveal][data-reveal-ready] { animation: sk-fade-up .65s ease both; }
 
 /* ---------- 文章页 ---------- */
 .sk-article { width: min(760px, 100%); margin-inline: auto; padding: 36px 32px; background: var(--sk-surface); border: 1px solid var(--sk-line); border-radius: 26px; box-shadow: var(--sk-shadow); }
 
 /* ---------- 正文排版 ---------- */
+.oss-content { overflow-wrap: anywhere; }
 .oss-content > :first-child { margin-top: 0; }
 .oss-content > :last-child { margin-bottom: 0; }
 .oss-content h1, .oss-content h2, .oss-content h3 { font-family: var(--sk-serif); font-weight: 600; line-height: 1.4; scroll-margin-top: 92px; }

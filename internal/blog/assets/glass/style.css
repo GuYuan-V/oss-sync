@@ -25,6 +25,7 @@ html[data-theme="dark"] {
   --gl-shadow: 0 10px 34px rgba(0, 0, 0, .4);
   --gl-page: linear-gradient(120deg, #141830, #1d1430, #251428, #141830);
 }
+*, *::before, *::after { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
   margin: 0;
@@ -205,13 +206,14 @@ html[data-theme="dark"] .gl-post::after { background: linear-gradient(115deg, tr
 .gl-post-title a:hover { color: var(--gl-accent); }
 .gl-post-summary, .gl-empty { margin: 0; color: var(--gl-muted); font-size: 14.5px; }
 
-[data-reveal] { opacity: 0; }
+.oss-theme-ready [data-reveal]:not([data-reveal-ready]) { opacity: 0; }
 [data-reveal][data-reveal-ready] { animation: gl-rise .6s ease both; }
 
 /* ---------- 文章页 ---------- */
 .gl-article { width: min(820px, 100%); margin-inline: auto; padding: 32px 32px; background: var(--gl-glass); backdrop-filter: var(--gl-blur); border: 1px solid var(--gl-line); border-radius: 26px; box-shadow: var(--gl-shadow); animation: gl-rise .6s ease both; }
 
 /* ---------- 正文排版 ---------- */
+.oss-content { overflow-wrap: anywhere; }
 .oss-content > :first-child { margin-top: 0; }
 .oss-content > :last-child { margin-bottom: 0; }
 .oss-content h1, .oss-content h2, .oss-content h3 { font-weight: 750; line-height: 1.25; letter-spacing: -.01em; scroll-margin-top: 100px; }
