@@ -271,6 +271,7 @@ html[data-theme="dark"] .gl-post::after { background: linear-gradient(115deg, tr
 }
 @media (max-width: 780px) {
   body[data-reading-toc-open="1"] { overflow: hidden; }
+  body[data-reading-toc-open="1"] .gl-main { z-index: 50; }
   .gl-topbar__inner { flex-direction: column; align-items: flex-start; gap: 10px; }
   .reading-toc { position: fixed; inset: 0; z-index: 60; top: 0; max-height: none; margin: 0; padding: 0; overflow: visible; background: transparent; border: 0; border-radius: 0; box-shadow: none; pointer-events: none; }
   .reading-toc__panel { position: absolute; inset: 0; display: flex; flex-direction: column; max-width: 320px; padding: 18px; background: var(--gl-glass-strong); backdrop-filter: var(--gl-blur); border-right: 1px solid var(--gl-line); transform: translateX(-100%); transition: transform .22s ease; pointer-events: auto; }
